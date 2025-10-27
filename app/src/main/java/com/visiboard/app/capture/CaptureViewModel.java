@@ -1,4 +1,4 @@
-package com.capture;
+package com.visiboard.app.capture;
 
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;

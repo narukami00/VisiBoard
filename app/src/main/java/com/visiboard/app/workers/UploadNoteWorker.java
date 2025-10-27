@@ -1,4 +1,4 @@
-package note;
+package com.visiboard.app.workers;
 
 import android.content.Context;
 import android.util.Log;

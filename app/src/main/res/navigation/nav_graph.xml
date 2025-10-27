@@ -1,6 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <navigation xmlns:android="http://schemas.android.com/apk/res/android"
-             xmlns:app="http://schemas.android.com/apk/res-auto"
-             android:id="@+id/nav_graph">
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:startDestination="@id/mapFragment">
 
+    <fragment
+        android:id="@+id/mapFragment"
+        android:name="com.visiboard.app.ui.map.MapFragment"
+        android:label="Map" />
+
+    <fragment
+        android:id="@+id/captureFragment"
+        android:name="com.visiboard.app.ui.capture.CaptureFragment"
+        android:label="Capture" />
+
+    <fragment
+        android:id="@+id/feedFragment"
+        android:name="com.visiboard.app.ui.feed.FeedFragment"
+        android:label="Feed" />
+
+    <fragment
+        android:id="@+id/profileFragment"
+        android:name="com.visiboard.app.ui.profile.ProfileFragment"
+        android:label="Profile" />
 </navigation>
