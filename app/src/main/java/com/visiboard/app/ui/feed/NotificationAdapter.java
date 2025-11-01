@@ -1,0 +1,131 @@
+package com.visiboard.app.ui.feed;
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.util.Base64;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+import com.visiboard.app.R;
+import com.visiboard.app.data.Notification;
+import java.util.ArrayList;
+import java.util.List;
+
+public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapter.NotificationViewHolder> {
+
+    private List<Notification> notifications = new ArrayList<>();
+    private OnNotificationClickListener listener;
+
+    public interface OnNotificationClickListener {
+        void onNotificationClick(Notification notification);
+    }
+
+    public NotificationAdapter(OnNotificationClickListener listener) {
+        this.listener = listener;
+    }
+
+    @NonNull
+    @Override
+    public NotificationViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        View view = LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.item_notification, parent, false);
+        return new NotificationViewHolder(view);
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull NotificationViewHolder holder, int position) {
+        Notification notification = notifications.get(position);
+        holder.bind(notification);
+    }
+
+    @Override
+    public int getItemCount() {
+        return notifications.size();
+    }
+
+    public void setNotifications(List<Notification> notifications) {
+        this.notifications = notifications;
+        notifyDataSetChanged();
+    }
+
+    class NotificationViewHolder extends RecyclerView.ViewHolder {
+        TextView tvNotificationText, tvNotificationTime;
+        ImageView ivUserAvatar, ivNotificationIcon;
+
+        NotificationViewHolder(@NonNull View itemView) {
+            super(itemView);
+            tvNotificationText = itemView.findViewById(R.id.tv_notification_text);
+            tvNotificationTime = itemView.findViewById(R.id.tv_notification_time);
+            ivUserAvatar = itemView.findViewById(R.id.iv_user_avatar);
+            ivNotificationIcon = itemView.findViewById(R.id.iv_notification_icon);
+
+            itemView.setOnClickListener(v -> {
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION && listener != null) {
+                    listener.onNotificationClick(notifications.get(position));
+                }
+            });
+        }
+
+        void bind(Notification notification) {
+            String text = "";
+            int iconRes = R.drawable.ic_like;
+
+            switch (notification.getType()) {
+                case "like":
+                    text = notification.getFromUserName() + " liked your note";
+                    iconRes = R.drawable.ic_like;
+                    break;
+                case "comment":
+                    text = notification.getFromUserName() + " commented on your note";
+                    iconRes = R.drawable.ic_comment;
+                    break;
+                case "follow":
+                    text = notification.getFromUserName() + " started following you";
+                    iconRes = R.drawable.ic_profile;
+                    break;
+                case "message":
+                    text = notification.getFromUserName() + " sent you a message";
+                    iconRes = R.drawable.ic_send;
+                    break;
+            }
+
+            tvNotificationText.setText(text);
+            tvNotificationTime.setText(getTimeAgo(notification.getTimestamp()));
+            ivNotificationIcon.setImageResource(iconRes);
+            
+            // Load profile picture
+            String profilePic = notification.getFromUserProfilePic();
+            if (profilePic != null && !profilePic.isEmpty()) {
+                try {
+                    byte[] bytes = Base64.decode(profilePic, Base64.DEFAULT);
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    ivUserAvatar.setImageBitmap(bitmap);
+                } catch (Exception e) {
+                    ivUserAvatar.setImageResource(R.drawable.ic_profile);
+                }
+            } else {
+                ivUserAvatar.setImageResource(R.drawable.ic_profile);
+            }
+        }
+
+        private String getTimeAgo(long timestamp) {
+            long now = System.currentTimeMillis();
+            long diff = now - timestamp;
+
+            long seconds = diff / 1000;
+            long minutes = seconds / 60;
+            long hours = minutes / 60;
+            long days = hours / 24;
+
+            if (days > 0) return days + "d ago";
+            if (hours > 0) return hours + "h ago";
+            if (minutes > 0) return minutes + "m ago";
+            return "Just now";
+        }
+    }
+}

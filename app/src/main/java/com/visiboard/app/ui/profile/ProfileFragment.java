@@ -23,16 +23,21 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.Navigation;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import android.widget.LinearLayout;
 import com.visiboard.app.R;
+import com.visiboard.app.data.NearbyNote;
 import com.visiboard.app.ui.auth.LoginActivity;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import de.hdodenhof.circleimageview.CircleImageView;
@@ -40,10 +45,12 @@ import de.hdodenhof.circleimageview.CircleImageView;
 public class ProfileFragment extends Fragment {
 
     private CircleImageView profileImage;
-    private TextView nameText, emailText, tvTotalNotes, tvTotalLikes, tvRecentNote, tvMilestone, tvMilestoneProgress, tvLocation;
+    private TextView nameText, emailText, tvTotalNotes, tvTotalLikes, tvNoRecentNotes, tvMilestone, tvMilestoneProgress, tvLocation;
     private TextView tvFollowersCount, tvFollowingCount;
     private ImageView ivTierIcon, logoutIcon;
     private ProgressBar progressMilestone;
+    private RecyclerView rvRecentNotes;
+    private RecentNotesAdapter recentNotesAdapter;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -71,7 +78,8 @@ public class ProfileFragment extends Fragment {
         emailText = view.findViewById(R.id.profileEmail);
         tvTotalNotes = view.findViewById(R.id.tv_total_notes);
         tvTotalLikes = view.findViewById(R.id.tv_total_likes);
-        tvRecentNote = view.findViewById(R.id.tv_recent_note);
+        tvNoRecentNotes = view.findViewById(R.id.tv_no_recent_notes);
+        rvRecentNotes = view.findViewById(R.id.rv_recent_notes);
         tvMilestone = view.findViewById(R.id.tv_milestone);
         tvMilestoneProgress = view.findViewById(R.id.tv_milestone_progress);
         tvLocation = view.findViewById(R.id.tv_location);
@@ -83,6 +91,13 @@ public class ProfileFragment extends Fragment {
 
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
+        
+        // Setup RecyclerView
+        rvRecentNotes.setLayoutManager(new LinearLayoutManager(getContext()));
+        recentNotesAdapter = new RecentNotesAdapter(note -> {
+            navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
+        });
+        rvRecentNotes.setAdapter(recentNotesAdapter);
 
         loadUserData();
         loadUserStats();
@@ -193,76 +208,154 @@ public class ProfileFragment extends Fragment {
 
         String uid = user.getUid();
         
-        // Query global notes collection for current user's notes
-        db.collection("notes")
-                .whereEqualTo("userId", uid)
-                .get()
-                .addOnSuccessListener(querySnapshot -> {
-                    int totalNotes = querySnapshot.size();
-                    tvTotalNotes.setText(String.valueOf(totalNotes));
+        // First load current user's info for the notes
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener(currentUserDoc -> {
+                String currentUserName = currentUserDoc.getString("name");
+                String currentUserProfilePic = currentUserDoc.getString("profilePic");
+                
+                // Query global notes collection for current user's notes
+                db.collection("notes")
+                    .whereEqualTo("userId", uid)
+                    .get()
+                    .addOnSuccessListener(querySnapshot -> {
+                        int totalNotes = querySnapshot.size();
+                        tvTotalNotes.setText(String.valueOf(totalNotes));
 
-                    // Calculate total likes across all notes
-                    int totalLikes = 0;
-                    if (!querySnapshot.isEmpty()) {
-                        List<com.google.firebase.firestore.DocumentSnapshot> docs = querySnapshot.getDocuments();
-                        String recent = docs.get(docs.size() - 1).getString("note");
-                        tvRecentNote.setText("Recent Note: " + (recent != null && recent.length() > 30 ? recent.substring(0, 30) + "..." : recent));
+                        // Calculate total likes across all notes
+                        int totalLikes = 0;
+                        List<NearbyNote> recentNotes = new ArrayList<>();
                         
-                        for (com.google.firebase.firestore.DocumentSnapshot doc : docs) {
-                            Long likeCount = doc.getLong("likeCount");
-                            if (likeCount != null) {
-                                totalLikes += likeCount.intValue();
+                        if (!querySnapshot.isEmpty()) {
+                            List<com.google.firebase.firestore.DocumentSnapshot> docs = querySnapshot.getDocuments();
+                            
+                            // Get up to 5 most recent notes
+                            int limit = Math.min(5, docs.size());
+                            for (int i = docs.size() - 1; i >= docs.size() - limit && i >= 0; i--) {
+                                com.google.firebase.firestore.DocumentSnapshot doc = docs.get(i);
+                                
+                                NearbyNote note = new NearbyNote();
+                                note.setId(doc.getId());
+                                
+                                String noteText = doc.getString("text");
+                                if (noteText == null) noteText = doc.getString("note");
+                                note.setText(noteText);
+                                
+                                String summary = doc.getString("summary");
+                                if (summary == null && noteText != null && noteText.length() > 100) {
+                                    summary = noteText.substring(0, 100) + "...";
+                                }
+                                note.setSummary(summary);
+                                
+                                // Use current user's info
+                                note.setUserName(currentUserName != null ? currentUserName : "You");
+                                note.setUserProfilePic(currentUserProfilePic);
+                                note.setUserId(uid);
+                                
+                                Double lat = doc.getDouble("lat");
+                                Double lon = doc.getDouble("lon");
+                                if (lat != null && lon != null) {
+                                    note.setLat(lat);
+                                    note.setLng(lon);
+                                }
+                                
+                                Long timestamp = doc.getLong("timestamp");
+                                note.setTimestamp(timestamp != null ? timestamp : 0);
+                                
+                                // Get likes count - check both field names
+                                Long likesCount = doc.getLong("likesCount");
+                                if (likesCount == null) likesCount = doc.getLong("likeCount");
+                                note.setLikesCount(likesCount != null ? likesCount.intValue() : 0);
+                                
+                                // Get comments count from subcollection for accuracy
+                                String noteIdForComments = doc.getId();
+                                db.collection("notes").document(noteIdForComments)
+                                    .collection("comments").get()
+                                    .addOnSuccessListener(comments -> {
+                                        note.setCommentsCount(comments.size());
+                                        recentNotesAdapter.notifyDataSetChanged();
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        // Fallback to stored count
+                                        Long commentsCount = doc.getLong("commentsCount");
+                                        note.setCommentsCount(commentsCount != null ? commentsCount.intValue() : 0);
+                                    });
+                                
+                                recentNotes.add(0, note); // Add at beginning to maintain reverse order
                             }
+                            
+                            // Calculate total likes
+                            for (com.google.firebase.firestore.DocumentSnapshot doc : docs) {
+                                Long likeCount = doc.getLong("likesCount");
+                                if (likeCount == null) likeCount = doc.getLong("likeCount");
+                                if (likeCount != null) {
+                                    totalLikes += likeCount.intValue();
+                                }
+                            }
+                            
+                            // Show recent notes
+                            if (!recentNotes.isEmpty()) {
+                                rvRecentNotes.setVisibility(View.VISIBLE);
+                                tvNoRecentNotes.setVisibility(View.GONE);
+                                recentNotesAdapter.setNotes(recentNotes);
+                            } else {
+                                rvRecentNotes.setVisibility(View.GONE);
+                                tvNoRecentNotes.setVisibility(View.VISIBLE);
+                            }
+                        } else {
+                            rvRecentNotes.setVisibility(View.GONE);
+                            tvNoRecentNotes.setVisibility(View.VISIBLE);
                         }
-                    } else {
-                        tvRecentNote.setText("No notes yet.");
-                    }
-                    
-                    tvTotalLikes.setText(String.valueOf(totalLikes));
+                        
+                        tvTotalLikes.setText(String.valueOf(totalLikes));
 
-                    // Determine tier and progress (based on likes now for better gamification)
-                    int tierIndex = -1;
-                    for (int i = 0; i < milestones.length; i++) {
-                        if (totalLikes >= milestones[i]) tierIndex = i;
-                    }
+                        // Determine tier and progress (based on likes now for better gamification)
+                        int tierIndex = -1;
+                        for (int i = 0; i < milestones.length; i++) {
+                            if (totalLikes >= milestones[i]) tierIndex = i;
+                        }
 
-                    String currentTier;
+                        String currentTier;
 
-                    if (tierIndex == -1) {
-                        currentTier = "None";
-                        tvMilestone.setText("No Tier Yet");
-                        ivTierIcon.setImageResource(R.drawable.ic_default_tier);
-                        progressMilestone.setMax(milestones[0]);
-                        progressMilestone.setProgress(totalLikes);
-                        tvMilestoneProgress.setText(totalLikes + " / " + milestones[0] + " likes to Bronze");
-                    } else if (tierIndex < milestones.length - 1) {
-                        currentTier = milestoneTiers[tierIndex];
-                        tvMilestone.setText("Current Tier: " + currentTier);
-                        ivTierIcon.setImageResource(milestoneIcons[tierIndex]);
-                        int nextGoal = milestones[tierIndex + 1];
-                        progressMilestone.setMax(nextGoal);
-                        progressMilestone.setProgress(totalLikes);
-                        tvMilestoneProgress.setText(totalLikes + " / " + nextGoal + " likes to " + milestoneTiers[tierIndex + 1]);
-                    } else {
-                        currentTier = "Platinum";
-                        tvMilestone.setText("Max Tier: Platinum");
-                        ivTierIcon.setImageResource(milestoneIcons[milestoneIcons.length - 1]);
-                        progressMilestone.setMax(milestones[milestones.length - 1]);
-                        progressMilestone.setProgress(milestones[milestones.length - 1]);
-                        tvMilestoneProgress.setText("Maxed Out");
-                    }
+                        if (tierIndex == -1) {
+                            currentTier = "None";
+                            tvMilestone.setText("No Tier Yet");
+                            ivTierIcon.setImageResource(R.drawable.ic_default_tier);
+                            progressMilestone.setMax(milestones[0]);
+                            progressMilestone.setProgress(totalLikes);
+                            tvMilestoneProgress.setText(totalLikes + " / " + milestones[0] + " likes to Bronze");
+                        } else if (tierIndex < milestones.length - 1) {
+                            currentTier = milestoneTiers[tierIndex];
+                            tvMilestone.setText("Current Tier: " + currentTier);
+                            ivTierIcon.setImageResource(milestoneIcons[tierIndex]);
+                            int nextGoal = milestones[tierIndex + 1];
+                            progressMilestone.setMax(nextGoal);
+                            progressMilestone.setProgress(totalLikes);
+                            tvMilestoneProgress.setText(totalLikes + " / " + nextGoal + " likes to " + milestoneTiers[tierIndex + 1]);
+                        } else {
+                            currentTier = "Platinum";
+                            tvMilestone.setText("Max Tier: Platinum");
+                            ivTierIcon.setImageResource(milestoneIcons[milestoneIcons.length - 1]);
+                            progressMilestone.setMax(milestones[milestones.length - 1]);
+                            progressMilestone.setProgress(milestones[milestones.length - 1]);
+                            tvMilestoneProgress.setText("Maxed Out");
+                        }
 
-                    // 🔹 UPDATE TIER IN DATABASE
-                    db.collection("users").document(uid)
-                            .update("currentTier", currentTier)
-                            .addOnFailureListener(e ->
-                                    Toast.makeText(getContext(), "Tier update failed: " + e.getMessage(), Toast.LENGTH_SHORT).show()
-                            );
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("ProfileFragment", "Error loading stats: " + e.getMessage());
-                    Toast.makeText(getContext(), "Failed to load statistics", Toast.LENGTH_SHORT).show();
-                });
+                        // 🔹 UPDATE TIER IN DATABASE
+                        db.collection("users").document(uid)
+                                .update("currentTier", currentTier)
+                                .addOnFailureListener(e ->
+                                        Toast.makeText(getContext(), "Tier update failed: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+                                );
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e("ProfileFragment", "Error loading stats: " + e.getMessage());
+                        Toast.makeText(getContext(), "Failed to load statistics", Toast.LENGTH_SHORT).show();
+                    });
+            })
+            .addOnFailureListener(e -> {
+                Log.e("ProfileFragment", "Error loading user info: " + e.getMessage());
+            });
     }
 
 
@@ -720,5 +813,16 @@ public class ProfileFragment extends Fragment {
         }
         
         dialog.show();
+    }
+    
+    private void navigateToNoteOnMap(double lat, double lng, String noteId) {
+        Bundle args = new Bundle();
+        args.putDouble("target_lat", lat);
+        args.putDouble("target_lng", lng);
+        args.putString("target_note_id", noteId);
+        args.putBoolean("open_note_window", true);
+        
+        Navigation.findNavController(requireView())
+            .navigate(R.id.mapFragment, args);
     }
 }

@@ -59,9 +59,41 @@ import java.util.Map;
 
 public class MapFragment extends Fragment {
 
+    private static final String TAG = "MapFragment";
     private static final int LOCATION_PERMISSION_REQUEST = 100;
     private static final String PREFS_NAME = "notes_prefs";
     private static final String NOTES_KEY = "notes_array";
+    
+    // Nice vibrant colors for note cards
+    private static final int[] NOTE_COLORS = {
+        0xFF6C5CE7, // Purple
+        0xFF74B9FF, // Sky Blue
+        0xFF00B894, // Teal
+        0xFFFF6B6B, // Coral Red
+        0xFFFDCB6E, // Yellow
+        0xFFE17055, // Orange
+        0xFFA29BFE, // Light Purple
+        0xFF55EFC4, // Mint
+        0xFFFF7675, // Pink
+        0xFFFD79A8, // Rose
+        0xFF00CEC9, // Cyan
+        0xFF81ECEC  // Aqua
+    };
+    
+    private static final int[] NOTE_BORDER_COLORS = {
+        0xFF5849C7, // Dark Purple
+        0xFF5A9DE8, // Dark Sky Blue
+        0xFF00966D, // Dark Teal
+        0xFFE84545, // Dark Coral
+        0xFFE9B949, // Dark Yellow
+        0xFFCB5A3E, // Dark Orange
+        0xFF8B7EE8, // Dark Light Purple
+        0xFF3ACF98, // Dark Mint
+        0xFFE85454, // Dark Pink
+        0xFFE35B89, // Dark Rose
+        0xFF00A8A5, // Dark Cyan
+        0xFF5FD4D4  // Dark Aqua
+    };
 
     private MapView mapView;
     private MapLibreMap mapLibreMap;
@@ -111,6 +143,8 @@ public class MapFragment extends Fragment {
 
                     enableUserLocation();
                     loadSavedNotes();
+                    
+                    handleNavigationArguments();
 
                     symbolManager.addClickListener(symbol -> {
                         if (symbol.getData() != null) {
@@ -188,9 +222,26 @@ public class MapFragment extends Fragment {
         View noteCardView = LayoutInflater.from(requireContext()).inflate(R.layout.note_card_layout, null);
         TextView noteTextView = noteCardView.findViewById(R.id.note_text_view);
         noteTextView.setText(shortNote);
+        
+        // Generate random color index based on note ID or timestamp
+        int colorIndex = (docId != null ? docId.hashCode() : (int) timestamp) % NOTE_COLORS.length;
+        if (colorIndex < 0) colorIndex = -colorIndex;
+        
+        // Apply random colors
+        int backgroundColor = NOTE_COLORS[colorIndex];
+        int borderColor = NOTE_BORDER_COLORS[colorIndex];
+        
+        // Create gradient drawable programmatically
+        android.graphics.drawable.GradientDrawable drawable = new android.graphics.drawable.GradientDrawable();
+        drawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        drawable.setCornerRadius(16 * getResources().getDisplayMetrics().density);
+        drawable.setColor(backgroundColor);
+        drawable.setStroke((int)(2 * getResources().getDisplayMetrics().density), borderColor);
+        noteTextView.setBackground(drawable);
+        noteTextView.setTextColor(0xFFFFFFFF); // White text for better contrast
 
         Bitmap noteBitmap = getBitmapFromView(noteCardView);
-        String iconId = "note_icon_" + System.currentTimeMillis();
+        String iconId = "note_icon_" + System.currentTimeMillis() + "_" + (docId != null ? docId : timestamp);
         mapLibreMap.getStyle().addImage(iconId, noteBitmap);
 
         try {
@@ -388,6 +439,10 @@ public class MapFragment extends Fragment {
                                         int count = Integer.parseInt(tvLikeCount.getText().toString());
                                         tvLikeCount.setText(String.valueOf(count + 1));
                                         isProcessingLike[0] = false;
+                                        
+                                        if (!isOwner) {
+                                            createNotification(noteOwnerId, currentUserId, "like", docId, noteText, position);
+                                        }
                                     })
                                     .addOnFailureListener(e -> isProcessingLike[0] = false);
                         }
@@ -395,7 +450,7 @@ public class MapFragment extends Fragment {
                 });
 
                 // Comment button click
-                commentSection.setOnClickListener(v -> showAddCommentDialog(noteRef, commentsContainer, tvCommentCount, tvCommentsHeader));
+                commentSection.setOnClickListener(v -> showAddCommentDialog(noteRef, commentsContainer, tvCommentCount, tvCommentsHeader, noteOwnerId, position, noteText));
             }
         } else {
             // Offline mode - hide interaction section and show default owner info
@@ -468,7 +523,8 @@ public class MapFragment extends Fragment {
 
     // Show add comment dialog
     private void showAddCommentDialog(DocumentReference noteRef, LinearLayout commentsContainer, 
-                                      TextView tvCommentCount, TextView tvCommentsHeader) {
+                                      TextView tvCommentCount, TextView tvCommentsHeader,
+                                      String noteOwnerId, LatLng notePosition, String noteText) {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_comment, null);
         
         com.google.android.material.textfield.TextInputEditText commentInput = dialogView.findViewById(R.id.comment_input);
@@ -508,6 +564,13 @@ public class MapFragment extends Fragment {
                                         tvCommentsHeader.setVisibility(View.VISIBLE);
                                         int count = Integer.parseInt(tvCommentCount.getText().toString());
                                         tvCommentCount.setText(String.valueOf(count + 1));
+                                        
+                                        noteRef.update("commentsCount", FieldValue.increment(1));
+                                        
+                                        if (!uid.equals(noteOwnerId)) {
+                                            createNotification(noteOwnerId, uid, "comment", noteRef.getId(), noteText, notePosition);
+                                        }
+                                        
                                         Toast.makeText(requireContext(), "Comment added!", Toast.LENGTH_SHORT).show();
                                         dialog.dismiss();
                                     });
@@ -584,25 +647,37 @@ public class MapFragment extends Fragment {
     private void saveNote(LatLng position, String note, long timestamp) {
         if (useCloudMode && auth.getCurrentUser() != null) {
             String uid = auth.getCurrentUser().getUid();
-            Map<String, Object> noteMap = new HashMap<>();
-            noteMap.put("userId", uid);
-            noteMap.put("lat", position.getLatitude());
-            noteMap.put("lon", position.getLongitude());
-            noteMap.put("note", note);
-            noteMap.put("timestamp", timestamp);
-            noteMap.put("likeCount", 0);
-            noteMap.put("likedBy", new java.util.ArrayList<String>());
+            
+            db.collection("users").document(uid).get()
+                .addOnSuccessListener(userDoc -> {
+                    String userName = userDoc.getString("name");
+                    String userProfilePic = userDoc.getString("profilePic");
+                    
+                    Map<String, Object> noteMap = new HashMap<>();
+                    noteMap.put("userId", uid);
+                    noteMap.put("userName", userName);
+                    noteMap.put("userProfilePic", userProfilePic);
+                    noteMap.put("lat", position.getLatitude());
+                    noteMap.put("lon", position.getLongitude());
+                    noteMap.put("location", new com.google.firebase.firestore.GeoPoint(position.getLatitude(), position.getLongitude()));
+                    noteMap.put("text", note);
+                    noteMap.put("summary", note.length() > 100 ? note.substring(0, 100) + "..." : note);
+                    noteMap.put("timestamp", timestamp);
+                    noteMap.put("likesCount", 0);
+                    noteMap.put("likedBy", new java.util.ArrayList<String>());
+                    noteMap.put("commentsCount", 0);
 
-            // Save to global notes collection
-            db.collection("notes")
-                    .add(noteMap)
-                    .addOnSuccessListener(docRef -> {
-                        Log.d("MapFragment", "Note saved: " + docRef.getId());
-                        // Update marker with docId
-                        addNoteMarker(position, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                                timestamp, docRef.getId(), uid);
-                    })
-                    .addOnFailureListener(e -> Log.e("MapFragment", "Error saving note: " + e.getMessage()));
+                    // Save to global notes collection
+                    db.collection("notes")
+                            .add(noteMap)
+                            .addOnSuccessListener(docRef -> {
+                                Log.d("MapFragment", "Note saved: " + docRef.getId());
+                                // Update marker with docId
+                                addNoteMarker(position, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
+                                        timestamp, docRef.getId(), uid);
+                            })
+                            .addOnFailureListener(e -> Log.e("MapFragment", "Error saving note: " + e.getMessage()));
+                });
         } else {
             saveNoteLocally(position, note, timestamp);
         }
@@ -768,6 +843,8 @@ public class MapFragment extends Fragment {
                                 btn.setBackgroundResource(R.drawable.btn_following_selector);
                                 btn.setTextColor(getResources().getColor(R.color.button_text_following, null));
                                 
+                                createNotification(targetUserId, currentUserId, "follow", null, null, null);
+                                
                                 Toast.makeText(requireContext(), "Following " + targetName, Toast.LENGTH_SHORT).show();
                             });
                 });
@@ -926,6 +1003,133 @@ public class MapFragment extends Fragment {
         }
         
         dialog.show();
+    }
+    
+    private void createNotification(String toUserId, String fromUserId, String type, 
+                                   String noteId, String noteText, LatLng noteLocation) {
+        db.collection("users").document(fromUserId).get()
+            .addOnSuccessListener(userDoc -> {
+                String fromUserName = userDoc.getString("name");
+                String fromUserProfilePic = userDoc.getString("profilePic");
+                
+                // For like/comment notifications, check if notification already exists for this note
+                if (noteId != null && (type.equals("like") || type.equals("comment"))) {
+                    db.collection("notifications")
+                        .whereEqualTo("toUserId", toUserId)
+                        .whereEqualTo("type", type)
+                        .whereEqualTo("noteId", noteId)
+                        .get()
+                        .addOnSuccessListener(querySnapshot -> {
+                            Map<String, Object> notification = new HashMap<>();
+                            notification.put("toUserId", toUserId);
+                            notification.put("fromUserId", fromUserId);
+                            notification.put("fromUserName", fromUserName);
+                            notification.put("fromUserProfilePic", fromUserProfilePic);
+                            notification.put("type", type);
+                            notification.put("timestamp", System.currentTimeMillis());
+                            notification.put("read", false);
+                            
+                            if (noteId != null) {
+                                notification.put("noteId", noteId);
+                            }
+                            if (noteText != null) {
+                                notification.put("noteText", noteText);
+                            }
+                            if (noteLocation != null) {
+                                notification.put("noteLat", noteLocation.getLatitude());
+                                notification.put("noteLng", noteLocation.getLongitude());
+                            }
+                            
+                            if (!querySnapshot.isEmpty()) {
+                                // Update existing notification
+                                String docId = querySnapshot.getDocuments().get(0).getId();
+                                db.collection("notifications").document(docId)
+                                    .update(notification)
+                                    .addOnSuccessListener(aVoid -> Log.d(TAG, "Notification updated"))
+                                    .addOnFailureListener(e -> Log.e(TAG, "Error updating notification", e));
+                            } else {
+                                // Create new notification
+                                db.collection("notifications").add(notification)
+                                    .addOnSuccessListener(docRef -> Log.d(TAG, "Notification created"))
+                                    .addOnFailureListener(e -> Log.e(TAG, "Error creating notification", e));
+                            }
+                        });
+                } else {
+                    // For follow notifications, always create new
+                    Map<String, Object> notification = new HashMap<>();
+                    notification.put("toUserId", toUserId);
+                    notification.put("fromUserId", fromUserId);
+                    notification.put("fromUserName", fromUserName);
+                    notification.put("fromUserProfilePic", fromUserProfilePic);
+                    notification.put("type", type);
+                    notification.put("timestamp", System.currentTimeMillis());
+                    notification.put("read", false);
+                    
+                    db.collection("notifications").add(notification)
+                        .addOnSuccessListener(docRef -> Log.d(TAG, "Notification created"))
+                        .addOnFailureListener(e -> Log.e(TAG, "Error creating notification", e));
+                }
+            });
+    }
+    
+    private void handleNavigationArguments() {
+        if (getArguments() != null) {
+            double targetLat = getArguments().getDouble("target_lat", 0);
+            double targetLng = getArguments().getDouble("target_lng", 0);
+            String targetNoteId = getArguments().getString("target_note_id");
+            boolean openNoteWindow = getArguments().getBoolean("open_note_window", false);
+            
+            if (targetLat != 0 && targetLng != 0) {
+                LatLng targetLocation = new LatLng(targetLat, targetLng);
+                
+                if (mapLibreMap != null) {
+                    mapLibreMap.animateCamera(CameraUpdateFactory.newLatLngZoom(targetLocation, 17), 1000);
+                }
+                
+                if (openNoteWindow && targetNoteId != null) {
+                    new android.os.Handler().postDelayed(() -> {
+                        openNoteWindowById(targetNoteId, targetLocation);
+                    }, 1500);
+                }
+                
+                getArguments().clear();
+            }
+        }
+    }
+    
+    private void openNoteWindowById(String noteId, LatLng location) {
+        db.collection("notes").document(noteId).get()
+            .addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    String noteText = doc.getString("text");
+                    if (noteText == null) noteText = doc.getString("note");
+                    
+                    Long timestamp = doc.getLong("timestamp");
+                    String userId = doc.getString("userId");
+                    
+                    if (noteText != null && timestamp != null) {
+                        Symbol targetSymbol = findSymbolAtLocation(location);
+                        showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId);
+                    }
+                }
+            })
+            .addOnFailureListener(e -> Log.e(TAG, "Error loading note", e));
+    }
+    
+    private Symbol findSymbolAtLocation(LatLng location) {
+        if (symbolManager == null) return null;
+        
+        androidx.collection.LongSparseArray<Symbol> annotations = symbolManager.getAnnotations();
+        for (int i = 0; i < annotations.size(); i++) {
+            Symbol symbol = annotations.valueAt(i);
+            LatLng symbolLatLng = symbol.getLatLng();
+            if (symbolLatLng != null && 
+                Math.abs(symbolLatLng.getLatitude() - location.getLatitude()) < 0.0001 &&
+                Math.abs(symbolLatLng.getLongitude() - location.getLongitude()) < 0.0001) {
+                return symbol;
+            }
+        }
+        return null;
     }
 
     // Lifecycle
