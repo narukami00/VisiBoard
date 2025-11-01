@@ -3,36 +3,214 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="8dp"
-    android:layout_margin="8dp"
-    android:backgroundTint="#F9FAFB">
+    app:cardCornerRadius="24dp"
+    app:cardElevation="16dp"
+    android:layout_margin="16dp"
+    android:backgroundTint="#FFFFFF">
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:maxHeight="550dp">
 
-        <TextView
-            android:id="@+id/note_text"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/text_light"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            android:lineSpacingExtra="3dp"
-            android:maxLines="6"
-            android:ellipsize="end" />
+            android:orientation="vertical"
+            android:padding="24dp">
 
-        <TextView
-            android:id="@+id/note_timestamp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:textColor="@color/secondary"
-            android:textSize="13sp" />
+            <!-- Owner Info Section -->
+            <LinearLayout
+                android:id="@+id/owner_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginBottom="16dp">
 
-    </LinearLayout>
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:id="@+id/owner_profile_pic"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_profile_placeholder"
+                    app:civ_border_width="2dp"
+                    app:civ_border_color="@color/primary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="12dp">
+
+                    <TextView
+                        android:id="@+id/owner_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Owner Name"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:fontFamily="@font/poppins_semibold" />
+
+                    <TextView
+                        android:id="@+id/note_timestamp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:fontFamily="@font/poppins_regular" />
+
+                </LinearLayout>
+
+                <!-- Follow Button (shown only for other users) -->
+                <Button
+                    android:id="@+id/btn_follow_owner"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:text="Follow"
+                    android:textColor="@color/button_text_primary"
+                    android:background="@drawable/btn_primary_selector"
+                    android:textAllCaps="false"
+                    android:fontFamily="@font/poppins_semibold"
+                    android:textSize="12sp"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:elevation="2dp"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Note Content -->
+            <TextView
+                android:id="@+id/note_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:lineSpacingExtra="4dp"
+                android:fontFamily="@font/poppins_regular"
+                android:layout_marginBottom="20dp" />
+
+            <!-- Like and Comment Actions -->
+            <LinearLayout
+                android:id="@+id/interaction_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:background="@drawable/bg_interaction_bar"
+                android:visibility="visible">
+
+                <LinearLayout
+                    android:id="@+id/like_section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <ImageView
+                        android:id="@+id/btn_like"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_heart_outline" />
+
+                    <TextView
+                        android:id="@+id/tv_like_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/background_dark"
+                        android:fontFamily="@font/poppins_semibold"
+                        android:layout_marginStart="8dp" />
+
+                </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="24dp"
+                    android:background="#E0E0E0"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/comment_section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <ImageView
+                        android:id="@+id/btn_comment"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_comment" />
+
+                    <TextView
+                        android:id="@+id/tv_comment_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/background_dark"
+                        android:fontFamily="@font/poppins_semibold"
+                        android:layout_marginStart="8dp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Comments Section -->
+            <TextView
+                android:id="@+id/tv_comments_header"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Comments"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/primaryDark"
+                android:fontFamily="@font/poppins_semibold"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/comments_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+        </LinearLayout>
+
+    </ScrollView>
 
 </androidx.cardview.widget.CardView>

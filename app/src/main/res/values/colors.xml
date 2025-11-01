@@ -2,11 +2,51 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="primary">#FFD700</color>
-    <color name="primaryDark">#B8860B</color>
-    <color name="secondary">#9ACD32</color>
-    <color name="background_light">#F5F5DC</color>
-    <color name="background_dark">#2E2E2E</color>
-    <color name="text_light">#000000</color>
-    <color name="text_dark">#FFFFFF</color>
+    
+    <!-- Primary Colors -->
+    <color name="primary">#6C5CE7</color>
+    <color name="primaryDark">#5849C7</color>
+    <color name="primaryLight">#A29BFE</color>
+    
+    <!-- Secondary Colors -->
+    <color name="secondary">#74B9FF</color>
+    <color name="accent">#00B894</color>
+    <color name="accentDark">#00966D</color>
+    
+    <!-- Background Colors -->
+    <color name="background_light">#F5F6FA</color>
+    <color name="background_dark">#1E272E</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="overlay_dark">#CC000000</color>
+    <color name="dialog_background">#FFFFFF</color>
+    
+    <!-- Text Colors -->
+    <color name="text_primary">#1E272E</color>
+    <color name="text_secondary">#57606F</color>
+    <color name="text_hint">#A4B0BE</color>
+    <color name="text_on_primary">#FFFFFF</color>
+    <color name="text_light">#FFFFFF</color>
+    <color name="text_dark">#1E272E</color>
+    
+    <!-- Interactive Colors -->
+    <color name="like_color">#FF6B6B</color>
+    <color name="error">#FF3838</color>
+    <color name="success">#00B894</color>
+    <color name="warning">#FDCB6E</color>
+    
+    <!-- Button Colors -->
+    <color name="button_primary">#6C5CE7</color>
+    <color name="button_primary_pressed">#5849C7</color>
+    <color name="button_secondary">#E8EAED</color>
+    <color name="button_secondary_pressed">#D1D5DB</color>
+    <color name="button_following">#00B894</color>
+    <color name="button_following_pressed">#00966D</color>
+    <color name="button_delete">#FF6B6B</color>
+    <color name="button_text_primary">#FFFFFF</color>
+    <color name="button_text_secondary">#1E272E</color>
+    <color name="button_text_following">#FFFFFF</color>
+    
+    <!-- Divider -->
+    <color name="divider">#E1E8ED</color>
+    <color name="divider_dark">#4A5568</color>
 </resources>

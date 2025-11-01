@@ -123,6 +123,8 @@ public class SignupActivity extends AppCompatActivity {
                         Map<String, Object> userMap = new HashMap<>();
                         userMap.put("name", name);
                         userMap.put("email", email);
+                        userMap.put("currentTier", "None");
+                        userMap.put("createdAt", System.currentTimeMillis());
                         if (!base64Image.isEmpty()) {
                             userMap.put("profilePic", base64Image);
                         }

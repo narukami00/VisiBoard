@@ -11,3 +11,4 @@ build/
 app/build/
 google-services.json
 *.keystore
+*.md

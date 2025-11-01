@@ -11,7 +11,7 @@
         android:layout_height="wrap_content"
         android:background="@drawable/note_card_background"
         android:padding="8dp"
-        android:textColor="@color/text_light"
+        android:textColor="@color/background_dark"
         android:textSize="14sp"
         android:maxWidth="120dp"
         android:ellipsize="end"

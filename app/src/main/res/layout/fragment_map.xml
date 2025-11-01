@@ -1,5 +1,6 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -8,28 +9,48 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <Switch
-        android:id="@+id/switch_mode"
+    <!-- Modern Switch Card -->
+    <androidx.cardview.widget.CardView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_margin="16dp"
-        android:checked="true"
-        android:fontFamily="@font/poppins_regular"
-        android:text="Cloud Mode"
-        android:textColor="@color/text_light"
-        android:typeface="normal" />
+        app:cardCornerRadius="25dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="@color/card_background">
 
+        <Switch
+            android:id="@+id/switch_mode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:fontFamily="@font/poppins_regular"
+            android:text="Cloud Mode"
+            android:textColor="@color/background_dark"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:typeface="normal"
+            tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+    </androidx.cardview.widget.CardView>
+
+    <!-- Modern FAB -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/btnAddNote"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_margin="24dp"
         android:clickable="true"
         android:focusable="true"
         android:src="@drawable/ic_add"
         app:backgroundTint="@color/primary"
-        app:tint="@android:color/white" />
+        app:elevation="12dp"
+        app:pressedTranslationZ="16dp"
+        app:rippleColor="@color/primaryDark"
+        app:tint="@android:color/white"
+        app:borderWidth="0dp" />
 
 </FrameLayout>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="12dp"
+    android:backgroundTint="@color/card_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Header with Tabs -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@drawable/bg_dialog"
+            android:padding="4dp"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btn_followers_tab"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="Followers"
+                android:textColor="@color/button_text_primary"
+                android:background="@drawable/btn_primary_selector"
+                android:textAllCaps="false"
+                android:fontFamily="@font/poppins_semibold"
+                android:textSize="14sp"
+                android:elevation="2dp" />
+
+            <Button
+                android:id="@+id/btn_following_tab"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:text="Following"
+                android:textColor="@color/black"
+                android:background="@drawable/btn_secondary_selector"
+                android:textAllCaps="false"
+                android:fontFamily="@font/poppins_semibold"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+        <!-- User List -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/users_recycler"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="400dp"
+            android:nestedScrollingEnabled="true" />
+
+        <!-- Empty State -->
+        <TextView
+            android:id="@+id/empty_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No users to show"
+            android:textSize="15sp"
+            android:textColor="@color/text_secondary"
+            android:fontFamily="@font/poppins_regular"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>
