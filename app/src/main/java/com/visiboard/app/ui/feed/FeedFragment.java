@@ -42,6 +42,7 @@ public class FeedFragment extends Fragment {
     private static final String TAG = "FeedFragment";
     private static final double NEARBY_RADIUS_KM = 10.0;
     
+    private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipeRefresh;
     private RecyclerView rvNotifications, rvNearbyNotes, rvSearchResults, rvFollowing;
     private TextView tvNoNotifications, tvNoNearbyNotes, tvNoFollowing;
     private Button btnClearNotifications;
@@ -70,6 +71,7 @@ public class FeedFragment extends Fragment {
         db = FirebaseFirestore.getInstance();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
         
+        swipeRefresh = view.findViewById(R.id.swipe_refresh);
         rvNotifications = view.findViewById(R.id.rv_notifications);
         rvNearbyNotes = view.findViewById(R.id.rv_nearby_notes);
         rvSearchResults = view.findViewById(R.id.rv_search_results);
@@ -80,10 +82,28 @@ public class FeedFragment extends Fragment {
         btnClearNotifications = view.findViewById(R.id.btn_clear_notifications);
         etSearchUsers = view.findViewById(R.id.et_search_users);
         
+        setupSwipeRefresh();
         setupRecyclerViews();
         setupSearchBar();
         setupClearButton();
         loadUserLocation();
+    }
+    
+    private void setupSwipeRefresh() {
+        swipeRefresh.setColorSchemeResources(
+            R.color.primary,
+            R.color.secondary,
+            R.color.accent
+        );
+        swipeRefresh.setOnRefreshListener(() -> {
+            loadUserLocation();
+            // Stop refreshing after 2 seconds max if location doesn't load
+            new android.os.Handler().postDelayed(() -> {
+                if (swipeRefresh != null && swipeRefresh.isRefreshing()) {
+                    swipeRefresh.setRefreshing(false);
+                }
+            }, 2000);
+        });
     }
     
     @Override
@@ -403,6 +423,7 @@ public class FeedFragment extends Fragment {
         if (ActivityCompat.checkSelfPermission(requireContext(), 
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "Location permission not granted");
+            if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
             return;
         }
         
@@ -411,18 +432,34 @@ public class FeedFragment extends Fragment {
             if (location != null) {
                 currentLocation = location;
                 Log.d(TAG, "Location obtained: " + location.getLatitude() + ", " + location.getLongitude());
-                loadNotifications();
-                loadNearbyNotes();
-                loadFollowingUsers();
+                
+                // Track how many data loads are complete
+                final int[] completed = {0};
+                Runnable checkComplete = () -> {
+                    completed[0]++;
+                    if (completed[0] >= 3 && swipeRefresh != null) { // 3 = notifications, nearby, following
+                        swipeRefresh.setRefreshing(false);
+                    }
+                };
+                
+                loadNotifications(checkComplete);
+                loadNearbyNotes(checkComplete);
+                loadFollowingUsers(checkComplete);
             } else {
                 Log.e(TAG, "Location is null");
+                if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
             }
         }).addOnFailureListener(e -> {
             Log.e(TAG, "Error getting location", e);
+            if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
         });
     }
     
     private void loadNotifications() {
+        loadNotifications(null);
+    }
+    
+    private void loadNotifications(Runnable onComplete) {
         String userId = auth.getCurrentUser().getUid();
         Log.d(TAG, "Loading notifications for user: " + userId);
         
@@ -457,19 +494,27 @@ public class FeedFragment extends Fragment {
                     rvNotifications.setVisibility(View.VISIBLE);
                     notificationAdapter.setNotifications(notifications);
                 }
+                
+                if (onComplete != null) onComplete.run();
             })
             .addOnFailureListener(e -> {
                 Log.e(TAG, "Error loading notifications", e);
                 tvNoNotifications.setVisibility(View.VISIBLE);
                 rvNotifications.setVisibility(View.GONE);
+                if (onComplete != null) onComplete.run();
             });
     }
     
     private void loadNearbyNotes() {
+        loadNearbyNotes(null);
+    }
+    
+    private void loadNearbyNotes(Runnable onComplete) {
         if (currentLocation == null) {
             Log.e(TAG, "Current location is null");
             tvNoNearbyNotes.setVisibility(View.VISIBLE);
             rvNearbyNotes.setVisibility(View.GONE);
+            if (onComplete != null) onComplete.run();
             return;
         }
         
@@ -579,11 +624,13 @@ public class FeedFragment extends Fragment {
                 }
                 
                 Log.d(TAG, "Found " + nearbyNotes.size() + " nearby notes");
+                if (onComplete != null) onComplete.run();
             })
             .addOnFailureListener(e -> {
                 Log.e(TAG, "Error loading nearby notes", e);
                 tvNoNearbyNotes.setVisibility(View.VISIBLE);
                 rvNearbyNotes.setVisibility(View.GONE);
+                if (onComplete != null) onComplete.run();
             });
     }
     
@@ -601,6 +648,10 @@ public class FeedFragment extends Fragment {
     }
     
     private void loadFollowingUsers() {
+        loadFollowingUsers(null);
+    }
+    
+    private void loadFollowingUsers(Runnable onComplete) {
         String userId = auth.getCurrentUser().getUid();
         Log.d(TAG, "Loading following users for: " + userId);
         
@@ -615,6 +666,7 @@ public class FeedFragment extends Fragment {
                 if (totalFollowing == 0) {
                     rvFollowing.setVisibility(View.GONE);
                     tvNoFollowing.setVisibility(View.VISIBLE);
+                    if (onComplete != null) onComplete.run();
                     return;
                 }
                 
@@ -637,16 +689,24 @@ public class FeedFragment extends Fragment {
                                     tvNoFollowing.setVisibility(View.GONE);
                                     followingAdapter.setUsers(following);
                                     Log.d(TAG, "Loaded " + following.size() + " following users");
+                                    if (onComplete != null) onComplete.run();
                                 }
                             }
                         })
-                        .addOnFailureListener(e -> Log.e(TAG, "Error loading user: " + followedId, e));
+                        .addOnFailureListener(e -> {
+                            Log.e(TAG, "Error loading user: " + followedId, e);
+                            // Still count as processed to avoid hanging
+                            if (following.size() >= totalFollowing - 1 && onComplete != null) {
+                                onComplete.run();
+                            }
+                        });
                 }
             })
             .addOnFailureListener(e -> {
                 Log.e(TAG, "Error loading following list", e);
                 rvFollowing.setVisibility(View.GONE);
                 tvNoFollowing.setVisibility(View.VISIBLE);
+                if (onComplete != null) onComplete.run();
             });
     }
     

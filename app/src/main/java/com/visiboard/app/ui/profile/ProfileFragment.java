@@ -54,6 +54,12 @@ public class ProfileFragment extends Fragment {
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
+    
+    // Caching to improve performance
+    private static String cachedName;
+    private static String cachedProfilePic;
+    private static Long cachedFollowersCount;
+    private static Long cachedFollowingCount;
 
     private final int PICK_IMAGE = 101;
     private String base64Image = "";
@@ -105,6 +111,7 @@ public class ProfileFragment extends Fragment {
 
         profileImage.setOnClickListener(v -> pickImage());
         logoutIcon.setOnClickListener(v -> showLogoutConfirmation());
+        view.findViewById(R.id.btn_view_all_notes).setOnClickListener(v -> showAllNotesDialog());
         
         // Followers/Following click listeners
         view.findViewById(R.id.followers_section).setOnClickListener(v -> showFollowersDialog(false));
@@ -167,39 +174,88 @@ public class ProfileFragment extends Fragment {
         if (user == null) return;
 
         emailText.setText(user.getEmail());
+        
+        // Load from cache first for instant display
+        if (cachedName != null) {
+            nameText.setText(cachedName);
+        }
+        if (cachedProfilePic != null && !cachedProfilePic.isEmpty()) {
+            try {
+                byte[] bytes = Base64.decode(cachedProfilePic, Base64.DEFAULT);
+                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                profileImage.setImageBitmap(bitmap);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        if (cachedFollowersCount != null) {
+            tvFollowersCount.setText(String.valueOf(cachedFollowersCount));
+        }
+        if (cachedFollowingCount != null) {
+            tvFollowingCount.setText(String.valueOf(cachedFollowingCount));
+        }
 
+        // Then load fresh data from Firestore with caching enabled
         String uid = user.getUid();
-        db.collection("users").document(uid).get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        String name = doc.getString("name");
-                        nameText.setText(name != null ? name : "User");
-
-                        String location = doc.getString("lastKnownLocation");
-                        if (location != null && !location.isEmpty()) {
-                            tvLocation.setText(location);
-                            tvLocation.setVisibility(View.VISIBLE);
-                        }
-
-                        // Load followers and following counts
-                        Long followersCount = doc.getLong("followersCount");
-                        Long followingCount = doc.getLong("followingCount");
-                        tvFollowersCount.setText(String.valueOf(followersCount != null ? followersCount : 0));
-                        tvFollowingCount.setText(String.valueOf(followingCount != null ? followingCount : 0));
-
-                        String pic = doc.getString("profilePic");
-                        if (pic != null && !pic.isEmpty()) {
-                            try {
-                                byte[] bytes = Base64.decode(pic, Base64.DEFAULT);
-                                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                                profileImage.setImageBitmap(bitmap);
-                            } catch (IllegalArgumentException e) {
-                                e.printStackTrace();
-                                Toast.makeText(getContext(), "Error loading profile picture", Toast.LENGTH_SHORT).show();
-                            }
-                        }
+        db.collection("users").document(uid)
+                .get(com.google.firebase.firestore.Source.CACHE)
+                .addOnSuccessListener(cachedDoc -> {
+                    if (cachedDoc.exists()) {
+                        updateUserDataUI(cachedDoc);
                     }
+                    // Then get fresh data
+                    db.collection("users").document(uid).get()
+                            .addOnSuccessListener(this::updateUserDataUI)
+                            .addOnFailureListener(e -> 
+                                    Log.e("ProfileFragment", "Error loading user data: " + e.getMessage()));
+                })
+                .addOnFailureListener(e -> {
+                    // Cache miss, load from server
+                    db.collection("users").document(uid).get()
+                            .addOnSuccessListener(this::updateUserDataUI)
+                            .addOnFailureListener(err -> 
+                                    Log.e("ProfileFragment", "Error loading user data: " + err.getMessage()));
                 });
+    }
+    
+    private void updateUserDataUI(com.google.firebase.firestore.DocumentSnapshot doc) {
+        if (doc.exists()) {
+            String name = doc.getString("name");
+            if (name != null) {
+                nameText.setText(name);
+                cachedName = name;
+            }
+
+            String location = doc.getString("lastKnownLocation");
+            if (location != null && !location.isEmpty()) {
+                tvLocation.setText(location);
+                tvLocation.setVisibility(View.VISIBLE);
+            }
+
+            // Load followers and following counts
+            Long followersCount = doc.getLong("followersCount");
+            Long followingCount = doc.getLong("followingCount");
+            if (followersCount != null) {
+                tvFollowersCount.setText(String.valueOf(followersCount));
+                cachedFollowersCount = followersCount;
+            }
+            if (followingCount != null) {
+                tvFollowingCount.setText(String.valueOf(followingCount));
+                cachedFollowingCount = followingCount;
+            }
+
+            String pic = doc.getString("profilePic");
+            if (pic != null && !pic.isEmpty()) {
+                try {
+                    byte[] bytes = Base64.decode(pic, Base64.DEFAULT);
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    profileImage.setImageBitmap(bitmap);
+                    cachedProfilePic = pic;
+                } catch (IllegalArgumentException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     private void loadUserStats() {
@@ -263,8 +319,8 @@ public class ProfileFragment extends Fragment {
                                 note.setTimestamp(timestamp != null ? timestamp : 0);
                                 
                                 // Get likes count - check both field names
-                                Long likesCount = doc.getLong("likesCount");
-                                if (likesCount == null) likesCount = doc.getLong("likeCount");
+                                Long likesCount = doc.getLong("likeCount");
+                                if (likesCount == null) likesCount = doc.getLong("likesCount"); // fallback to old field name
                                 note.setLikesCount(likesCount != null ? likesCount.intValue() : 0);
                                 
                                 // Get comments count from subcollection for accuracy
@@ -286,8 +342,8 @@ public class ProfileFragment extends Fragment {
                             
                             // Calculate total likes
                             for (com.google.firebase.firestore.DocumentSnapshot doc : docs) {
-                                Long likeCount = doc.getLong("likesCount");
-                                if (likeCount == null) likeCount = doc.getLong("likeCount");
+                                Long likeCount = doc.getLong("likeCount");
+                                if (likeCount == null) likeCount = doc.getLong("likesCount"); // fallback to old field name
                                 if (likeCount != null) {
                                     totalLikes += likeCount.intValue();
                                 }
@@ -810,6 +866,118 @@ public class ProfileFragment extends Fragment {
         
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        dialog.show();
+    }
+    
+    // Show all notes dialog
+    private void showAllNotesDialog() {
+        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_followers_list, null);
+        
+        android.widget.Button followersTab = dialogView.findViewById(R.id.btn_followers_tab);
+        android.widget.Button followingTab = dialogView.findViewById(R.id.btn_following_tab);
+        androidx.recyclerview.widget.RecyclerView recyclerView = dialogView.findViewById(R.id.users_recycler);
+        TextView emptyState = dialogView.findViewById(R.id.empty_state);
+        
+        // Repurpose the tabs - hide following tab and use followers tab as title
+        followersTab.setText("All My Notes");
+        followersTab.setEnabled(false);
+        followersTab.setTextColor(getResources().getColor(R.color.black, null));
+        followersTab.setBackgroundColor(getResources().getColor(R.color.secondary, null));
+        followingTab.setVisibility(View.GONE);
+        
+        recyclerView.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(getContext()));
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
+                .setView(dialogView)
+                .setNegativeButton("Close", null)
+                .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        // Load all notes
+        FirebaseUser user = auth.getCurrentUser();
+        if (user != null) {
+            String uid = user.getUid();
+            
+            db.collection("users").document(uid).get()
+                .addOnSuccessListener(currentUserDoc -> {
+                    String currentUserName = currentUserDoc.getString("name");
+                    String currentUserProfilePic = currentUserDoc.getString("profilePic");
+                    
+                    db.collection("notes")
+                        .whereEqualTo("userId", uid)
+                        .get()
+                        .addOnSuccessListener(querySnapshot -> {
+                            List<NearbyNote> allNotes = new ArrayList<>();
+                            
+                            for (var doc : querySnapshot.getDocuments()) {
+                                NearbyNote note = new NearbyNote();
+                                note.setId(doc.getId());
+                                
+                                String noteText = doc.getString("text");
+                                if (noteText == null) noteText = doc.getString("note");
+                                note.setText(noteText);
+                                
+                                String summary = doc.getString("summary");
+                                if (summary == null && noteText != null && noteText.length() > 100) {
+                                    summary = noteText.substring(0, 100) + "...";
+                                }
+                                note.setSummary(summary);
+                                
+                                note.setUserName(currentUserName != null ? currentUserName : "You");
+                                note.setUserProfilePic(currentUserProfilePic);
+                                note.setUserId(uid);
+                                
+                                Double lat = doc.getDouble("lat");
+                                Double lon = doc.getDouble("lon");
+                                if (lat != null && lon != null) {
+                                    note.setLat(lat);
+                                    note.setLng(lon);
+                                }
+                                
+                                Long timestamp = doc.getLong("timestamp");
+                                note.setTimestamp(timestamp != null ? timestamp : 0);
+                                
+                                Long likeCount = doc.getLong("likeCount");
+                                if (likeCount == null) likeCount = doc.getLong("likesCount");
+                                note.setLikesCount(likeCount != null ? likeCount.intValue() : 0);
+                                
+                                Long commentsCount = doc.getLong("commentsCount");
+                                note.setCommentsCount(commentsCount != null ? commentsCount.intValue() : 0);
+                                
+                                allNotes.add(note);
+                            }
+                            
+                            // Sort by timestamp descending (newest first) in memory
+                            allNotes.sort((a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()));
+                            
+                            if (allNotes.isEmpty()) {
+                                emptyState.setVisibility(View.VISIBLE);
+                                emptyState.setText("You haven't placed any notes yet");
+                                recyclerView.setVisibility(View.GONE);
+                            } else {
+                                emptyState.setVisibility(View.GONE);
+                                recyclerView.setVisibility(View.VISIBLE);
+                                
+                                RecentNotesAdapter adapter = new RecentNotesAdapter(note -> {
+                                    dialog.dismiss();
+                                    navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
+                                });
+                                adapter.setNotes(allNotes);
+                                recyclerView.setAdapter(adapter);
+                            }
+                        })
+                        .addOnFailureListener(e -> {
+                            emptyState.setVisibility(View.VISIBLE);
+                            emptyState.setText("Failed to load notes");
+                            recyclerView.setVisibility(View.GONE);
+                            Log.e("ProfileFragment", "Error loading all notes: " + e.getMessage());
+                        });
+                });
         }
         
         dialog.show();

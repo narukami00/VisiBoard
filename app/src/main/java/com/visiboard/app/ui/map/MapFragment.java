@@ -105,6 +105,7 @@ public class MapFragment extends Fragment {
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
+    private com.google.firebase.firestore.ListenerRegistration notesListener;
 
     private boolean useCloudMode = true; // true: Firestore, false: SharedPreferences
 
@@ -409,43 +410,70 @@ public class MapFragment extends Fragment {
                             }
                         });
 
-                // Like button click with double-click prevention
+                // Like button click with double-click prevention using Firestore transaction
                 likeSection.setOnClickListener(v -> {
                     if (isProcessingLike[0]) return; // Prevent double-click
                     isProcessingLike[0] = true;
                     
+                    // Optimistic UI update
                     noteRef.get().addOnSuccessListener(doc -> {
                         java.util.List<String> likedBy = (java.util.List<String>) doc.get("likedBy");
                         boolean isLiked = likedBy != null && likedBy.contains(currentUserId);
+                        boolean willLike = !isLiked;
                         
-                        if (isLiked) {
-                            // Unlike
-                            noteRef.update("likedBy", FieldValue.arrayRemove(currentUserId),
-                                    "likeCount", FieldValue.increment(-1))
-                                    .addOnSuccessListener(aVoid -> {
-                                        btnLike.setImageResource(R.drawable.ic_heart_outline);
-                                        int count = Integer.parseInt(tvLikeCount.getText().toString());
-                                        tvLikeCount.setText(String.valueOf(Math.max(0, count - 1)));
-                                        isProcessingLike[0] = false;
-                                    })
-                                    .addOnFailureListener(e -> isProcessingLike[0] = false);
+                        // Update UI immediately
+                        if (willLike) {
+                            btnLike.setImageResource(R.drawable.ic_heart);
+                            animateLike(btnLike);
+                            int count = Integer.parseInt(tvLikeCount.getText().toString());
+                            tvLikeCount.setText(String.valueOf(count + 1));
                         } else {
-                            // Like
-                            noteRef.update("likedBy", FieldValue.arrayUnion(currentUserId),
-                                    "likeCount", FieldValue.increment(1))
-                                    .addOnSuccessListener(aVoid -> {
-                                        btnLike.setImageResource(R.drawable.ic_heart);
-                                        animateLike(btnLike);
-                                        int count = Integer.parseInt(tvLikeCount.getText().toString());
-                                        tvLikeCount.setText(String.valueOf(count + 1));
-                                        isProcessingLike[0] = false;
-                                        
-                                        if (!isOwner) {
-                                            createNotification(noteOwnerId, currentUserId, "like", docId, noteText, position);
-                                        }
-                                    })
-                                    .addOnFailureListener(e -> isProcessingLike[0] = false);
+                            btnLike.setImageResource(R.drawable.ic_heart_outline);
+                            int count = Integer.parseInt(tvLikeCount.getText().toString());
+                            tvLikeCount.setText(String.valueOf(Math.max(0, count - 1)));
                         }
+                        
+                        // Perform update with transaction to prevent race conditions
+                        db.runTransaction(transaction -> {
+                            com.google.firebase.firestore.DocumentSnapshot snapshot = transaction.get(noteRef);
+                            java.util.List<String> currentLikedBy = (java.util.List<String>) snapshot.get("likedBy");
+                            boolean currentlyLiked = currentLikedBy != null && currentLikedBy.contains(currentUserId);
+                            
+                            if (currentlyLiked && willLike) {
+                                // Already liked, user is trying to like again - do nothing
+                                return null;
+                            } else if (!currentlyLiked && !willLike) {
+                                // Not liked, user is trying to unlike - do nothing
+                                return null;
+                            }
+                            
+                            if (willLike) {
+                                transaction.update(noteRef, "likedBy", FieldValue.arrayUnion(currentUserId));
+                                transaction.update(noteRef, "likeCount", FieldValue.increment(1));
+                            } else {
+                                transaction.update(noteRef, "likedBy", FieldValue.arrayRemove(currentUserId));
+                                transaction.update(noteRef, "likeCount", FieldValue.increment(-1));
+                            }
+                            return null;
+                        }).addOnSuccessListener(aVoid -> {
+                            isProcessingLike[0] = false;
+                            if (willLike && !isOwner) {
+                                createNotification(noteOwnerId, currentUserId, "like", docId, noteText, position);
+                            }
+                        }).addOnFailureListener(e -> {
+                            // Revert UI on failure
+                            if (willLike) {
+                                btnLike.setImageResource(R.drawable.ic_heart_outline);
+                                int count = Integer.parseInt(tvLikeCount.getText().toString());
+                                tvLikeCount.setText(String.valueOf(Math.max(0, count - 1)));
+                            } else {
+                                btnLike.setImageResource(R.drawable.ic_heart);
+                                int count = Integer.parseInt(tvLikeCount.getText().toString());
+                                tvLikeCount.setText(String.valueOf(count + 1));
+                            }
+                            isProcessingLike[0] = false;
+                            Toast.makeText(requireContext(), "Failed to update like", Toast.LENGTH_SHORT).show();
+                        });
                     }).addOnFailureListener(e -> isProcessingLike[0] = false);
                 });
 
@@ -528,6 +556,7 @@ public class MapFragment extends Fragment {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_comment, null);
         
         com.google.android.material.textfield.TextInputEditText commentInput = dialogView.findViewById(R.id.comment_input);
+        android.widget.Button btnPost = dialogView.findViewById(R.id.btn_post);
         
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setView(dialogView)
@@ -539,9 +568,17 @@ public class MapFragment extends Fragment {
         
         dialogView.findViewById(R.id.btn_cancel).setOnClickListener(v -> dialog.dismiss());
         
-        dialogView.findViewById(R.id.btn_post).setOnClickListener(v -> {
+        final boolean[] isPosting = {false}; // Prevent duplicate posts
+        
+        btnPost.setOnClickListener(v -> {
+            if (isPosting[0]) return; // Already posting
+            
             String commentText = commentInput.getText().toString().trim();
             if (!commentText.isEmpty() && auth.getCurrentUser() != null) {
+                isPosting[0] = true;
+                btnPost.setEnabled(false);
+                btnPost.setText("Posting...");
+                
                 String uid = auth.getCurrentUser().getUid();
                 
                 // Get user name from Firestore
@@ -573,7 +610,19 @@ public class MapFragment extends Fragment {
                                         
                                         Toast.makeText(requireContext(), "Comment added!", Toast.LENGTH_SHORT).show();
                                         dialog.dismiss();
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        isPosting[0] = false;
+                                        btnPost.setEnabled(true);
+                                        btnPost.setText("Post");
+                                        Toast.makeText(requireContext(), "Failed to add comment", Toast.LENGTH_SHORT).show();
                                     });
+                        })
+                        .addOnFailureListener(e -> {
+                            isPosting[0] = false;
+                            btnPost.setEnabled(true);
+                            btnPost.setText("Post");
+                            Toast.makeText(requireContext(), "Failed to load user info", Toast.LENGTH_SHORT).show();
                         });
             } else {
                 Toast.makeText(requireContext(), "Please write something", Toast.LENGTH_SHORT).show();
@@ -622,9 +671,6 @@ public class MapFragment extends Fragment {
             String note = editText.getText().toString().trim();
             if (!note.isEmpty()) {
                 long timestamp = System.currentTimeMillis();
-                String shortNote = note.length() > 30 ? note.substring(0, 30) + "..." : note;
-                String currentUserId = auth.getCurrentUser() != null ? auth.getCurrentUser().getUid() : null;
-                addNoteMarker(position, note, shortNote, timestamp, null, currentUserId);
                 saveNote(position, note, timestamp);
                 dialog.dismiss();
             } else {
@@ -660,10 +706,10 @@ public class MapFragment extends Fragment {
                     noteMap.put("lat", position.getLatitude());
                     noteMap.put("lon", position.getLongitude());
                     noteMap.put("location", new com.google.firebase.firestore.GeoPoint(position.getLatitude(), position.getLongitude()));
-                    noteMap.put("text", note);
+                    noteMap.put("note", note);
                     noteMap.put("summary", note.length() > 100 ? note.substring(0, 100) + "..." : note);
                     noteMap.put("timestamp", timestamp);
-                    noteMap.put("likesCount", 0);
+                    noteMap.put("likeCount", 0);
                     noteMap.put("likedBy", new java.util.ArrayList<String>());
                     noteMap.put("commentsCount", 0);
 
@@ -672,11 +718,12 @@ public class MapFragment extends Fragment {
                             .add(noteMap)
                             .addOnSuccessListener(docRef -> {
                                 Log.d("MapFragment", "Note saved: " + docRef.getId());
-                                // Update marker with docId
-                                addNoteMarker(position, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                                        timestamp, docRef.getId(), uid);
+                                Toast.makeText(requireContext(), "Note placed!", Toast.LENGTH_SHORT).show();
                             })
-                            .addOnFailureListener(e -> Log.e("MapFragment", "Error saving note: " + e.getMessage()));
+                            .addOnFailureListener(e -> {
+                                Log.e("MapFragment", "Error saving note: " + e.getMessage());
+                                Toast.makeText(requireContext(), "Failed to save note", Toast.LENGTH_SHORT).show();
+                            });
                 });
         } else {
             saveNoteLocally(position, note, timestamp);
@@ -738,26 +785,52 @@ public class MapFragment extends Fragment {
     // Load notes
     private void loadSavedNotes() {
         if (useCloudMode && auth.getCurrentUser() != null) {
-            // Load ALL notes from the global notes collection
-            db.collection("notes")
-                    .get()
-                    .addOnSuccessListener(querySnapshot -> {
-                        for (var doc : querySnapshot) {
-                            try {
-                                double lat = doc.getDouble("lat");
-                                double lon = doc.getDouble("lon");
-                                String note = doc.getString("note");
-                                String userId = doc.getString("userId");
-                                long timestamp = doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0L;
-                                LatLng pos = new LatLng(lat, lon);
-                                addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                                        timestamp, doc.getId(), userId);
-                            } catch (Exception e) {
-                                Log.e("MapFragment", "Error processing note: " + e.getMessage());
+            // Remove old listener if exists
+            if (notesListener != null) {
+                notesListener.remove();
+            }
+            
+            // Add real-time listener to load ALL notes from the global notes collection
+            notesListener = db.collection("notes")
+                    .addSnapshotListener((querySnapshot, error) -> {
+                        if (error != null) {
+                            Log.e("MapFragment", "Error loading notes: " + error.getMessage());
+                            return;
+                        }
+                        
+                        if (querySnapshot != null) {
+                            // Clear existing note markers (keep user location marker)
+                            if (symbolManager != null) {
+                                java.util.List<Symbol> symbolsToRemove = new java.util.ArrayList<>();
+                                androidx.collection.LongSparseArray<Symbol> annotations = symbolManager.getAnnotations();
+                                for (int i = 0; i < annotations.size(); i++) {
+                                    Symbol symbol = annotations.valueAt(i);
+                                    if (symbol != userLocationSymbol) {
+                                        symbolsToRemove.add(symbol);
+                                    }
+                                }
+                                symbolManager.delete(symbolsToRemove);
+                            }
+                            
+                            // Add all notes
+                            for (var doc : querySnapshot) {
+                                try {
+                                    double lat = doc.getDouble("lat");
+                                    double lon = doc.getDouble("lon");
+                                    // Try "note" first, fallback to "text" for backward compatibility
+                                    String note = doc.getString("note");
+                                    if (note == null) note = doc.getString("text");
+                                    String userId = doc.getString("userId");
+                                    long timestamp = doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0L;
+                                    LatLng pos = new LatLng(lat, lon);
+                                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
+                                            timestamp, doc.getId(), userId);
+                                } catch (Exception e) {
+                                    Log.e("MapFragment", "Error processing note: " + e.getMessage());
+                                }
                             }
                         }
-                    })
-                    .addOnFailureListener(e -> Log.e("MapFragment", "Error loading notes: " + e.getMessage()));
+                    });
         } else {
             try {
                 JSONArray array = new JSONArray(sharedPreferences.getString(NOTES_KEY, "[]"));
@@ -1082,14 +1155,29 @@ public class MapFragment extends Fragment {
             if (targetLat != 0 && targetLng != 0) {
                 LatLng targetLocation = new LatLng(targetLat, targetLng);
                 
+                // Immediately move camera to target location (don't wait for anything)
                 if (mapLibreMap != null) {
-                    mapLibreMap.animateCamera(CameraUpdateFactory.newLatLngZoom(targetLocation, 17), 1000);
-                }
-                
-                if (openNoteWindow && targetNoteId != null) {
+                    Log.d(TAG, "Navigating to note at: " + targetLat + ", " + targetLng);
+                    
+                    // First, immediately jump to location with medium zoom
+                    mapLibreMap.moveCamera(CameraUpdateFactory.newLatLngZoom(targetLocation, 16.0));
+                    
+                    // Then smoothly animate to closer zoom
                     new android.os.Handler().postDelayed(() -> {
-                        openNoteWindowById(targetNoteId, targetLocation);
-                    }, 1500);
+                        if (mapLibreMap != null) {
+                            mapLibreMap.animateCamera(
+                                CameraUpdateFactory.newLatLngZoom(targetLocation, 18.0),
+                                800 // Smooth zoom animation
+                            );
+                        }
+                    }, 300);
+                    
+                    if (openNoteWindow && targetNoteId != null) {
+                        // Wait for notes to load and animation to complete
+                        new android.os.Handler().postDelayed(() -> {
+                            openNoteWindowById(targetNoteId, targetLocation);
+                        }, 2000);
+                    }
                 }
                 
                 getArguments().clear();
@@ -1101,8 +1189,9 @@ public class MapFragment extends Fragment {
         db.collection("notes").document(noteId).get()
             .addOnSuccessListener(doc -> {
                 if (doc.exists()) {
-                    String noteText = doc.getString("text");
-                    if (noteText == null) noteText = doc.getString("note");
+                    // Try "note" first, fallback to "text" for backward compatibility
+                    String noteText = doc.getString("note");
+                    if (noteText == null) noteText = doc.getString("text");
                     
                     Long timestamp = doc.getLong("timestamp");
                     String userId = doc.getString("userId");
@@ -1138,7 +1227,12 @@ public class MapFragment extends Fragment {
     @Override public void onPause() { super.onPause(); mapView.onPause(); }
     @Override public void onStop() { super.onStop(); mapView.onStop(); }
     @Override public void onLowMemory() { super.onLowMemory(); mapView.onLowMemory(); }
-    @Override public void onDestroy() { super.onDestroy(); if (symbolManager != null) symbolManager.onDestroy(); mapView.onDestroy(); }
+    @Override public void onDestroy() { 
+        super.onDestroy(); 
+        if (notesListener != null) notesListener.remove();
+        if (symbolManager != null) symbolManager.onDestroy(); 
+        mapView.onDestroy(); 
+    }
     @Override public void onSaveInstanceState(@NonNull Bundle outState) { super.onSaveInstanceState(outState); mapView.onSaveInstanceState(outState); }
 
     @Override

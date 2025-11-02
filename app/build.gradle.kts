@@ -64,6 +64,7 @@ dependencies {
 
     // Room
     implementation("androidx.room:room-runtime:2.5.2")
+    implementation(libs.swiperefreshlayout)
     annotationProcessor("androidx.room:room-compiler:2.5.2")
 
     // WorkManager

@@ -5,6 +5,22 @@
     android:layout_height="match_parent"
     android:background="@color/background_light">
 
+    <!-- View All Notes Button (Top Left) -->
+    <ImageView
+        android:id="@+id/btn_view_all_notes"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:src="@drawable/ic_map"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="6dp"
+        android:tint="@color/primaryDark"
+        android:elevation="4dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:contentDescription="View All Notes" />
+
     <!-- Logout Icon -->
     <ImageView
         android:id="@+id/logout_icon"
