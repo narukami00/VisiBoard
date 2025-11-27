@@ -12,3 +12,4 @@ app/build/
 google-services.json
 *.keystore
 *.md
+/VisiBoard_v2
