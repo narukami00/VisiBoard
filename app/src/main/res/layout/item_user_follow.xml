@@ -45,6 +45,17 @@
 
     </LinearLayout>
 
+    <ImageView
+        android:id="@+id/item_message_icon"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:src="@drawable/ic_message"
+        app:tint="@color/primary"
+        android:padding="6dp"
+        android:layout_marginEnd="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Send Message" />
+
     <Button
         android:id="@+id/item_follow_btn"
         android:layout_width="wrap_content"

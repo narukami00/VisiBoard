@@ -55,25 +55,37 @@
         android:layout_marginTop="40dp" />
 
     <!-- Password Field -->
-    <EditText
-        android:id="@+id/loginPassword"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/loginPasswordLayout"
         android:layout_width="0dp"
-        android:layout_height="56dp"
+        android:layout_height="wrap_content"
         android:hint="Password"
         android:textColorHint="@color/text_hint"
-        android:textColor="@color/text_primary"
-        android:inputType="textPassword"
-        android:background="@drawable/edittext_bg"
-        android:padding="16dp"
-        android:fontFamily="@font/poppins_regular"
-        android:drawableStart="@drawable/ic_lock"
-        android:drawablePadding="12dp"
+        app:boxBackgroundMode="outline"
+        app:boxBackgroundColor="@android:color/transparent"
+        app:boxStrokeColor="@color/primary"
+        app:endIconMode="password_toggle"
+        app:endIconTint="@color/text_secondary"
+        app:startIconDrawable="@drawable/ic_lock"
+        app:startIconTint="@color/text_secondary"
         app:layout_constraintTop_toBottomOf="@id/loginEmail"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="16dp"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
-    <!-- Forgot Password (optional, can add functionality later) -->
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/loginPassword"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPassword"
+            android:textColor="@color/text_primary"
+            android:fontFamily="@font/poppins_regular"
+            android:minHeight="56dp"/>
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Forgot Password -->
     <TextView
         android:id="@+id/forgotPassword"
         android:layout_width="wrap_content"
@@ -81,7 +93,7 @@
         android:text="Forgot Password?"
         android:textColor="@color/primary"
         android:textSize="14sp"
-        app:layout_constraintTop_toBottomOf="@id/loginPassword"
+        app:layout_constraintTop_toBottomOf="@id/loginPasswordLayout"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="8dp" />
 

@@ -45,7 +45,7 @@ public class FeedFragment extends Fragment {
     private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipeRefresh;
     private RecyclerView rvNotifications, rvNearbyNotes, rvSearchResults, rvFollowing;
     private TextView tvNoNotifications, tvNoNearbyNotes, tvNoFollowing;
-    private Button btnClearNotifications;
+    private Button btnClearNotifications, btnShowMoreNotifications, btnShowMoreNearby;
     private TextInputEditText etSearchUsers;
     private NotificationAdapter notificationAdapter;
     private NearbyNotesAdapter nearbyNotesAdapter;
@@ -57,6 +57,14 @@ public class FeedFragment extends Fragment {
     private FusedLocationProviderClient fusedLocationClient;
     
     private Location currentLocation;
+    
+    // Show More functionality
+    private boolean showingAllNotifications = false;
+    private boolean showingAllNearby = false;
+    private List<Notification> allNotifications = new ArrayList<>();
+    private List<NearbyNote> allNearbyNotes = new ArrayList<>();
+    private static final int MAX_NOTIFICATIONS_PREVIEW = 5;
+    private static final int MAX_NEARBY_PREVIEW = 3;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -80,12 +88,15 @@ public class FeedFragment extends Fragment {
         tvNoNearbyNotes = view.findViewById(R.id.tv_no_nearby_notes);
         tvNoFollowing = view.findViewById(R.id.tv_no_following);
         btnClearNotifications = view.findViewById(R.id.btn_clear_notifications);
+        btnShowMoreNotifications = view.findViewById(R.id.btn_show_more_notifications);
+        btnShowMoreNearby = view.findViewById(R.id.btn_show_more_nearby);
         etSearchUsers = view.findViewById(R.id.et_search_users);
         
         setupSwipeRefresh();
         setupRecyclerViews();
         setupSearchBar();
         setupClearButton();
+        setupShowMoreButtons();
         loadUserLocation();
     }
     
@@ -129,6 +140,9 @@ public class FeedFragment extends Fragment {
         rvSearchResults.setLayoutManager(new LinearLayoutManager(getContext()));
         userSearchAdapter = new UserSearchAdapter(user -> {
             showUserInfoDialog(user.getUserId());
+        });
+        userSearchAdapter.setOnMessageClickListener(user -> {
+            showSendMessageDialog(user);
         });
         rvSearchResults.setAdapter(userSearchAdapter);
         
@@ -189,6 +203,75 @@ public class FeedFragment extends Fragment {
             
             dialog.show();
         });
+    }
+    
+    private void setupShowMoreButtons() {
+        btnShowMoreNotifications.setOnClickListener(v -> toggleNotificationsView());
+        btnShowMoreNearby.setOnClickListener(v -> toggleNearbyNotesView());
+    }
+    
+    private void toggleNotificationsView() {
+        showingAllNotifications = !showingAllNotifications;
+        updateNotificationsDisplay();
+    }
+    
+    private void toggleNearbyNotesView() {
+        showingAllNearby = !showingAllNearby;
+        updateNearbyNotesDisplay();
+    }
+    
+    private void updateNotificationsDisplay() {
+        if (allNotifications.isEmpty()) {
+            tvNoNotifications.setVisibility(View.VISIBLE);
+            rvNotifications.setVisibility(View.GONE);
+            btnShowMoreNotifications.setVisibility(View.GONE);
+            return;
+        }
+        
+        List<Notification> displayList;
+        if (showingAllNotifications) {
+            displayList = allNotifications;
+        } else {
+            displayList = allNotifications.subList(0, Math.min(MAX_NOTIFICATIONS_PREVIEW, allNotifications.size()));
+        }
+        
+        tvNoNotifications.setVisibility(View.GONE);
+        rvNotifications.setVisibility(View.VISIBLE);
+        notificationAdapter.setNotifications(displayList);
+        
+        if (allNotifications.size() > MAX_NOTIFICATIONS_PREVIEW) {
+            btnShowMoreNotifications.setVisibility(View.VISIBLE);
+            btnShowMoreNotifications.setText(showingAllNotifications ? "Show Less" : "Show More (" + (allNotifications.size() - MAX_NOTIFICATIONS_PREVIEW) + " more)");
+        } else {
+            btnShowMoreNotifications.setVisibility(View.GONE);
+        }
+    }
+    
+    private void updateNearbyNotesDisplay() {
+        if (allNearbyNotes.isEmpty()) {
+            tvNoNearbyNotes.setVisibility(View.VISIBLE);
+            rvNearbyNotes.setVisibility(View.GONE);
+            btnShowMoreNearby.setVisibility(View.GONE);
+            return;
+        }
+        
+        List<NearbyNote> displayList;
+        if (showingAllNearby) {
+            displayList = allNearbyNotes;
+        } else {
+            displayList = allNearbyNotes.subList(0, Math.min(MAX_NEARBY_PREVIEW, allNearbyNotes.size()));
+        }
+        
+        tvNoNearbyNotes.setVisibility(View.GONE);
+        rvNearbyNotes.setVisibility(View.VISIBLE);
+        nearbyNotesAdapter.setNotes(displayList);
+        
+        if (allNearbyNotes.size() > MAX_NEARBY_PREVIEW) {
+            btnShowMoreNearby.setVisibility(View.VISIBLE);
+            btnShowMoreNearby.setText(showingAllNearby ? "Show Less" : "Show More (" + (allNearbyNotes.size() - MAX_NEARBY_PREVIEW) + " more)");
+        } else {
+            btnShowMoreNearby.setVisibility(View.GONE);
+        }
     }
     
     private void handleNotificationClick(Notification notification) {
@@ -486,14 +569,8 @@ public class FeedFragment extends Fragment {
                 // Sort by timestamp descending
                 notifications.sort((a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()));
                 
-                if (notifications.isEmpty()) {
-                    tvNoNotifications.setVisibility(View.VISIBLE);
-                    rvNotifications.setVisibility(View.GONE);
-                } else {
-                    tvNoNotifications.setVisibility(View.GONE);
-                    rvNotifications.setVisibility(View.VISIBLE);
-                    notificationAdapter.setNotifications(notifications);
-                }
+                allNotifications = notifications;
+                updateNotificationsDisplay();
                 
                 if (onComplete != null) onComplete.run();
             })
@@ -614,14 +691,8 @@ public class FeedFragment extends Fragment {
                 
                 nearbyNotes.sort((a, b) -> Double.compare(a.getDistance(), b.getDistance()));
                 
-                if (nearbyNotes.isEmpty()) {
-                    tvNoNearbyNotes.setVisibility(View.VISIBLE);
-                    rvNearbyNotes.setVisibility(View.GONE);
-                } else {
-                    tvNoNearbyNotes.setVisibility(View.GONE);
-                    rvNearbyNotes.setVisibility(View.VISIBLE);
-                    nearbyNotesAdapter.setNotes(nearbyNotes);
-                }
+                allNearbyNotes = nearbyNotes;
+                updateNearbyNotesDisplay();
                 
                 Log.d(TAG, "Found " + nearbyNotes.size() + " nearby notes");
                 if (onComplete != null) onComplete.run();

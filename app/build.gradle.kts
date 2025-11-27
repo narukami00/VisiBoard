@@ -56,11 +56,15 @@ dependencies {
     implementation("androidx.navigation:navigation-fragment:2.6.0")
     implementation("androidx.navigation:navigation-ui:2.6.0")
 
+    // Firebase BOM
+    implementation(platform("com.google.firebase:firebase-bom:32.3.1"))
+    
     // Firebase
-    implementation("com.google.firebase:firebase-auth:22.1.1")
-    implementation("com.google.firebase:firebase-firestore:24.6.0")
-    implementation("com.google.firebase:firebase-storage:20.2.0")
-    implementation("com.google.firebase:firebase-messaging:23.2.0")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-analytics")
 
     // Room
     implementation("androidx.room:room-runtime:2.5.2")
@@ -97,6 +101,11 @@ dependencies {
     // Circle image
     implementation ("de.hdodenhof:circleimageview:3.1.0")
 
+    // CameraX
+    implementation ("androidx.camera:camera-core:1.3.0")
+    implementation ("androidx.camera:camera-camera2:1.3.0")
+    implementation ("androidx.camera:camera-lifecycle:1.3.0")
+    implementation ("androidx.camera:camera-view:1.3.0")
 
     // Testing
     testImplementation(libs.junit)

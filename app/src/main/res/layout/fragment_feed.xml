@@ -9,7 +9,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
-    android:background="#F5F5F5">
+    android:background="@color/background_light">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@android:color/white"
+            android:background="@color/card_background"
             android:padding="16dp"
             android:elevation="4dp">
 
@@ -29,7 +29,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="Search users..."
-                android:textColorHint="@color/background_dark"
+                android:textColorHint="@color/text_secondary"
                 app:startIconDrawable="@drawable/ic_profile"
                 app:endIconMode="clear_text"
                 app:hintTextColor="@color/text_secondary"
@@ -41,7 +41,7 @@
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:textColor="@color/text_primary"
-                    android:textColorHint="@color/background_dark"
+                    android:textColorHint="@color/text_secondary"
                     android:imeOptions="actionSearch"/>
 
             </com.google.android.material.textfield.TextInputLayout>
@@ -60,14 +60,14 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="8dp"
-            android:background="#F5F5F5"/>
+            android:background="@color/background_light"/>
 
         <!-- Notifications Section -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@android:color/white"
+            android:background="@color/card_background"
             android:padding="16dp">
 
             <LinearLayout
@@ -106,6 +106,18 @@
                 android:layout_marginTop="8dp"
                 android:nestedScrollingEnabled="false"/>
 
+            <Button
+                android:id="@+id/btn_show_more_notifications"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Show More"
+                android:textColor="@color/primary"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:textSize="14sp"
+                android:visibility="gone"
+                style="?attr/borderlessButtonStyle"/>
+
             <TextView
                 android:id="@+id/tv_no_notifications"
                 android:layout_width="match_parent"
@@ -123,14 +135,14 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="8dp"
-            android:background="#F5F5F5"/>
+            android:background="@color/background_light"/>
 
         <!-- Near You Section -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@android:color/white"
+            android:background="@color/card_background"
             android:padding="16dp">
 
             <TextView
@@ -147,6 +159,18 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:nestedScrollingEnabled="false"/>
+
+            <Button
+                android:id="@+id/btn_show_more_nearby"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Show More"
+                android:textColor="@color/primary"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:textSize="14sp"
+                android:visibility="gone"
+                style="?attr/borderlessButtonStyle"/>
 
             <TextView
                 android:id="@+id/tv_no_nearby_notes"
@@ -165,14 +189,14 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="8dp"
-            android:background="#F5F5F5"/>
+            android:background="@color/background_light"/>
 
         <!-- Following Section -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@android:color/white"
+            android:background="@color/card_background"
             android:padding="16dp">
 
             <TextView

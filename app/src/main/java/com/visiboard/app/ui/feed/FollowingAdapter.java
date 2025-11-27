@@ -98,20 +98,9 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Foll
                 tvUserLocation.setVisibility(View.GONE);
             }
             
-            // Load profile picture
-            String profilePic = user.getProfilePic();
-            if (profilePic != null && !profilePic.isEmpty()) {
-                try {
-                    byte[] bytes = Base64.decode(profilePic, Base64.DEFAULT);
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                    ivUserAvatar.setImageBitmap(bitmap);
-                } catch (Exception e) {
-                    ivUserAvatar.setImageResource(R.drawable.ic_profile);
-                    Log.e(TAG, "Error loading profile pic", e);
-                }
-            } else {
-                ivUserAvatar.setImageResource(R.drawable.ic_profile);
-            }
+            // Load profile picture asynchronously with caching
+            com.visiboard.app.utils.ImageCache.getInstance()
+                .loadBase64Image(user.getProfilePic(), ivUserAvatar, R.drawable.ic_profile);
         }
     }
 }

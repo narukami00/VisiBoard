@@ -90,19 +90,9 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
             tvLikesCount.setText(String.valueOf(note.getLikesCount()));
             tvCommentsCount.setText(String.valueOf(note.getCommentsCount()));
             
-            // Load profile picture
-            String profilePic = note.getUserProfilePic();
-            if (profilePic != null && !profilePic.isEmpty()) {
-                try {
-                    byte[] bytes = Base64.decode(profilePic, Base64.DEFAULT);
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                    ivUserAvatar.setImageBitmap(bitmap);
-                } catch (Exception e) {
-                    ivUserAvatar.setImageResource(R.drawable.ic_profile);
-                }
-            } else {
-                ivUserAvatar.setImageResource(R.drawable.ic_profile);
-            }
+            // Load profile picture asynchronously with caching
+            com.visiboard.app.utils.ImageCache.getInstance()
+                .loadBase64Image(note.getUserProfilePic(), ivUserAvatar, R.drawable.ic_profile);
         }
 
         private String getTimeAgo(long timestamp) {

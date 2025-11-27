@@ -7,6 +7,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
@@ -34,6 +36,7 @@ import android.widget.LinearLayout;
 import com.visiboard.app.R;
 import com.visiboard.app.data.NearbyNote;
 import com.visiboard.app.ui.auth.LoginActivity;
+import com.visiboard.app.utils.ThemeManager;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -73,6 +76,9 @@ public class ProfileFragment extends Fragment {
             R.drawable.ic_diamond,
             R.drawable.ic_platinum
     };
+    
+    private long lastThemeToggleTime = 0;
+    private static final long THEME_TOGGLE_COOLDOWN = 2000;
 
     @Nullable
     @Override
@@ -112,6 +118,58 @@ public class ProfileFragment extends Fragment {
         profileImage.setOnClickListener(v -> pickImage());
         logoutIcon.setOnClickListener(v -> showLogoutConfirmation());
         view.findViewById(R.id.btn_view_all_notes).setOnClickListener(v -> showAllNotesDialog());
+        nameText.setOnClickListener(v -> showEditNameDialog());
+        
+        // Theme toggle
+        ImageView themeToggle = view.findViewById(R.id.theme_toggle_icon);
+        ThemeManager themeManager = ThemeManager.getInstance(requireContext());
+        updateThemeIcon(themeToggle, themeManager.isDarkMode());
+        
+        themeToggle.setOnClickListener(v -> {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastThemeToggleTime < THEME_TOGGLE_COOLDOWN) {
+                Toast.makeText(getContext(), "Please wait...", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            lastThemeToggleTime = currentTime;
+            themeToggle.setEnabled(false);
+            
+            boolean newMode = !themeManager.isDarkMode();
+            themeManager.saveThemePreference(newMode);
+            updateThemeIcon(themeToggle, newMode);
+            
+            v.postDelayed(() -> {
+                if (getActivity() != null) {
+                    Log.d("ProfileFragment", "Starting theme transition sequence");
+                    
+                    showThemeTransitionDialog(newMode);
+                    
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        if (getActivity() == null) return;
+                        
+                        Log.d("ProfileFragment", "Navigating to MapFragment");
+                        try {
+                            Navigation.findNavController(requireView()).navigate(R.id.mapFragment);
+                        } catch (Exception e) {
+                            Log.e("ProfileFragment", "Navigation failed", e);
+                        }
+                        
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            if (getActivity() != null) {
+                                Log.d("ProfileFragment", "Restarting app to apply theme");
+                                Intent intent = new Intent(getActivity(), com.visiboard.app.MainActivity.class);
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                                startActivity(intent);
+                                getActivity().finish();
+                                getActivity().overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                            }
+                        }, 500);
+                        
+                    }, 1000);
+                }
+            }, 100);
+        });
         
         // Followers/Following click listeners
         view.findViewById(R.id.followers_section).setOnClickListener(v -> showFollowersDialog(false));
@@ -450,6 +508,45 @@ public class ProfileFragment extends Fragment {
         db.collection("users").document(uid).update("profilePic", base64Image)
                 .addOnSuccessListener(unused -> Toast.makeText(getContext(), "Profile picture updated", Toast.LENGTH_SHORT).show())
                 .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to update: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+    }
+
+    private void showEditNameDialog() {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null) return;
+
+        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_edit_username, null);
+        com.google.android.material.textfield.TextInputEditText input = dialogView.findViewById(R.id.et_username_input);
+        input.setText(nameText.getText().toString());
+
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
+                .setTitle("Edit Name")
+                .setView(dialogView)
+                .setPositiveButton("Save", (d, w) -> {
+                    String newName = input.getText().toString().trim();
+                    if (!newName.isEmpty()) {
+                        updateUserName(newName);
+                    } else {
+                        Toast.makeText(getContext(), "Name cannot be empty", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.show();
+    }
+
+    private void updateUserName(String newName) {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null) return;
+
+        String uid = user.getUid();
+        db.collection("users").document(uid).update("name", newName)
+                .addOnSuccessListener(unused -> {
+                    nameText.setText(newName);
+                    cachedName = newName;
+                    Toast.makeText(getContext(), "Name updated successfully", Toast.LENGTH_SHORT).show();
+                })
+                .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to update name: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 
     private void showLogoutConfirmation() {
@@ -873,30 +970,24 @@ public class ProfileFragment extends Fragment {
     
     // Show all notes dialog
     private void showAllNotesDialog() {
-        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_followers_list, null);
+        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_all_notes, null);
         
-        android.widget.Button followersTab = dialogView.findViewById(R.id.btn_followers_tab);
-        android.widget.Button followingTab = dialogView.findViewById(R.id.btn_following_tab);
-        androidx.recyclerview.widget.RecyclerView recyclerView = dialogView.findViewById(R.id.users_recycler);
-        TextView emptyState = dialogView.findViewById(R.id.empty_state);
-        
-        // Repurpose the tabs - hide following tab and use followers tab as title
-        followersTab.setText("All My Notes");
-        followersTab.setEnabled(false);
-        followersTab.setTextColor(getResources().getColor(R.color.black, null));
-        followersTab.setBackgroundColor(getResources().getColor(R.color.secondary, null));
-        followingTab.setVisibility(View.GONE);
+        androidx.recyclerview.widget.RecyclerView recyclerView = dialogView.findViewById(R.id.rv_all_notes);
+        TextView emptyState = dialogView.findViewById(R.id.tv_no_notes);
+        TextView notesCount = dialogView.findViewById(R.id.tv_notes_count);
+        ImageView btnClose = dialogView.findViewById(R.id.btn_close);
         
         recyclerView.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(getContext()));
         
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
                 .setView(dialogView)
-                .setNegativeButton("Close", null)
                 .create();
         
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
+        
+        btnClose.setOnClickListener(v -> dialog.dismiss());
         
         // Load all notes
         FirebaseUser user = auth.getCurrentUser();
@@ -952,16 +1043,18 @@ public class ProfileFragment extends Fragment {
                                 allNotes.add(note);
                             }
                             
-                            // Sort by timestamp descending (newest first) in memory
+                            // Sort by timestamp descending (newest first)
                             allNotes.sort((a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()));
                             
                             if (allNotes.isEmpty()) {
                                 emptyState.setVisibility(View.VISIBLE);
-                                emptyState.setText("You haven't placed any notes yet");
                                 recyclerView.setVisibility(View.GONE);
+                                notesCount.setVisibility(View.GONE);
                             } else {
                                 emptyState.setVisibility(View.GONE);
                                 recyclerView.setVisibility(View.VISIBLE);
+                                notesCount.setVisibility(View.VISIBLE);
+                                notesCount.setText(allNotes.size() + (allNotes.size() == 1 ? " note" : " notes"));
                                 
                                 RecentNotesAdapter adapter = new RecentNotesAdapter(note -> {
                                     dialog.dismiss();
@@ -973,8 +1066,8 @@ public class ProfileFragment extends Fragment {
                         })
                         .addOnFailureListener(e -> {
                             emptyState.setVisibility(View.VISIBLE);
-                            emptyState.setText("Failed to load notes");
                             recyclerView.setVisibility(View.GONE);
+                            notesCount.setVisibility(View.GONE);
                             Log.e("ProfileFragment", "Error loading all notes: " + e.getMessage());
                         });
                 });
@@ -989,8 +1082,39 @@ public class ProfileFragment extends Fragment {
         args.putDouble("target_lng", lng);
         args.putString("target_note_id", noteId);
         args.putBoolean("open_note_window", true);
-        
+
         Navigation.findNavController(requireView())
             .navigate(R.id.mapFragment, args);
+    }
+    
+    private void showThemeTransitionDialog(boolean isDarkMode) {
+        androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(requireContext());
+        View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_theme_transition, null);
+        builder.setView(view);
+        
+        ImageView icon = view.findViewById(R.id.theme_icon);
+        TextView text = view.findViewById(R.id.theme_text);
+        
+        if (isDarkMode) {
+            icon.setImageResource(R.drawable.ic_moon);
+            text.setText("Dark Mode");
+        } else {
+            icon.setImageResource(R.drawable.ic_sun);
+            text.setText("Light Mode");
+        }
+        
+        icon.animate().rotation(360).setDuration(1000).start();
+        
+        androidx.appcompat.app.AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        dialog.show();
+        
+        new Handler(Looper.getMainLooper()).postDelayed(dialog::dismiss, 2000);
+    }
+
+    private void updateThemeIcon(ImageView themeToggle, boolean isDarkMode) {
+        themeToggle.setImageResource(isDarkMode ? R.drawable.ic_sun : R.drawable.ic_moon);
     }
 }

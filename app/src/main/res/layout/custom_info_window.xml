@@ -6,7 +6,7 @@
     app:cardCornerRadius="24dp"
     app:cardElevation="16dp"
     android:layout_margin="16dp"
-    android:backgroundTint="#FFFFFF">
+    app:cardBackgroundColor="@color/card_background">
 
     <ScrollView
         android:layout_width="match_parent"
@@ -141,7 +141,7 @@
                         android:text="0"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/background_dark"
+                        android:textColor="@color/text_primary"
                         android:fontFamily="@font/poppins_semibold"
                         android:layout_marginStart="8dp" />
 
@@ -150,7 +150,7 @@
                 <View
                     android:layout_width="1dp"
                     android:layout_height="24dp"
-                    android:background="#E0E0E0"
+                    android:background="@color/divider"
                     android:layout_marginStart="8dp"
                     android:layout_marginEnd="8dp" />
 
@@ -181,7 +181,7 @@
                         android:text="0"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/background_dark"
+                        android:textColor="@color/text_primary"
                         android:fontFamily="@font/poppins_semibold"
                         android:layout_marginStart="8dp" />
 

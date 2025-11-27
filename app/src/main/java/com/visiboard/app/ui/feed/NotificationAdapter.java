@@ -98,19 +98,9 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             tvNotificationTime.setText(getTimeAgo(notification.getTimestamp()));
             ivNotificationIcon.setImageResource(iconRes);
             
-            // Load profile picture
-            String profilePic = notification.getFromUserProfilePic();
-            if (profilePic != null && !profilePic.isEmpty()) {
-                try {
-                    byte[] bytes = Base64.decode(profilePic, Base64.DEFAULT);
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                    ivUserAvatar.setImageBitmap(bitmap);
-                } catch (Exception e) {
-                    ivUserAvatar.setImageResource(R.drawable.ic_profile);
-                }
-            } else {
-                ivUserAvatar.setImageResource(R.drawable.ic_profile);
-            }
+            // Load profile picture asynchronously with caching
+            com.visiboard.app.utils.ImageCache.getInstance()
+                .loadBase64Image(notification.getFromUserProfilePic(), ivUserAvatar, R.drawable.ic_profile);
         }
 
         private String getTimeAgo(long timestamp) {

@@ -15,11 +15,28 @@
         android:src="@drawable/ic_map"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:padding="6dp"
-        android:tint="@color/primaryDark"
+        app:tint="@color/primaryDark"
         android:elevation="4dp"
         android:clickable="true"
         android:focusable="true"
         android:contentDescription="View All Notes" />
+
+    <!-- Theme Toggle Button -->
+    <ImageView
+        android:id="@+id/theme_toggle_icon"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="60dp"
+        android:src="@drawable/ic_moon"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="6dp"
+        app:tint="@color/primaryDark"
+        android:elevation="4dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:contentDescription="Toggle Theme" />
 
     <!-- Logout Icon -->
     <ImageView
@@ -31,7 +48,7 @@
         android:src="@drawable/ic_logout"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:padding="6dp"
-        android:tint="@color/primaryDark"
+        app:tint="@color/primaryDark"
         android:elevation="4dp"
         android:clickable="true"
         android:focusable="true"
@@ -70,7 +87,7 @@
             android:textStyle="bold"
             android:fontFamily="@font/poppins_semibold"
             android:layout_marginTop="12dp"
-            android:textColor="@color/background_dark" />
+            android:textColor="@color/text_primary" />
 
         <TextView
             android:id="@+id/profileEmail"
@@ -304,7 +321,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="12dp"
                     android:progressTint="@color/primary"
-                    android:progressBackgroundTint="#E0E0E0"
+                    android:progressBackgroundTint="@color/divider"
                     android:layout_marginTop="16dp"
                     android:layout_marginBottom="10dp"
                     android:max="100"

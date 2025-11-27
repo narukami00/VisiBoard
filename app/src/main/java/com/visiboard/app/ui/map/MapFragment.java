@@ -187,6 +187,22 @@ public class MapFragment extends Fragment {
 
         // Switch between local and firestore
         switchMode.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            // Check network if switching to cloud mode
+            if (isChecked && !com.visiboard.app.utils.NetworkManager.isNetworkAvailable(requireContext())) {
+                // Revert switch
+                buttonView.setChecked(false);
+                
+                // Show network banner
+                com.visiboard.app.utils.NetworkManager.showNoInternetBanner(
+                    requireActivity(),
+                    () -> {
+                        // Retry - switch to cloud mode again
+                        buttonView.setChecked(true);
+                    }
+                );
+                return;
+            }
+            
             useCloudMode = isChecked;
             Toast.makeText(requireContext(), useCloudMode ? "Cloud Mode" : "Local Mode", Toast.LENGTH_SHORT).show();
 
@@ -304,8 +320,8 @@ public class MapFragment extends Fragment {
                 .setView(infoWindow)
                 .setNegativeButton("Close", (d, w) -> d.dismiss());
 
-        // Only show delete button if user owns the note
-        if (isOwner) {
+        // Show delete button if user owns the note OR if it's local mode
+        if (isOwner || !useCloudMode) {
             builder.setPositiveButton("Delete", (d, w) -> {
                 if (useCloudMode && docId != null) {
                     deleteNoteFirestore(docId, noteOwnerId);
@@ -779,7 +795,16 @@ public class MapFragment extends Fragment {
                 }
             }
             sharedPreferences.edit().putString(NOTES_KEY, newArray.toString()).apply();
-        } catch (Exception e) { e.printStackTrace(); }
+            
+            // Reload notes to reflect deletion
+            loadSavedNotes();
+            
+            Toast.makeText(requireContext(), "Note deleted", Toast.LENGTH_SHORT).show();
+            Log.d(TAG, "Note deleted locally");
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(requireContext(), "Failed to delete note", Toast.LENGTH_SHORT).show();
+        }
     }
 
     // Load notes

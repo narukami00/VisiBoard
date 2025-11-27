@@ -34,11 +34,21 @@ public class UserSearchAdapter extends RecyclerView.Adapter<UserSearchAdapter.Us
     public interface OnUserClickListener {
         void onUserClick(UserInfo user);
     }
+    
+    public interface OnMessageClickListener {
+        void onMessageClick(UserInfo user);
+    }
+
+    private OnMessageClickListener messageListener;
 
     public UserSearchAdapter(OnUserClickListener listener) {
         this.listener = listener;
         this.auth = FirebaseAuth.getInstance();
         this.db = FirebaseFirestore.getInstance();
+    }
+    
+    public void setOnMessageClickListener(OnMessageClickListener messageListener) {
+        this.messageListener = messageListener;
     }
 
     @NonNull
@@ -69,6 +79,7 @@ public class UserSearchAdapter extends RecyclerView.Adapter<UserSearchAdapter.Us
         TextView tvUserName, tvUserLocation;
         CircleImageView ivProfilePic;
         Button btnFollow;
+        android.widget.ImageView ivMessage;
         String currentUserId;
 
         UserViewHolder(@NonNull View itemView) {
@@ -77,12 +88,20 @@ public class UserSearchAdapter extends RecyclerView.Adapter<UserSearchAdapter.Us
             tvUserLocation = itemView.findViewById(R.id.item_user_location);
             ivProfilePic = itemView.findViewById(R.id.item_user_profile_pic);
             btnFollow = itemView.findViewById(R.id.item_follow_btn);
+            ivMessage = itemView.findViewById(R.id.item_message_icon);
             currentUserId = auth.getCurrentUser().getUid();
 
             itemView.setOnClickListener(v -> {
                 int position = getAdapterPosition();
                 if (position != RecyclerView.NO_POSITION && listener != null) {
                     listener.onUserClick(users.get(position));
+                }
+            });
+            
+            ivMessage.setOnClickListener(v -> {
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION && messageListener != null) {
+                    messageListener.onMessageClick(users.get(position));
                 }
             });
         }
@@ -97,20 +116,9 @@ public class UserSearchAdapter extends RecyclerView.Adapter<UserSearchAdapter.Us
                 tvUserLocation.setVisibility(View.GONE);
             }
             
-            // Load profile picture
-            String profilePic = user.getProfilePic();
-            if (profilePic != null && !profilePic.isEmpty()) {
-                try {
-                    byte[] bytes = Base64.decode(profilePic, Base64.DEFAULT);
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                    ivProfilePic.setImageBitmap(bitmap);
-                } catch (Exception e) {
-                    ivProfilePic.setImageResource(R.drawable.ic_profile);
-                    Log.e(TAG, "Error loading profile pic", e);
-                }
-            } else {
-                ivProfilePic.setImageResource(R.drawable.ic_profile);
-            }
+            // Load profile picture asynchronously with caching
+            com.visiboard.app.utils.ImageCache.getInstance()
+                .loadBase64Image(user.getProfilePic(), ivProfilePic, R.drawable.ic_profile);
             
             // Check follow status and update button
             db.collection("users").document(currentUserId)
