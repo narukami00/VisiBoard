@@ -94,8 +94,24 @@ public class LoginActivity extends AppCompatActivity {
                     } else {
                         String error = task.getException() != null ? task.getException().getMessage() : "Unknown error";
                         Log.e(TAG, "Login failed: " + error);
-                        Toast.makeText(LoginActivity.this, "Login failed: " + error,
-                                Toast.LENGTH_LONG).show();
+                        
+                        // Provide user-friendly error messages
+                        String errorMessage;
+                        if (error.contains("no user record") || error.contains("user not found") || error.contains("ERROR_USER_NOT_FOUND")) {
+                            errorMessage = "Email not registered. Please sign up first.";
+                        } else if (error.contains("password is invalid") || error.contains("wrong-password") || error.contains("ERROR_WRONG_PASSWORD")) {
+                            errorMessage = "Incorrect password. Please try again.";
+                        } else if (error.contains("badly formatted") || error.contains("invalid-email") || error.contains("ERROR_INVALID_EMAIL")) {
+                            errorMessage = "Invalid email format.";
+                        } else if (error.contains("network error") || error.contains("NETWORK_ERROR")) {
+                            errorMessage = "Network error. Please check your connection.";
+                        } else if (error.contains("too many requests") || error.contains("TOO_MANY_REQUESTS")) {
+                            errorMessage = "Too many login attempts. Please try again later.";
+                        } else {
+                            errorMessage = "Wrong email or password. Please try again.";
+                        }
+                        
+                        Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_LONG).show();
                     }
                 });
     }

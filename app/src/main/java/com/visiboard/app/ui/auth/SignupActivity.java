@@ -138,7 +138,23 @@ public class SignupActivity extends AppCompatActivity {
                                 .addOnFailureListener(e ->
                                         Toast.makeText(this, "Firestore error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
                     } else {
-                        Toast.makeText(this, "Signup failed: " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
+                        String error = task.getException() != null ? task.getException().getMessage() : "Unknown error";
+                        
+                        // Provide user-friendly error messages
+                        String errorMessage;
+                        if (error.contains("already in use") || error.contains("email-already-in-use") || error.contains("ERROR_EMAIL_ALREADY_IN_USE")) {
+                            errorMessage = "Email is already registered. Please login instead.";
+                        } else if (error.contains("weak password") || error.contains("ERROR_WEAK_PASSWORD")) {
+                            errorMessage = "Password is too weak. Use a stronger password.";
+                        } else if (error.contains("badly formatted") || error.contains("invalid-email") || error.contains("ERROR_INVALID_EMAIL")) {
+                            errorMessage = "Invalid email format.";
+                        } else if (error.contains("network error") || error.contains("NETWORK_ERROR")) {
+                            errorMessage = "Network error. Please check your connection.";
+                        } else {
+                            errorMessage = "Signup failed: " + error;
+                        }
+                        
+                        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show();
                     }
                 });
     }

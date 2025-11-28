@@ -379,6 +379,12 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         
         int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
         
+        // Scale based on distance - closer notes appear larger
+        float scale = 1.0f - (float)(note.distance / AR_RADIUS_METERS) * 0.5f;
+        scale = Math.max(0.6f, Math.min(1.4f, scale));
+        noteView.setScaleX(scale);
+        noteView.setScaleY(scale);
+        
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) noteView.getLayoutParams();
         params.leftMargin = Math.max(10, Math.min(screenWidth - 210, x));
         params.topMargin = y;
@@ -461,6 +467,12 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         verticalPosition = Math.max(0.2f, Math.min(0.8f, verticalPosition));
         
         int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
+        
+        // Scale based on distance - closer notes appear larger
+        float scale = 1.0f - (float)(note.distance / AR_RADIUS_METERS) * 0.5f;
+        scale = Math.max(0.6f, Math.min(1.4f, scale));
+        noteView.setScaleX(scale);
+        noteView.setScaleY(scale);
         
         params.leftMargin = Math.max(10, Math.min(screenWidth - 210, x));
         params.topMargin = y;

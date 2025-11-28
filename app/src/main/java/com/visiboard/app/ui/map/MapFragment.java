@@ -101,6 +101,7 @@ public class MapFragment extends Fragment {
     private Symbol userLocationSymbol;
 
     private FusedLocationProviderClient fusedLocationClient;
+    private com.google.android.gms.location.LocationCallback locationCallback;
     private SharedPreferences sharedPreferences;
 
     private FirebaseAuth auth;
@@ -108,9 +109,16 @@ public class MapFragment extends Fragment {
     private com.google.firebase.firestore.ListenerRegistration notesListener;
 
     private boolean useCloudMode = true; // true: Firestore, false: SharedPreferences
+    
+    private String currentMapStyle;
+    private double currentZoom = 15.0;
+    
 
-    private final String GEOAPIFY_STYLE_URL =
+
+    private final String GEOAPIFY_LIGHT_STYLE_URL =
             "https://maps.geoapify.com/v1/styles/osm-bright/style.json?apiKey=4034ef4942f146d6b43fd4a9871cfdc3";
+    private final String GEOAPIFY_DARK_STYLE_URL =
+            "https://maps.geoapify.com/v1/styles/dark-matter/style.json?apiKey=4034ef4942f146d6b43fd4a9871cfdc3";
 
     private static final String MARKER_ICON_ID_USER_LOCATION = "MARKER_ICON_USER_LOCATION";
 
@@ -130,13 +138,16 @@ public class MapFragment extends Fragment {
         Switch switchMode = view.findViewById(R.id.switch_mode);
         switchMode.setChecked(useCloudMode); // initialize
 
+        // Determine map style based on theme
+        boolean isDarkMode = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
+        currentMapStyle = isDarkMode ? GEOAPIFY_DARK_STYLE_URL : GEOAPIFY_LIGHT_STYLE_URL;
 
         mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapLibreMap mapLibreMapReady) {
                 mapLibreMap = mapLibreMapReady;
-                mapLibreMap.setStyle(new Style.Builder().fromUri(GEOAPIFY_STYLE_URL), style -> {
-                    style.addImage(MARKER_ICON_ID_USER_LOCATION, getBitmapFromVectorDrawable(R.drawable.ic_marker));
+                mapLibreMap.setStyle(new Style.Builder().fromUri(currentMapStyle), style -> {
+                    style.addImage(MARKER_ICON_ID_USER_LOCATION, getBitmapFromVectorDrawable(R.drawable.ic_user_location));
 
                     symbolManager = new SymbolManager(mapView, mapLibreMap, style);
                     symbolManager.setIconAllowOverlap(true);
@@ -146,6 +157,12 @@ public class MapFragment extends Fragment {
                     loadSavedNotes();
                     
                     handleNavigationArguments();
+                    
+                    // Add camera listener to update user location marker size based on zoom
+                    mapLibreMap.addOnCameraIdleListener(() -> {
+                        currentZoom = mapLibreMap.getCameraPosition().zoom;
+                        updateUserLocationMarkerSize();
+                    });
 
                     symbolManager.addClickListener(symbol -> {
                         if (symbol.getData() != null) {
@@ -877,20 +894,97 @@ public class MapFragment extends Fragment {
             return;
         }
 
+        // Get initial location
         fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
             if (location != null && mapLibreMap != null) {
                 LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-                mapLibreMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15));
-                if (symbolManager != null) {
-                    if (userLocationSymbol != null) symbolManager.delete(userLocationSymbol);
-                    userLocationSymbol = symbolManager.create(new SymbolOptions()
-                            .withLatLng(latLng)
-                            .withIconImage(MARKER_ICON_ID_USER_LOCATION)
-                            .withTextOffset(new Float[]{0f, -2.5f}));
-                }
+                currentZoom = 15.0;
+                mapLibreMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, currentZoom));
+                updateUserLocationMarker(latLng);
             }
         });
+        
+        // Start continuous location updates for accuracy
+        startLocationUpdates();
     }
+    
+    // Start continuous location updates
+    private void startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        
+        com.google.android.gms.location.LocationRequest locationRequest = 
+            com.google.android.gms.location.LocationRequest.create()
+                .setPriority(com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY)
+                .setInterval(5000)  // Update every 5 seconds
+                .setFastestInterval(2000);  // Can update as fast as 2 seconds
+        
+        locationCallback = new com.google.android.gms.location.LocationCallback() {
+            @Override
+            public void onLocationResult(com.google.android.gms.location.LocationResult locationResult) {
+                if (locationResult != null && locationResult.getLastLocation() != null) {
+                    android.location.Location location = locationResult.getLastLocation();
+                    LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+                    updateUserLocationMarker(latLng);
+                }
+            }
+        };
+        
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null);
+    }
+    
+    // Stop location updates
+    private void stopLocationUpdates() {
+        if (locationCallback != null) {
+            fusedLocationClient.removeLocationUpdates(locationCallback);
+        }
+    }
+    
+    // Update user location marker position
+    private void updateUserLocationMarker(LatLng latLng) {
+        if (symbolManager == null) return;
+        
+        if (userLocationSymbol != null) {
+            userLocationSymbol.setLatLng(latLng);
+            symbolManager.update(userLocationSymbol);
+        } else {
+            // Create marker if it doesn't exist
+            float iconSize = calculateIconSize(currentZoom);
+            userLocationSymbol = symbolManager.create(new SymbolOptions()
+                    .withLatLng(latLng)
+                    .withIconImage(MARKER_ICON_ID_USER_LOCATION)
+                    .withIconSize(iconSize));
+        }
+    }
+    
+    // Calculate icon size based on zoom level
+    private float calculateIconSize(double zoom) {
+        // Larger base size for better visibility
+        // Zoom ranges typically: 0 (world) to 22 (street level)
+        if (zoom <= 8) {
+            return 2.5f; // Large for zoomed out
+        } else if (zoom <= 12) {
+            return 2.0f; // Medium-large
+        } else if (zoom <= 15) {
+            return 1.5f; // Medium
+        } else if (zoom <= 18) {
+            return 1.3f; // Normal
+        } else {
+            return 1.0f; // Small for zoomed in (still larger than before)
+        }
+    }
+    
+    // Update user location marker size when zoom changes
+    private void updateUserLocationMarkerSize() {
+        if (userLocationSymbol != null && symbolManager != null) {
+            float newSize = calculateIconSize(currentZoom);
+            userLocationSymbol.setIconSize(newSize);
+            symbolManager.update(userLocationSymbol);
+        }
+    }
+    
+
 
     // Follow user
     private void followUser(String targetUserId, android.widget.Button btn) {
@@ -1248,12 +1342,27 @@ public class MapFragment extends Fragment {
 
     // Lifecycle
     @Override public void onStart() { super.onStart(); mapView.onStart(); }
-    @Override public void onResume() { super.onResume(); mapView.onResume(); }
-    @Override public void onPause() { super.onPause(); mapView.onPause(); }
+    @Override 
+    public void onResume() { 
+        super.onResume(); 
+        mapView.onResume();
+        // Restart location updates for accuracy
+        startLocationUpdates();
+    }
+    @Override 
+    public void onPause() { 
+        super.onPause(); 
+        mapView.onPause();
+        // Stop location updates to save battery
+        stopLocationUpdates();
+    }
     @Override public void onStop() { super.onStop(); mapView.onStop(); }
     @Override public void onLowMemory() { super.onLowMemory(); mapView.onLowMemory(); }
-    @Override public void onDestroy() { 
-        super.onDestroy(); 
+    @Override 
+    public void onDestroy() { 
+        super.onDestroy();
+        // Clean up location updates
+        stopLocationUpdates();
         if (notesListener != null) notesListener.remove();
         if (symbolManager != null) symbolManager.onDestroy(); 
         mapView.onDestroy(); 
