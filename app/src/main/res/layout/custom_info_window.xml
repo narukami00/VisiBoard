@@ -189,25 +189,7 @@
 
             </LinearLayout>
 
-            <!-- Comments Section -->
-            <TextView
-                android:id="@+id/tv_comments_header"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Comments"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/primaryDark"
-                android:fontFamily="@font/poppins_semibold"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="12dp"
-                android:visibility="gone" />
 
-            <LinearLayout
-                android:id="@+id/comments_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
 
         </LinearLayout>
 

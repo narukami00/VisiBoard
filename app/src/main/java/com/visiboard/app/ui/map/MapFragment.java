@@ -118,7 +118,7 @@ public class MapFragment extends Fragment {
     private final String GEOAPIFY_LIGHT_STYLE_URL =
             "https://maps.geoapify.com/v1/styles/osm-bright/style.json?apiKey=4034ef4942f146d6b43fd4a9871cfdc3";
     private final String GEOAPIFY_DARK_STYLE_URL =
-            "https://maps.geoapify.com/v1/styles/dark-matter/style.json?apiKey=4034ef4942f146d6b43fd4a9871cfdc3";
+            "https://maps.geoapify.com/v1/styles/dark-matter-dark-grey/style.json?apiKey=4034ef4942f146d6b43fd4a9871cfdc3";
 
     private static final String MARKER_ICON_ID_USER_LOCATION = "MARKER_ICON_USER_LOCATION";
 
@@ -322,8 +322,7 @@ public class MapFragment extends Fragment {
         LinearLayout commentSection = infoWindow.findViewById(R.id.comment_section);
         ImageView btnComment = infoWindow.findViewById(R.id.btn_comment);
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
-        LinearLayout commentsContainer = infoWindow.findViewById(R.id.comments_container);
-        TextView tvCommentsHeader = infoWindow.findViewById(R.id.tv_comments_header);
+
 
         noteTextView.setText(noteText);
         timestampTextView.setText(new SimpleDateFormat("dd MMM yyyy • hh:mm a", java.util.Locale.getDefault())
@@ -425,23 +424,14 @@ public class MapFragment extends Fragment {
                         java.util.List<String> likedBy = (java.util.List<String>) doc.get("likedBy");
                         boolean isLiked = likedBy != null && likedBy.contains(currentUserId);
                         btnLike.setImageResource(isLiked ? R.drawable.ic_heart : R.drawable.ic_heart_outline);
+                        
+                        // Load comment count
+                        Long commentCount = doc.getLong("commentsCount");
+                        tvCommentCount.setText(String.valueOf(commentCount != null ? commentCount : 0));
                     }
                 });
 
-                // Load comments
-                noteRef.collection("comments").orderBy("timestamp").get()
-                        .addOnSuccessListener(querySnapshot -> {
-                            int commentCount = querySnapshot.size();
-                            tvCommentCount.setText(String.valueOf(commentCount));
-                            
-                            if (commentCount > 0) {
-                                tvCommentsHeader.setVisibility(View.VISIBLE);
-                                for (var commentDoc : querySnapshot) {
-                                    Comment comment = commentDoc.toObject(Comment.class);
-                                    addCommentView(commentsContainer, comment);
-                                }
-                            }
-                        });
+
 
                 // Like button click with double-click prevention using Firestore transaction
                 likeSection.setOnClickListener(v -> {
@@ -511,7 +501,17 @@ public class MapFragment extends Fragment {
                 });
 
                 // Comment button click
-                commentSection.setOnClickListener(v -> showAddCommentDialog(noteRef, commentsContainer, tvCommentCount, tvCommentsHeader, noteOwnerId, position, noteText));
+                commentSection.setOnClickListener(v -> {
+                    // Don't dismiss the dialog, just open the bottom sheet
+                    CommentsBottomSheetFragment bottomSheet = CommentsBottomSheetFragment.newInstance(
+                            docId, noteOwnerId, noteText, position.getLatitude(), position.getLongitude()
+                    );
+                    
+                    // Set listener to show user info when a profile pic is clicked in comments
+                    bottomSheet.setOnUserClickListener(this::showUserInfoDialog);
+                    
+                    bottomSheet.show(getParentFragmentManager(), "CommentsBottomSheet");
+                });
             }
         } else {
             // Offline mode - hide interaction section and show default owner info
@@ -534,142 +534,9 @@ public class MapFragment extends Fragment {
         likeBtn.startAnimation(scaleAnimation);
     }
 
-    // Add comment view to container
-    private void addCommentView(LinearLayout container, Comment comment) {
-        View commentView = LayoutInflater.from(requireContext()).inflate(R.layout.item_comment, container, false);
-        
-        de.hdodenhof.circleimageview.CircleImageView commentUserPic = commentView.findViewById(R.id.comment_user_pic);
-        TextView tvUser = commentView.findViewById(R.id.tv_comment_user);
-        TextView tvText = commentView.findViewById(R.id.tv_comment_text);
-        TextView tvTime = commentView.findViewById(R.id.tv_comment_time);
-        
-        tvUser.setText(comment.userName);
-        tvText.setText(comment.text);
-        tvTime.setText(getTimeAgo(comment.timestamp));
-        
-        // Load commenter's profile pic
-        if (comment.userId != null) {
-            db.collection("users").document(comment.userId).get()
-                    .addOnSuccessListener(doc -> {
-                        if (doc.exists()) {
-                            String pic = doc.getString("profilePic");
-                            if (pic != null && !pic.isEmpty()) {
-                                try {
-                                    byte[] bytes = android.util.Base64.decode(pic, android.util.Base64.DEFAULT);
-                                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                                    commentUserPic.setImageBitmap(bitmap);
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        }
-                    });
-            
-            // Make avatar and name clickable to show user info
-            View.OnClickListener showUserInfo = v -> showUserInfoDialog(comment.userId);
-            commentUserPic.setOnClickListener(showUserInfo);
-            tvUser.setOnClickListener(showUserInfo);
-        }
-        
-        // Scale in animation
-        ScaleAnimation scaleIn = new ScaleAnimation(
-                0.5f, 1.0f, 0.5f, 1.0f,
-                Animation.RELATIVE_TO_SELF, 0.0f,
-                Animation.RELATIVE_TO_SELF, 0.0f);
-        scaleIn.setDuration(300);
-        commentView.startAnimation(scaleIn);
-        
-        container.addView(commentView);
-    }
 
-    // Show add comment dialog
-    private void showAddCommentDialog(DocumentReference noteRef, LinearLayout commentsContainer, 
-                                      TextView tvCommentCount, TextView tvCommentsHeader,
-                                      String noteOwnerId, LatLng notePosition, String noteText) {
-        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_comment, null);
-        
-        com.google.android.material.textfield.TextInputEditText commentInput = dialogView.findViewById(R.id.comment_input);
-        android.widget.Button btnPost = dialogView.findViewById(R.id.btn_post);
-        
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setView(dialogView)
-                .create();
-        
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        }
-        
-        dialogView.findViewById(R.id.btn_cancel).setOnClickListener(v -> dialog.dismiss());
-        
-        final boolean[] isPosting = {false}; // Prevent duplicate posts
-        
-        btnPost.setOnClickListener(v -> {
-            if (isPosting[0]) return; // Already posting
-            
-            String commentText = commentInput.getText().toString().trim();
-            if (!commentText.isEmpty() && auth.getCurrentUser() != null) {
-                isPosting[0] = true;
-                btnPost.setEnabled(false);
-                btnPost.setText("Posting...");
-                
-                String uid = auth.getCurrentUser().getUid();
-                
-                // Get user name from Firestore
-                db.collection("users").document(uid).get()
-                        .addOnSuccessListener(userDoc -> {
-                            String userName = userDoc.exists() && userDoc.getString("name") != null 
-                                    ? userDoc.getString("name") : "Anonymous";
-                            
-                            Comment comment = new Comment(
-                                    noteRef.collection("comments").document().getId(),
-                                    uid,
-                                    userName,
-                                    commentText,
-                                    System.currentTimeMillis()
-                            );
-                            
-                            noteRef.collection("comments").add(comment)
-                                    .addOnSuccessListener(docRef -> {
-                                        addCommentView(commentsContainer, comment);
-                                        tvCommentsHeader.setVisibility(View.VISIBLE);
-                                        int count = Integer.parseInt(tvCommentCount.getText().toString());
-                                        tvCommentCount.setText(String.valueOf(count + 1));
-                                        
-                                        noteRef.update("commentsCount", FieldValue.increment(1));
-                                        
-                                        if (!uid.equals(noteOwnerId)) {
-                                            createNotification(noteOwnerId, uid, "comment", noteRef.getId(), noteText, notePosition);
-                                        }
-                                        
-                                        Toast.makeText(requireContext(), "Comment added!", Toast.LENGTH_SHORT).show();
-                                        dialog.dismiss();
-                                    })
-                                    .addOnFailureListener(e -> {
-                                        isPosting[0] = false;
-                                        btnPost.setEnabled(true);
-                                        btnPost.setText("Post");
-                                        Toast.makeText(requireContext(), "Failed to add comment", Toast.LENGTH_SHORT).show();
-                                    });
-                        })
-                        .addOnFailureListener(e -> {
-                            isPosting[0] = false;
-                            btnPost.setEnabled(true);
-                            btnPost.setText("Post");
-                            Toast.makeText(requireContext(), "Failed to load user info", Toast.LENGTH_SHORT).show();
-                        });
-            } else {
-                Toast.makeText(requireContext(), "Please write something", Toast.LENGTH_SHORT).show();
-            }
-        });
-        
-        dialog.show();
-        
-        // Show keyboard
-        commentInput.requestFocus();
-        android.view.inputmethod.InputMethodManager imm = 
-            (android.view.inputmethod.InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-        imm.showSoftInput(commentInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-    }
+
+
 
     // Get time ago string
     private String getTimeAgo(long timestamp) {
@@ -1103,7 +970,7 @@ public class MapFragment extends Fragment {
     }
 
     // Show user info dialog
-    private void showUserInfoDialog(String userId) {
+    void showUserInfoDialog(String userId) {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_user_info, null);
         
         de.hdodenhof.circleimageview.CircleImageView profilePic = dialogView.findViewById(R.id.dialog_user_profile_pic);
@@ -1358,13 +1225,26 @@ public class MapFragment extends Fragment {
     }
     @Override public void onStop() { super.onStop(); mapView.onStop(); }
     @Override public void onLowMemory() { super.onLowMemory(); mapView.onLowMemory(); }
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // Reset symbol when view is destroyed so it's recreated on next load
+        userLocationSymbol = null;
+        if (symbolManager != null) {
+            symbolManager.onDestroy();
+            symbolManager = null;
+        }
+    }
+
     @Override 
     public void onDestroy() { 
         super.onDestroy();
         // Clean up location updates
         stopLocationUpdates();
         if (notesListener != null) notesListener.remove();
+        // symbolManager cleanup is now in onDestroyView, but safe to keep check here
         if (symbolManager != null) symbolManager.onDestroy(); 
+        userLocationSymbol = null; 
         mapView.onDestroy(); 
     }
     @Override public void onSaveInstanceState(@NonNull Bundle outState) { super.onSaveInstanceState(outState); mapView.onSaveInstanceState(outState); }

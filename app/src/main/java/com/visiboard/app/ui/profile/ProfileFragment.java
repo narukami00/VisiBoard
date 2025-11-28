@@ -28,6 +28,7 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -54,6 +55,7 @@ public class ProfileFragment extends Fragment {
     private ProgressBar progressMilestone;
     private RecyclerView rvRecentNotes;
     private RecentNotesAdapter recentNotesAdapter;
+    private SwipeRefreshLayout swipeRefreshLayout;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -63,6 +65,15 @@ public class ProfileFragment extends Fragment {
     private static String cachedProfilePic;
     private static Long cachedFollowersCount;
     private static Long cachedFollowingCount;
+    
+    // Extended caching
+    private static Integer cachedTotalNotes;
+    private static Integer cachedTotalLikes;
+    private static List<NearbyNote> cachedRecentNotes;
+    private static String cachedTier;
+    private static Integer cachedTierProgress;
+    private static Integer cachedTierMax;
+    private static Integer cachedTierIconRes;
 
     private final int PICK_IMAGE = 101;
     private String base64Image = "";
@@ -100,6 +111,10 @@ public class ProfileFragment extends Fragment {
         ivTierIcon = view.findViewById(R.id.iv_tier_icon);
         progressMilestone = view.findViewById(R.id.progress_milestone);
         logoutIcon = view.findViewById(R.id.logout_icon);
+        swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
+
+        swipeRefreshLayout.setOnRefreshListener(this::refreshData);
+        swipeRefreshLayout.setColorSchemeResources(R.color.primary);
 
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
@@ -275,8 +290,20 @@ public class ProfileFragment extends Fragment {
                                     Log.e("ProfileFragment", "Error loading user data: " + err.getMessage()));
                 });
     }
+
+    private void refreshData() {
+        loadUserData();
+        loadUserStats();
+    }
+    
+    private void safeToast(String message) {
+        if (getContext() != null && isAdded()) {
+            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+        }
+    }
     
     private void updateUserDataUI(com.google.firebase.firestore.DocumentSnapshot doc) {
+        if (!isAdded()) return;
         if (doc.exists()) {
             String name = doc.getString("name");
             if (name != null) {
@@ -318,13 +345,31 @@ public class ProfileFragment extends Fragment {
 
     private void loadUserStats() {
         FirebaseUser user = auth.getCurrentUser();
-        if (user == null) return;
+        if (user == null) {
+            swipeRefreshLayout.setRefreshing(false);
+            return;
+        }
+
+        // Load from cache first
+        if (cachedTotalNotes != null) tvTotalNotes.setText(String.valueOf(cachedTotalNotes));
+        if (cachedTotalLikes != null) tvTotalLikes.setText(String.valueOf(cachedTotalLikes));
+        if (cachedTier != null) tvMilestone.setText(cachedTier);
+        if (cachedTierProgress != null) progressMilestone.setProgress(cachedTierProgress);
+        if (cachedTierMax != null) progressMilestone.setMax(cachedTierMax);
+        if (cachedTierIconRes != null) ivTierIcon.setImageResource(cachedTierIconRes);
+        
+        if (cachedRecentNotes != null && !cachedRecentNotes.isEmpty()) {
+            rvRecentNotes.setVisibility(View.VISIBLE);
+            tvNoRecentNotes.setVisibility(View.GONE);
+            recentNotesAdapter.setNotes(cachedRecentNotes);
+        }
 
         String uid = user.getUid();
         
         // First load current user's info for the notes
         db.collection("users").document(uid).get()
             .addOnSuccessListener(currentUserDoc -> {
+                if (!isAdded()) return;
                 String currentUserName = currentUserDoc.getString("name");
                 String currentUserProfilePic = currentUserDoc.getString("profilePic");
                 
@@ -333,19 +378,34 @@ public class ProfileFragment extends Fragment {
                     .whereEqualTo("userId", uid)
                     .get()
                     .addOnSuccessListener(querySnapshot -> {
+                        if (!isAdded()) {
+                            swipeRefreshLayout.setRefreshing(false);
+                            return;
+                        }
+                        
                         int totalNotes = querySnapshot.size();
                         tvTotalNotes.setText(String.valueOf(totalNotes));
+                        cachedTotalNotes = totalNotes;
 
                         // Calculate total likes across all notes
                         int totalLikes = 0;
                         List<NearbyNote> recentNotes = new ArrayList<>();
                         
                         if (!querySnapshot.isEmpty()) {
-                            List<com.google.firebase.firestore.DocumentSnapshot> docs = querySnapshot.getDocuments();
+                            List<com.google.firebase.firestore.DocumentSnapshot> docs = new ArrayList<>(querySnapshot.getDocuments());
                             
-                            // Get up to 5 most recent notes
-                            int limit = Math.min(5, docs.size());
-                            for (int i = docs.size() - 1; i >= docs.size() - limit && i >= 0; i--) {
+                            // Sort by timestamp descending
+                            docs.sort((d1, d2) -> {
+                                Long t1 = d1.getLong("timestamp");
+                                Long t2 = d2.getLong("timestamp");
+                                if (t1 == null) t1 = 0L;
+                                if (t2 == null) t2 = 0L;
+                                return t2.compareTo(t1);
+                            });
+                            
+                            // Get up to 3 most recent notes
+                            int limit = Math.min(3, docs.size());
+                            for (int i = 0; i < limit; i++) {
                                 com.google.firebase.firestore.DocumentSnapshot doc = docs.get(i);
                                 
                                 NearbyNote note = new NearbyNote();
@@ -386,6 +446,7 @@ public class ProfileFragment extends Fragment {
                                 db.collection("notes").document(noteIdForComments)
                                     .collection("comments").get()
                                     .addOnSuccessListener(comments -> {
+                                        if (!isAdded()) return;
                                         note.setCommentsCount(comments.size());
                                         recentNotesAdapter.notifyDataSetChanged();
                                     })
@@ -395,7 +456,7 @@ public class ProfileFragment extends Fragment {
                                         note.setCommentsCount(commentsCount != null ? commentsCount.intValue() : 0);
                                     });
                                 
-                                recentNotes.add(0, note); // Add at beginning to maintain reverse order
+                                recentNotes.add(note);
                             }
                             
                             // Calculate total likes
@@ -412,16 +473,20 @@ public class ProfileFragment extends Fragment {
                                 rvRecentNotes.setVisibility(View.VISIBLE);
                                 tvNoRecentNotes.setVisibility(View.GONE);
                                 recentNotesAdapter.setNotes(recentNotes);
+                                cachedRecentNotes = new ArrayList<>(recentNotes);
                             } else {
                                 rvRecentNotes.setVisibility(View.GONE);
                                 tvNoRecentNotes.setVisibility(View.VISIBLE);
+                                cachedRecentNotes = new ArrayList<>();
                             }
                         } else {
                             rvRecentNotes.setVisibility(View.GONE);
                             tvNoRecentNotes.setVisibility(View.VISIBLE);
+                            cachedRecentNotes = new ArrayList<>();
                         }
                         
                         tvTotalLikes.setText(String.valueOf(totalLikes));
+                        cachedTotalLikes = totalLikes;
 
                         // Determine tier and progress (based on likes now for better gamification)
                         int tierIndex = -1;
@@ -433,42 +498,73 @@ public class ProfileFragment extends Fragment {
 
                         if (tierIndex == -1) {
                             currentTier = "None";
-                            tvMilestone.setText("No Tier Yet");
+                            String text = "No Tier Yet";
+                            tvMilestone.setText(text);
+                            cachedTier = text;
+                            
                             ivTierIcon.setImageResource(R.drawable.ic_default_tier);
+                            cachedTierIconRes = R.drawable.ic_default_tier;
+                            
                             progressMilestone.setMax(milestones[0]);
+                            cachedTierMax = milestones[0];
+                            
                             progressMilestone.setProgress(totalLikes);
+                            cachedTierProgress = totalLikes;
+                            
                             tvMilestoneProgress.setText(totalLikes + " / " + milestones[0] + " likes to Bronze");
                         } else if (tierIndex < milestones.length - 1) {
                             currentTier = milestoneTiers[tierIndex];
-                            tvMilestone.setText("Current Tier: " + currentTier);
+                            String text = "Current Tier: " + currentTier;
+                            tvMilestone.setText(text);
+                            cachedTier = text;
+                            
                             ivTierIcon.setImageResource(milestoneIcons[tierIndex]);
+                            cachedTierIconRes = milestoneIcons[tierIndex];
+                            
                             int nextGoal = milestones[tierIndex + 1];
                             progressMilestone.setMax(nextGoal);
+                            cachedTierMax = nextGoal;
+                            
                             progressMilestone.setProgress(totalLikes);
+                            cachedTierProgress = totalLikes;
+                            
                             tvMilestoneProgress.setText(totalLikes + " / " + nextGoal + " likes to " + milestoneTiers[tierIndex + 1]);
                         } else {
                             currentTier = "Platinum";
-                            tvMilestone.setText("Max Tier: Platinum");
+                            String text = "Max Tier: Platinum";
+                            tvMilestone.setText(text);
+                            cachedTier = text;
+                            
                             ivTierIcon.setImageResource(milestoneIcons[milestoneIcons.length - 1]);
+                            cachedTierIconRes = milestoneIcons[milestoneIcons.length - 1];
+                            
                             progressMilestone.setMax(milestones[milestones.length - 1]);
+                            cachedTierMax = milestones[milestones.length - 1];
+                            
                             progressMilestone.setProgress(milestones[milestones.length - 1]);
+                            cachedTierProgress = milestones[milestones.length - 1];
+                            
                             tvMilestoneProgress.setText("Maxed Out");
                         }
+                        
+                        swipeRefreshLayout.setRefreshing(false);
 
                         // 🔹 UPDATE TIER IN DATABASE
                         db.collection("users").document(uid)
                                 .update("currentTier", currentTier)
                                 .addOnFailureListener(e ->
-                                        Toast.makeText(getContext(), "Tier update failed: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+                                        safeToast("Tier update failed: " + e.getMessage())
                                 );
                     })
                     .addOnFailureListener(e -> {
                         Log.e("ProfileFragment", "Error loading stats: " + e.getMessage());
-                        Toast.makeText(getContext(), "Failed to load statistics", Toast.LENGTH_SHORT).show();
+                        safeToast("Failed to load statistics");
+                        swipeRefreshLayout.setRefreshing(false);
                     });
             })
             .addOnFailureListener(e -> {
                 Log.e("ProfileFragment", "Error loading user info: " + e.getMessage());
+                swipeRefreshLayout.setRefreshing(false);
             });
     }
 
@@ -495,7 +591,7 @@ public class ProfileFragment extends Fragment {
                 updateProfilePic(base64Image);
             } catch (IOException e) {
                 e.printStackTrace();
-                Toast.makeText(getContext(), "Failed to load image", Toast.LENGTH_SHORT).show();
+                safeToast("Failed to load image");
             }
         }
     }
@@ -506,8 +602,8 @@ public class ProfileFragment extends Fragment {
 
         String uid = user.getUid();
         db.collection("users").document(uid).update("profilePic", base64Image)
-                .addOnSuccessListener(unused -> Toast.makeText(getContext(), "Profile picture updated", Toast.LENGTH_SHORT).show())
-                .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to update: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                .addOnSuccessListener(unused -> safeToast("Profile picture updated"))
+                .addOnFailureListener(e -> safeToast("Failed to update: " + e.getMessage()));
     }
 
     private void showEditNameDialog() {
@@ -526,7 +622,7 @@ public class ProfileFragment extends Fragment {
                     if (!newName.isEmpty()) {
                         updateUserName(newName);
                     } else {
-                        Toast.makeText(getContext(), "Name cannot be empty", Toast.LENGTH_SHORT).show();
+                        safeToast("Name cannot be empty");
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -544,9 +640,9 @@ public class ProfileFragment extends Fragment {
                 .addOnSuccessListener(unused -> {
                     nameText.setText(newName);
                     cachedName = newName;
-                    Toast.makeText(getContext(), "Name updated successfully", Toast.LENGTH_SHORT).show();
+                    safeToast("Name updated successfully");
                 })
-                .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to update name: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                .addOnFailureListener(e -> safeToast("Failed to update name: " + e.getMessage()));
     }
 
     private void showLogoutConfirmation() {

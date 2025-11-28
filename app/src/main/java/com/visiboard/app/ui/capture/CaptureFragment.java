@@ -46,6 +46,8 @@ import com.visiboard.app.R;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -67,6 +69,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private ImageButton btnCameraToggle;
     private ImageButton btnCapture;
     private FrameLayout btnRadius;
+    private RadarView radarView;
     
     private FirebaseFirestore db;
     private FirebaseAuth auth;
@@ -108,6 +111,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         btnCameraToggle = view.findViewById(R.id.btn_camera_toggle);
         btnCapture = view.findViewById(R.id.btn_capture);
         btnRadius = view.findViewById(R.id.btn_radius);
+        radarView = view.findViewById(R.id.radar_view);
         
         db = FirebaseFirestore.getInstance();
         auth = FirebaseAuth.getInstance();
@@ -192,6 +196,9 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     
     private void updateRadiusDisplay() {
         tvRadiusValue.setText(String.valueOf(radiusOptions[currentRadiusIndex]));
+        if (radarView != null) {
+            radarView.setMaxDistance((float) currentRadiusMeters);
+        }
     }
     
     private void capturePhoto() {
@@ -419,7 +426,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         db.collection("notes")
             .get()
             .addOnSuccessListener(querySnapshot -> {
-                nearbyNotes.clear();
+                List<ARNote> newNotes = new ArrayList<>();
                 
                 for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
                     try {
@@ -451,6 +458,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                                 arNote.longitude = location.getLongitude();
                                 arNote.distance = distance;
                                 arNote.userId = noteUserId;
+                                arNote.userName = "User"; // Default
                                 
                                 arNote.bearing = calculateBearing(
                                     currentLocation.getLatitude(),
@@ -459,43 +467,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                                     location.getLongitude()
                                 );
                                 
-                                // Get userName and profilePic - always fetch from users collection for consistency
-                                if (noteUserId != null && !noteUserId.isEmpty()) {
-                                    nearbyNotes.add(arNote); // Add first, update later
-                                    
-                                    final int noteIndex = nearbyNotes.size() - 1;
-                                    db.collection("users").document(noteUserId).get()
-                                        .addOnSuccessListener(userDoc -> {
-                                            if (userDoc.exists()) {
-                                                arNote.userName = userDoc.getString("name");
-                                                arNote.userProfilePic = userDoc.getString("profilePic");
-                                                
-                                                if (arNote.userName == null) {
-                                                    arNote.userName = "User";
-                                                }
-                                                
-                                                // Update the view if already displayed
-                                                if (noteIndex < arOverlay.getChildCount()) {
-                                                    requireActivity().runOnUiThread(() -> {
-                                                        View noteView = arOverlay.getChildAt(noteIndex);
-                                                        if (noteView != null) {
-                                                            updateNoteViewData(noteView, arNote);
-                                                        }
-                                                    });
-                                                }
-                                            } else {
-                                                arNote.userName = "User";
-                                            }
-                                        })
-                                        .addOnFailureListener(e -> {
-                                            arNote.userName = "User";
-                                            Log.e(TAG, "Error fetching user info", e);
-                                        });
-                                } else {
-                                    arNote.userName = "User";
-                                    arNote.userProfilePic = null;
-                                    nearbyNotes.add(arNote);
-                                }
+                                newNotes.add(arNote);
                             }
                         }
                     } catch (Exception e) {
@@ -503,8 +475,34 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     }
                 }
                 
+                // Sort by distance descending (Far -> Near) so closer notes are drawn last (on top)
+                Collections.sort(newNotes, (n1, n2) -> Double.compare(n2.distance, n1.distance));
+                
+                nearbyNotes.clear();
+                nearbyNotes.addAll(newNotes);
+                
                 progressLoading.setVisibility(View.GONE);
                 updateARView();
+                
+                // Fetch user info for all notes
+                for (ARNote note : nearbyNotes) {
+                    if (note.userId != null && !note.userId.isEmpty()) {
+                        db.collection("users").document(note.userId).get()
+                            .addOnSuccessListener(userDoc -> {
+                                if (userDoc.exists()) {
+                                    note.userName = userDoc.getString("name");
+                                    note.userProfilePic = userDoc.getString("profilePic");
+                                    if (note.userName == null) note.userName = "User";
+                                    
+                                    // Update view if it exists
+                                    View view = arOverlay.findViewWithTag(note.id);
+                                    if (view != null) {
+                                        updateNoteViewData(view, note);
+                                    }
+                                }
+                            });
+                    }
+                }
                 
             }).addOnFailureListener(e -> {
                 Log.e(TAG, "Error loading notes", e);
@@ -531,6 +529,16 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                 addNoteToARView(note);
             }
         });
+        
+        // Update Radar
+        List<RadarView.RadarDot> radarDots = new ArrayList<>();
+        for (ARNote note : nearbyNotes) {
+            // Assign color based on something, or random
+            int color = 0xFFFFFFFF; // White default
+            // We can use the card color logic if we want consistency, but for now white/accent is fine
+            radarDots.add(new RadarView.RadarDot((float)note.distance, note.bearing, 0xFF00BCD4)); // Cyan
+        }
+        radarView.setDots(radarDots);
     }
     
     private void updateARViewPositions() {
@@ -606,8 +614,9 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
         
         // Scale based on distance - closer notes appear larger
-        float scale = 1.0f - (float)(note.distance / currentRadiusMeters) * 0.5f;
-        scale = Math.max(0.6f, Math.min(1.4f, scale));
+        // Formula: 0m -> 2.2x, Radius -> 0.5x
+        float scale = 2.2f - (float)(note.distance / currentRadiusMeters) * 1.7f;
+        scale = Math.max(0.5f, Math.min(2.5f, scale));
         noteView.setScaleX(scale);
         noteView.setScaleY(scale);
         
@@ -619,6 +628,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     
     private void addNoteToARView(ARNote note) {
         View noteView = LayoutInflater.from(requireContext()).inflate(R.layout.item_ar_note, arOverlay, false);
+        noteView.setTag(note.id); // Set tag to find it later
         
         TextView tvUserName = noteView.findViewById(R.id.tv_user_name);
         TextView tvNoteText = noteView.findViewById(R.id.tv_note_text);
@@ -695,8 +705,8 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
         
         // Scale based on distance - closer notes appear larger
-        float scale = 1.0f - (float)(note.distance / currentRadiusMeters) * 0.5f;
-        scale = Math.max(0.6f, Math.min(1.4f, scale));
+        float scale = 2.2f - (float)(note.distance / currentRadiusMeters) * 1.7f;
+        scale = Math.max(0.5f, Math.min(2.5f, scale));
         noteView.setScaleX(scale);
         noteView.setScaleY(scale);
         
@@ -770,6 +780,9 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     azimuth = newAzimuth;
                     lastUpdateAzimuth = newAzimuth;
                     updateARViewPositions();
+                    if (radarView != null) {
+                        radarView.setAzimuth(azimuth);
+                    }
                 }
             }
         }
