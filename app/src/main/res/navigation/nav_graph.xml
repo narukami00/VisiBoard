@@ -11,7 +11,20 @@
     <fragment
         android:id="@+id/captureFragment"
         android:name="com.visiboard.app.ui.capture.CaptureFragment"
-        android:label="Capture" />
+        android:label="Capture">
+        <action
+            android:id="@+id/action_captureFragment_to_capturePreviewFragment"
+            app:destination="@id/capturePreviewFragment"
+            app:enterAnim="@android:anim/fade_in"
+            app:exitAnim="@android:anim/fade_out"
+            app:popEnterAnim="@android:anim/fade_in"
+            app:popExitAnim="@android:anim/fade_out"/>
+    </fragment>
+
+    <fragment
+        android:id="@+id/capturePreviewFragment"
+        android:name="com.visiboard.app.ui.capture.CapturePreviewFragment"
+        android:label="Preview"/>
 
     <fragment
         android:id="@+id/feedFragment"

@@ -16,14 +16,18 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
@@ -40,6 +44,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.visiboard.app.R;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -50,12 +55,18 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
 
     private static final String TAG = "CaptureFragment";
     private static final int CAMERA_PERMISSION_CODE = 100;
-    private static final double AR_RADIUS_METERS = 10.0;
+    private double currentRadiusMeters = 10.0;
+    private int[] radiusOptions = {10, 20, 50};
+    private int currentRadiusIndex = 0;
     
     private PreviewView cameraPreview;
     private FrameLayout arOverlay;
-    private TextView tvNotesCount, tvRange;
+    private TextView tvNotesCount;
+    private TextView tvRadiusValue;
     private ProgressBar progressLoading;
+    private ImageButton btnCameraToggle;
+    private ImageButton btnCapture;
+    private FrameLayout btnRadius;
     
     private FirebaseFirestore db;
     private FirebaseAuth auth;
@@ -70,23 +81,33 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private float[] gravity;
     private float[] geomagnetic;
     private float azimuth = 0f;
+    private float pitch = 0f;
     private float lastUpdateAzimuth = 0f;
-    private static final float AZIMUTH_UPDATE_THRESHOLD = 10.0f; // Only update if heading changes by 10 degrees
+    private static final float AZIMUTH_UPDATE_THRESHOLD = 5.0f; // Reduced for smoother updates
+    private static final float ALPHA = 0.15f; // Low-pass filter constant (lower = smoother)
+    private static final float PITCH_VERTICAL_THRESHOLD = 50.0f; // Degrees away from vertical (-90) where notes hide
     
     private Camera camera;
+    private ImageCapture imageCapture;
+    private CameraSelector currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
     private boolean isUpdatingView = false;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_capture_new, container, false);
+        View view = inflater.inflate(R.layout.fragment_capture, container, false);
         
         cameraPreview = view.findViewById(R.id.camera_preview);
+        // Use COMPATIBLE mode (TextureView) to enable simple bitmap capture
+        cameraPreview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
         arOverlay = view.findViewById(R.id.ar_overlay);
         tvNotesCount = view.findViewById(R.id.tv_notes_count);
-        tvRange = view.findViewById(R.id.tv_range);
+        tvRadiusValue = view.findViewById(R.id.tv_radius_value);
         progressLoading = view.findViewById(R.id.progress_loading);
+        btnCameraToggle = view.findViewById(R.id.btn_camera_toggle);
+        btnCapture = view.findViewById(R.id.btn_capture);
+        btnRadius = view.findViewById(R.id.btn_radius);
         
         db = FirebaseFirestore.getInstance();
         auth = FirebaseAuth.getInstance();
@@ -96,6 +117,8 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
         
+        setupButtonListeners();
+        updateRadiusDisplay();
         checkCameraPermission();
         
         return view;
@@ -116,6 +139,200 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     public void onPause() {
         super.onPause();
         sensorManager.unregisterListener(this);
+    }
+    
+    private void setupButtonListeners() {
+        // Camera toggle button
+        btnCameraToggle.setOnClickListener(v -> {
+            v.animate().scaleX(0.8f).scaleY(0.8f).setDuration(100)
+                .withEndAction(() -> {
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
+                    toggleCamera();
+                });
+        });
+        
+        // Capture button
+        btnCapture.setOnClickListener(v -> {
+            v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(100)
+                .withEndAction(() -> {
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
+                    capturePhoto();
+                });
+        });
+        
+        // Radius selection button
+        btnRadius.setOnClickListener(v -> {
+            v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(100)
+                .withEndAction(() -> {
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
+                    cycleRadius();
+                });
+        });
+    }
+    
+    private void toggleCamera() {
+        if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+            currentCameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA;
+        } else {
+            currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+        }
+        startCamera();
+    }
+    
+    private void cycleRadius() {
+        currentRadiusIndex = (currentRadiusIndex + 1) % radiusOptions.length;
+        currentRadiusMeters = radiusOptions[currentRadiusIndex];
+        updateRadiusDisplay();
+        
+        // Reload notes with new radius
+        if (currentLocation != null) {
+            loadNearbyNotes();
+        }
+    }
+    
+    private void updateRadiusDisplay() {
+        tvRadiusValue.setText(String.valueOf(radiusOptions[currentRadiusIndex]));
+    }
+    
+    private void capturePhoto() {
+        Bitmap previewBitmap = cameraPreview.getBitmap();
+        if (previewBitmap != null) {
+            Log.d(TAG, "Captured bitmap: " + previewBitmap.getWidth() + "x" + previewBitmap.getHeight());
+            Bitmap finalBitmap = compositeBitmapWithOverlay(previewBitmap);
+            saveBitmapAndNavigate(finalBitmap);
+        } else {
+            Toast.makeText(requireContext(), "Failed to capture camera view", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // Removed captureWithPixelCopy as we are now using TextureView.getBitmap()
+    
+    private android.view.SurfaceView findSurfaceView(ViewGroup viewGroup) {
+        Log.d(TAG, "Searching for SurfaceView in: " + viewGroup.getClass().getSimpleName() + 
+                   " with " + viewGroup.getChildCount() + " children");
+        
+        for (int i = 0; i < viewGroup.getChildCount(); i++) {
+            View child = viewGroup.getChildAt(i);
+            Log.d(TAG, "  Child " + i + ": " + child.getClass().getSimpleName());
+            
+            if (child instanceof android.view.SurfaceView) {
+                Log.d(TAG, "Found SurfaceView!");
+                return (android.view.SurfaceView) child;
+            } else if (child instanceof ViewGroup) {
+                android.view.SurfaceView surfaceView = findSurfaceView((ViewGroup) child);
+                if (surfaceView != null) {
+                    return surfaceView;
+                }
+            }
+        }
+        Log.d(TAG, "SurfaceView not found in this branch");
+        return null;
+    }
+    
+    private android.view.TextureView findTextureView(ViewGroup viewGroup) {
+        Log.d(TAG, "Searching for TextureView in: " + viewGroup.getClass().getSimpleName() + 
+                   " with " + viewGroup.getChildCount() + " children");
+        
+        for (int i = 0; i < viewGroup.getChildCount(); i++) {
+            View child = viewGroup.getChildAt(i);
+            Log.d(TAG, "  Child " + i + ": " + child.getClass().getSimpleName());
+            
+            if (child instanceof android.view.TextureView) {
+                Log.d(TAG, "Found TextureView!");
+                return (android.view.TextureView) child;
+            } else if (child instanceof ViewGroup) {
+                android.view.TextureView textureView = findTextureView((ViewGroup) child);
+                if (textureView != null) {
+                    return textureView;
+                }
+            }
+        }
+        Log.d(TAG, "TextureView not found in this branch");
+        return null;
+    }
+    
+    private Bitmap compositeBitmapWithOverlay(Bitmap cameraBitmap) {
+        // Create a mutable bitmap to draw on
+        Bitmap resultBitmap = Bitmap.createBitmap(
+            cameraBitmap.getWidth(),
+            cameraBitmap.getHeight(),
+            Bitmap.Config.ARGB_8888
+        );
+        
+        android.graphics.Canvas canvas = new android.graphics.Canvas(resultBitmap);
+        
+        // Draw camera view first
+        canvas.drawBitmap(cameraBitmap, 0, 0, null);
+        
+        // Draw AR overlay on top
+        arOverlay.setDrawingCacheEnabled(true);
+        arOverlay.buildDrawingCache(true);
+        Bitmap overlayBitmap = Bitmap.createBitmap(arOverlay.getDrawingCache());
+        arOverlay.setDrawingCacheEnabled(false);
+        
+        if (overlayBitmap != null) {
+            // Don't stretch - instead center crop to maintain aspect ratio
+            if (overlayBitmap.getWidth() != cameraBitmap.getWidth() || 
+                overlayBitmap.getHeight() != cameraBitmap.getHeight()) {
+                
+                // Calculate source rect to center-crop overlay
+                int srcWidth = overlayBitmap.getWidth();
+                int srcHeight = overlayBitmap.getHeight();
+                float srcAspect = (float) srcWidth / srcHeight;
+                float dstAspect = (float) cameraBitmap.getWidth() / cameraBitmap.getHeight();
+                
+                android.graphics.Rect srcRect;
+                if (srcAspect > dstAspect) {
+                    // Overlay is wider, crop sides
+                    int newWidth = (int) (srcHeight * dstAspect);
+                    int left = (srcWidth - newWidth) / 2;
+                    srcRect = new android.graphics.Rect(left, 0, left + newWidth, srcHeight);
+                } else {
+                    // Overlay is taller, crop top/bottom
+                    int newHeight = (int) (srcWidth / dstAspect);
+                    int top = (srcHeight - newHeight) / 2;
+                    srcRect = new android.graphics.Rect(0, top, srcWidth, top + newHeight);
+                }
+                
+                android.graphics.Rect dstRect = new android.graphics.Rect(0, 0, cameraBitmap.getWidth(), cameraBitmap.getHeight());
+                canvas.drawBitmap(overlayBitmap, srcRect, dstRect, null);
+            } else {
+                canvas.drawBitmap(overlayBitmap, 0, 0, null);
+            }
+            overlayBitmap.recycle();
+        }
+        
+        cameraBitmap.recycle();
+        return resultBitmap;
+    }
+    
+    private void saveBitmapAndNavigate(Bitmap bitmap) {
+        try {
+            File cacheFile = new File(requireContext().getCacheDir(), "captured_" + System.currentTimeMillis() + ".jpg");
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(cacheFile)) {
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out);
+                out.flush();
+            }
+            bitmap.recycle();
+            
+            requireActivity().runOnUiThread(() -> {
+                navigateToPreview("file://" + cacheFile.getAbsolutePath());
+            });
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to save bitmap", e);
+            requireActivity().runOnUiThread(() -> {
+                Toast.makeText(requireContext(), "Failed to save photo", Toast.LENGTH_SHORT).show();
+            });
+        }
+    }
+    
+    private void navigateToPreview(String imageUri) {
+        Bundle args = new Bundle();
+        args.putString("image_uri", imageUri);
+        
+        androidx.navigation.Navigation.findNavController(requireView())
+                .navigate(R.id.action_captureFragment_to_capturePreviewFragment, args);
     }
     
     private void checkCameraPermission() {
@@ -158,16 +375,19 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     }
     
     private void bindCameraPreview(ProcessCameraProvider cameraProvider) {
-        Preview preview = new Preview.Builder().build();
+        Preview preview = new Preview.Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_16_9)
+                .build();
         
-        CameraSelector cameraSelector = new CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+        imageCapture = new ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .setTargetAspectRatio(AspectRatio.RATIO_16_9)
                 .build();
         
         preview.setSurfaceProvider(cameraPreview.getSurfaceProvider());
         
         cameraProvider.unbindAll();
-        camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview);
+        camera = cameraProvider.bindToLifecycle(this, currentCameraSelector, preview, imageCapture);
     }
     
     private void loadUserLocation() {
@@ -204,9 +424,6 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                 for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
                     try {
                         String noteUserId = doc.getString("userId");
-                        if (noteUserId != null && noteUserId.equals(userId)) {
-                            continue;
-                        }
                         
                         GeoPoint location = doc.getGeoPoint("location");
                         if (location == null) {
@@ -225,7 +442,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                                 location.getLongitude()
                             );
                             
-                            if (distance <= AR_RADIUS_METERS) {
+                            if (distance <= currentRadiusMeters) {
                                 ARNote arNote = new ARNote();
                                 arNote.id = doc.getId();
                                 arNote.text = doc.getString("text");
@@ -306,7 +523,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
             return;
         }
         
-        tvNotesCount.setText(nearbyNotes.size() + " notes in " + (int)AR_RADIUS_METERS + "m radius");
+        tvNotesCount.setText(nearbyNotes.size() + " notes in " + (int)currentRadiusMeters + "m radius");
         
         // Wait for layout before adding views
         arOverlay.post(() -> {
@@ -356,6 +573,15 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         
         if (screenWidth == 0 || screenHeight == 0) return;
         
+        // Hide notes when phone is not held in upright position
+        // When phone is upright (normal AR viewing), pitch is around -90 degrees
+        // Hide if deviating more than 50 degrees from upright position
+        float deviationFromVertical = Math.abs(pitch + 90);
+        if (deviationFromVertical > PITCH_VERTICAL_THRESHOLD) {
+            noteView.setVisibility(View.GONE);
+            return;
+        }
+        
         float relativeBearing = note.bearing - azimuth;
         
         while (relativeBearing > 180) relativeBearing -= 360;
@@ -374,13 +600,13 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         
         int x = (int) (horizontalPosition * screenWidth) - 100;
         
-        float verticalPosition = (float) (1.0 - (note.distance / AR_RADIUS_METERS));
+        float verticalPosition = (float) (1.0 - (note.distance / currentRadiusMeters));
         verticalPosition = Math.max(0.2f, Math.min(0.8f, verticalPosition));
         
         int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
         
         // Scale based on distance - closer notes appear larger
-        float scale = 1.0f - (float)(note.distance / AR_RADIUS_METERS) * 0.5f;
+        float scale = 1.0f - (float)(note.distance / currentRadiusMeters) * 0.5f;
         scale = Math.max(0.6f, Math.min(1.4f, scale));
         noteView.setScaleX(scale);
         noteView.setScaleY(scale);
@@ -463,13 +689,13 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         
         int x = (int) (horizontalPosition * screenWidth) - 100;
         
-        float verticalPosition = (float) (1.0 - (note.distance / AR_RADIUS_METERS));
+        float verticalPosition = (float) (1.0 - (note.distance / currentRadiusMeters));
         verticalPosition = Math.max(0.2f, Math.min(0.8f, verticalPosition));
         
         int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
         
         // Scale based on distance - closer notes appear larger
-        float scale = 1.0f - (float)(note.distance / AR_RADIUS_METERS) * 0.5f;
+        float scale = 1.0f - (float)(note.distance / currentRadiusMeters) * 0.5f;
         scale = Math.max(0.6f, Math.min(1.4f, scale));
         noteView.setScaleX(scale);
         noteView.setScaleY(scale);
@@ -498,10 +724,24 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            gravity = event.values.clone();
+            // Apply low-pass filter for smoother values
+            if (gravity == null) {
+                gravity = event.values.clone();
+            } else {
+                gravity[0] = ALPHA * event.values[0] + (1 - ALPHA) * gravity[0];
+                gravity[1] = ALPHA * event.values[1] + (1 - ALPHA) * gravity[1];
+                gravity[2] = ALPHA * event.values[2] + (1 - ALPHA) * gravity[2];
+            }
         }
         if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-            geomagnetic = event.values.clone();
+            // Apply low-pass filter for smoother values
+            if (geomagnetic == null) {
+                geomagnetic = event.values.clone();
+            } else {
+                geomagnetic[0] = ALPHA * event.values[0] + (1 - ALPHA) * geomagnetic[0];
+                geomagnetic[1] = ALPHA * event.values[1] + (1 - ALPHA) * geomagnetic[1];
+                geomagnetic[2] = ALPHA * event.values[2] + (1 - ALPHA) * geomagnetic[2];
+            }
         }
         
         if (gravity != null && geomagnetic != null) {
@@ -516,6 +756,9 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                 if (newAzimuth < 0) {
                     newAzimuth += 360;
                 }
+                
+                // Get pitch (tilt up/down)
+                pitch = (float) Math.toDegrees(orientation[1]);
                 
                 // Only update if heading changed significantly
                 float azimuthDiff = Math.abs(newAzimuth - lastUpdateAzimuth);
