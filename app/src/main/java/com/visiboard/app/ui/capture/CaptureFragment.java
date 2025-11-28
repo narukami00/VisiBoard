@@ -57,6 +57,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
 
     private static final String TAG = "CaptureFragment";
     private static final int CAMERA_PERMISSION_CODE = 100;
+    private static final int ACTIVITY_RECOGNITION_PERMISSION_CODE = 101;
     private double currentRadiusMeters = 10.0;
     private int[] radiusOptions = {10, 20, 50};
     private int currentRadiusIndex = 0;
@@ -68,6 +69,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private ProgressBar progressLoading;
     private ImageButton btnCameraToggle;
     private ImageButton btnCapture;
+    private ImageButton btnRefreshLocation;
     private FrameLayout btnRadius;
     private RadarView radarView;
     
@@ -76,19 +78,28 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private FusedLocationProviderClient fusedLocationClient;
     
     private Location currentLocation;
+    private Location virtualLocation; // For dead reckoning
     private List<ARNote> nearbyNotes = new ArrayList<>();
     
     private SensorManager sensorManager;
     private Sensor accelerometer;
     private Sensor magnetometer;
+    private Sensor stepDetector;
     private float[] gravity;
     private float[] geomagnetic;
     private float azimuth = 0f;
     private float pitch = 0f;
+    private Float initialPitch = null; // Baseline pitch for vertical calibration
     private float lastUpdateAzimuth = 0f;
-    private static final float AZIMUTH_UPDATE_THRESHOLD = 5.0f; // Reduced for smoother updates
-    private static final float ALPHA = 0.15f; // Low-pass filter constant (lower = smoother)
+    private static final float AZIMUTH_UPDATE_THRESHOLD = 0.5f; // Reduced for smoother updates
+    // Dynamic filter constants
+    private static final float ALPHA_STEADY = 0.03f; // Very smooth for steady hand
+    private static final float ALPHA_MOVE = 0.3f;    // Fast response for movement
+    private static final float MOVEMENT_THRESHOLD = 0.8f; // Threshold to switch between steady and move
     private static final float PITCH_VERTICAL_THRESHOLD = 50.0f; // Degrees away from vertical (-90) where notes hide
+    private static final double STEP_LENGTH_METERS = 0.75; // Average step length
+    private static final float VERTICAL_FOV_DEGREES = 60.0f; // Approximate vertical field of view
+    private static final float DEPTH_EFFECT_FACTOR = 0.4f; // Increased factor for depth movement
     
     private Camera camera;
     private ImageCapture imageCapture;
@@ -110,6 +121,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         progressLoading = view.findViewById(R.id.progress_loading);
         btnCameraToggle = view.findViewById(R.id.btn_camera_toggle);
         btnCapture = view.findViewById(R.id.btn_capture);
+        btnRefreshLocation = view.findViewById(R.id.btn_refresh_location);
         btnRadius = view.findViewById(R.id.btn_radius);
         radarView = view.findViewById(R.id.radar_view);
         
@@ -120,6 +132,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         sensorManager = (SensorManager) requireActivity().getSystemService(android.content.Context.SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+        stepDetector = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
         
         setupButtonListeners();
         updateRadiusDisplay();
@@ -136,6 +149,9 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         }
         if (magnetometer != null) {
             sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI);
+        }
+        if (stepDetector != null) {
+            sensorManager.registerListener(this, stepDetector, SensorManager.SENSOR_DELAY_UI);
         }
     }
     
@@ -172,6 +188,14 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     cycleRadius();
                 });
         });
+        
+        // Refresh location button
+        if (btnRefreshLocation != null) {
+            btnRefreshLocation.setOnClickListener(v -> {
+                v.animate().rotationBy(360).setDuration(500).start();
+                loadUserLocation();
+            });
+        }
     }
     
     private void toggleCamera() {
@@ -349,6 +373,17 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         } else {
             startCamera();
             loadUserLocation();
+            checkActivityPermission();
+        }
+    }
+    
+    private void checkActivityPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACTIVITY_RECOGNITION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.ACTIVITY_RECOGNITION}, 
+                    ACTIVITY_RECOGNITION_PERMISSION_CODE);
+            }
         }
     }
     
@@ -408,6 +443,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
             if (location != null) {
                 currentLocation = location;
+                virtualLocation = new Location(location); // Initialize virtual location
                 loadNearbyNotes();
             } else {
                 progressLoading.setVisibility(View.GONE);
@@ -443,8 +479,8 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                         
                         if (location != null) {
                             double distance = calculateDistance(
-                                currentLocation.getLatitude(),
-                                currentLocation.getLongitude(),
+                                virtualLocation.getLatitude(),
+                                virtualLocation.getLongitude(),
                                 location.getLatitude(),
                                 location.getLongitude()
                             );
@@ -461,8 +497,8 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                                 arNote.userName = "User"; // Default
                                 
                                 arNote.bearing = calculateBearing(
-                                    currentLocation.getLatitude(),
-                                    currentLocation.getLongitude(),
+                                    virtualLocation.getLatitude(),
+                                    virtualLocation.getLongitude(),
                                     location.getLatitude(),
                                     location.getLongitude()
                                 );
@@ -514,10 +550,9 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private void updateARView() {
         if (isUpdatingView) return;
         
-        arOverlay.removeAllViews();
-        
         if (nearbyNotes.isEmpty()) {
             tvNotesCount.setText("No notes nearby");
+            arOverlay.removeAllViews();
             return;
         }
         
@@ -525,20 +560,61 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         
         // Wait for layout before adding views
         arOverlay.post(() -> {
+            // 1. Identify which notes are currently displayed
+            List<String> currentNoteIds = new ArrayList<>();
+            for (int i = 0; i < arOverlay.getChildCount(); i++) {
+                View child = arOverlay.getChildAt(i);
+                if (child.getTag() instanceof String) {
+                    currentNoteIds.add((String) child.getTag());
+                }
+            }
+            
+            // 2. Add new notes or update existing ones
             for (ARNote note : nearbyNotes) {
-                addNoteToARView(note);
+                View existingView = arOverlay.findViewWithTag(note.id);
+                if (existingView != null) {
+                    // Update existing view
+                    updateNoteViewContent(existingView, note);
+                    updateNotePosition(existingView, note);
+                    currentNoteIds.remove(note.id); // Mark as processed
+                } else {
+                    // Add new view
+                    addNoteToARView(note);
+                }
+            }
+            
+            // 3. Remove views that are no longer nearby
+            for (String idToRemove : currentNoteIds) {
+                View viewToRemove = arOverlay.findViewWithTag(idToRemove);
+                if (viewToRemove != null) {
+                    arOverlay.removeView(viewToRemove);
+                }
+            }
+            
+            // 4. Force Z-Order by bringing views to front in order (Far -> Near)
+            // nearbyNotes is already sorted by distance descending (Far -> Near)
+            // So we iterate and bringToFront, which puts the last one (Nearest) on top
+            for (ARNote note : nearbyNotes) {
+                View view = arOverlay.findViewWithTag(note.id);
+                if (view != null) {
+                    view.bringToFront();
+                }
             }
         });
         
         // Update Radar
         List<RadarView.RadarDot> radarDots = new ArrayList<>();
         for (ARNote note : nearbyNotes) {
-            // Assign color based on something, or random
-            int color = 0xFFFFFFFF; // White default
-            // We can use the card color logic if we want consistency, but for now white/accent is fine
             radarDots.add(new RadarView.RadarDot((float)note.distance, note.bearing, 0xFF00BCD4)); // Cyan
         }
         radarView.setDots(radarDots);
+    }
+    
+    private void updateNoteViewContent(View noteView, ARNote note) {
+        TextView tvDistance = noteView.findViewById(R.id.tv_distance);
+        if (tvDistance != null) {
+            tvDistance.setText(String.format("%.1fm", note.distance));
+        }
     }
     
     private void updateARViewPositions() {
@@ -613,12 +689,57 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         
         int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
         
+        // Depth Effect Logic
+        // 1. Calculate pitch change from initial baseline
+        if (initialPitch == null) {
+            initialPitch = pitch;
+        }
+        float pitchChange = pitch - initialPitch;
+        
+        // 2. Calculate distance ratio (0 = Close, 1 = Far)
+        // Note: note.distance is in meters, currentRadiusMeters is max radius
+        float distRatio = (float) (note.distance / currentRadiusMeters);
+        distRatio = Math.max(0f, Math.min(1f, distRatio));
+        
+        // 3. Calculate vertical movement
+        // Pixels per degree
+        float pixelsPerDegree = screenHeight / VERTICAL_FOV_DEGREES;
+        float rawMovement = pitchChange * pixelsPerDegree;
+        
+        // 4. Apply depth factor: Far notes move more, Close notes stay put
+        // We want:
+        // Tilt Up (pitchChange > 0) -> Far notes move UP (y decreases)
+        // Tilt Down (pitchChange < 0) -> Far notes move DOWN (y increases)
+        float depthMovement = rawMovement * distRatio * DEPTH_EFFECT_FACTOR;
+        
+        // Subtract because Y increases downwards
+        y -= (int) depthMovement;
+        
         // Scale based on distance - closer notes appear larger
-        // Formula: 0m -> 2.2x, Radius -> 0.5x
-        float scale = 2.2f - (float)(note.distance / currentRadiusMeters) * 1.7f;
-        scale = Math.max(0.5f, Math.min(2.5f, scale));
-        noteView.setScaleX(scale);
-        noteView.setScaleY(scale);
+        float targetScale = 1.4f - (float)(note.distance / currentRadiusMeters) * 1.7f;
+        targetScale = Math.max(0.4f, Math.min(2.5f, targetScale));
+        
+        // Animate scale change if difference is significant
+        if (Math.abs(noteView.getScaleX() - targetScale) > 0.05f) {
+            noteView.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .setDuration(200)
+                .start();
+        } else {
+            noteView.setScaleX(targetScale);
+            noteView.setScaleY(targetScale);
+        }
+        
+        // Explicit Z-Order: Closer notes (smaller distance) get higher elevation
+        // Use a base elevation (e.g., 1000) and subtract distance
+        // This ensures closer notes are drawn on top of farther notes
+        float zIndex = Math.max(0f, (float)(currentRadiusMeters - note.distance));
+        noteView.setElevation(zIndex);
+        
+        // Debug Log for Scaling Issue
+        Log.d(TAG, String.format("Note: %s, Dist: %.1f, Radius: %.1f, Scale: %.2f, Z: %.1f", 
+            note.id, note.distance, currentRadiusMeters, targetScale, zIndex));
         
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) noteView.getLayoutParams();
         params.leftMargin = Math.max(10, Math.min(screenWidth - 210, x));
@@ -679,45 +800,14 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
             return;
         }
         
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        );
+        // Add view first so we can update its position
+        arOverlay.addView(noteView);
         
-        float relativeBearing = note.bearing - azimuth;
+        // Use unified logic for position and scale
+        updateNotePosition(noteView, note);
         
-        while (relativeBearing > 180) relativeBearing -= 360;
-        while (relativeBearing < -180) relativeBearing += 360;
-        
-        // Only show notes within field of view
-        if (Math.abs(relativeBearing) > 90) {
-            noteView.setVisibility(View.GONE);
-        }
-        
-        float normalizedBearing = Math.max(-90, Math.min(90, relativeBearing));
-        float horizontalPosition = (normalizedBearing + 90) / 180.0f;
-        
-        int x = (int) (horizontalPosition * screenWidth) - 100;
-        
-        float verticalPosition = (float) (1.0 - (note.distance / currentRadiusMeters));
-        verticalPosition = Math.max(0.2f, Math.min(0.8f, verticalPosition));
-        
-        int y = (int) (verticalPosition * screenHeight * 0.6f) + 100;
-        
-        // Scale based on distance - closer notes appear larger
-        float scale = 2.2f - (float)(note.distance / currentRadiusMeters) * 1.7f;
-        scale = Math.max(0.5f, Math.min(2.5f, scale));
-        noteView.setScaleX(scale);
-        noteView.setScaleY(scale);
-        
-        params.leftMargin = Math.max(10, Math.min(screenWidth - 210, x));
-        params.topMargin = y;
-        
-        noteView.setLayoutParams(params);
         noteView.setAlpha(0f);
         noteView.animate().alpha(1f).setDuration(300).start();
-        
-        arOverlay.addView(noteView);
     }
     
     private void navigateToNoteOnMap(double lat, double lng, String noteId) {
@@ -734,24 +824,11 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            // Apply low-pass filter for smoother values
-            if (gravity == null) {
-                gravity = event.values.clone();
-            } else {
-                gravity[0] = ALPHA * event.values[0] + (1 - ALPHA) * gravity[0];
-                gravity[1] = ALPHA * event.values[1] + (1 - ALPHA) * gravity[1];
-                gravity[2] = ALPHA * event.values[2] + (1 - ALPHA) * gravity[2];
-            }
-        }
-        if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-            // Apply low-pass filter for smoother values
-            if (geomagnetic == null) {
-                geomagnetic = event.values.clone();
-            } else {
-                geomagnetic[0] = ALPHA * event.values[0] + (1 - ALPHA) * geomagnetic[0];
-                geomagnetic[1] = ALPHA * event.values[1] + (1 - ALPHA) * geomagnetic[1];
-                geomagnetic[2] = ALPHA * event.values[2] + (1 - ALPHA) * geomagnetic[2];
-            }
+            gravity = applyDynamicFilter(event.values, gravity);
+        } else if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+            geomagnetic = applyDynamicFilter(event.values, geomagnetic);
+        } else if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {
+            handleStep();
         }
         
         if (gravity != null && geomagnetic != null) {
@@ -770,6 +847,11 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                 // Get pitch (tilt up/down)
                 pitch = (float) Math.toDegrees(orientation[1]);
                 
+                // Set initial pitch if not set
+                if (initialPitch == null) {
+                    initialPitch = pitch;
+                }
+                
                 // Only update if heading changed significantly
                 float azimuthDiff = Math.abs(newAzimuth - lastUpdateAzimuth);
                 if (azimuthDiff > 180) {
@@ -783,9 +865,94 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     if (radarView != null) {
                         radarView.setAzimuth(azimuth);
                     }
+                } else {
+                    // Update for pitch changes (depth effect) even if azimuth hasn't changed much
+                    updateARViewPositions();
                 }
             }
         }
+    }
+
+    private void handleStep() {
+        if (virtualLocation == null) return;
+        
+        // Dead reckoning: Move virtual location based on azimuth and step length
+        // Azimuth is in degrees, convert to radians
+        // 0 degrees = North, 90 = East, etc.
+        double bearingRad = Math.toRadians(azimuth);
+        
+        // Earth radius in meters
+        final double R = 6378137.0;
+        
+        double lat1 = Math.toRadians(virtualLocation.getLatitude());
+        double lon1 = Math.toRadians(virtualLocation.getLongitude());
+        
+        // Calculate new lat/lon
+        // Formula:
+        // lat2 = asin(sin(lat1)*cos(d/R) + cos(lat1)*sin(d/R)*cos(brng))
+        // lon2 = lon1 + atan2(sin(brng)*sin(d/R)*cos(lat1), cos(d/R)-sin(lat1)*sin(lat2))
+        
+        double d = STEP_LENGTH_METERS;
+        double angularDistance = d / R;
+        
+        double lat2 = Math.asin(Math.sin(lat1) * Math.cos(angularDistance) +
+                               Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRad));
+                               
+        double lon2 = lon1 + Math.atan2(Math.sin(bearingRad) * Math.sin(angularDistance) * Math.cos(lat1),
+                                        Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2));
+                                        
+        virtualLocation.setLatitude(Math.toDegrees(lat2));
+        virtualLocation.setLongitude(Math.toDegrees(lon2));
+        
+        // Recalculate distances for all notes
+        updateNoteDistances();
+    }
+    
+    private void updateNoteDistances() {
+        if (nearbyNotes.isEmpty()) return;
+        
+        for (ARNote note : nearbyNotes) {
+            // We need the original note location... 
+            // Wait, ARNote stores its own lat/lon. We can just recalculate.
+            
+            note.distance = calculateDistance(
+                virtualLocation.getLatitude(),
+                virtualLocation.getLongitude(),
+                note.latitude,
+                note.longitude
+            );
+            
+            note.bearing = calculateBearing(
+                virtualLocation.getLatitude(),
+                virtualLocation.getLongitude(),
+                note.latitude,
+                note.longitude
+            );
+        }
+        
+        // Re-sort by distance
+        Collections.sort(nearbyNotes, (n1, n2) -> Double.compare(n2.distance, n1.distance));
+        
+        // Update UI
+        requireActivity().runOnUiThread(() -> {
+            updateARView(); // Full refresh to update distance text and scaling
+        });
+    }
+
+    private float[] applyDynamicFilter(float[] input, float[] output) {
+        if (output == null) return input.clone();
+
+        for (int i = 0; i < input.length; i++) {
+            float diff = Math.abs(input[i] - output[i]);
+            
+            // Dynamic alpha:
+            // If change is large (intentional movement), use higher alpha for responsiveness.
+            // If change is small (jitter), use lower alpha for stability.
+            float alpha = (diff > MOVEMENT_THRESHOLD) ? ALPHA_MOVE : ALPHA_STEADY;
+            
+            output[i] = alpha * input[i] + (1 - alpha) * output[i];
+        }
+        return output;
     }
     
     @Override

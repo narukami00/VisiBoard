@@ -59,6 +59,19 @@
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
+            <ImageButton
+                android:id="@+id/btn_refresh_location"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_refresh"
+                android:scaleType="fitCenter"
+                android:padding="8dp"
+                android:contentDescription="Refresh Location" />
+
             <com.visiboard.app.ui.capture.RadarView
                 android:id="@+id/radar_view"
                 android:layout_width="80dp"
@@ -124,13 +137,13 @@
             <TextView
                 android:id="@+id/tv_radius_value"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
+                android:fontFamily="@font/poppins_semibold"
                 android:text="10"
                 android:textColor="@color/white"
                 android:textSize="20sp"
-                android:textStyle="bold"
-                android:fontFamily="@font/poppins_semibold"/>
+                android:textStyle="bold" />
 
         </FrameLayout>
 
