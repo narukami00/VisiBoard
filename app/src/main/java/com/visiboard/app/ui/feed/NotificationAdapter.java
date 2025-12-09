@@ -52,6 +52,20 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         notifyDataSetChanged();
     }
 
+    public Notification getItem(int position) {
+        return notifications.get(position);
+    }
+
+    public void removeItem(int position) {
+        notifications.remove(position);
+        notifyItemRemoved(position);
+    }
+
+    public void restoreItem(Notification item, int position) {
+        notifications.add(position, item);
+        notifyItemInserted(position);
+    }
+
     class NotificationViewHolder extends RecyclerView.ViewHolder {
         TextView tvNotificationText, tvNotificationTime;
         ImageView ivUserAvatar, ivNotificationIcon;

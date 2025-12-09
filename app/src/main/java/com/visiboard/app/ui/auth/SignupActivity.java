@@ -10,6 +10,7 @@ import android.util.Patterns;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -31,6 +32,7 @@ public class SignupActivity extends AppCompatActivity {
     private EditText nameInput, emailInput, passInput, confirmPassInput;
     private ImageView profilePic;
     private Button signupBtn;
+    private ProgressBar signupProgressBar;
     private FirebaseAuth auth;
     private FirebaseFirestore db;
     private String base64Image = "";
@@ -51,6 +53,7 @@ public class SignupActivity extends AppCompatActivity {
         confirmPassInput = findViewById(R.id.signupConfirmPassword);
         profilePic = findViewById(R.id.profileImage);
         signupBtn = findViewById(R.id.signupBtn);
+        signupProgressBar = findViewById(R.id.signupProgressBar);
 
         profilePic.setOnClickListener(v -> pickImage());
 
@@ -115,6 +118,9 @@ public class SignupActivity extends AppCompatActivity {
         }
 
         // Firebase Auth signup
+        signupProgressBar.setVisibility(android.view.View.VISIBLE);
+        signupBtn.setEnabled(false);
+        
         auth.createUserWithEmailAndPassword(email, pass)
                 .addOnCompleteListener(task -> {
                     if (task.isSuccessful()) {
@@ -131,13 +137,20 @@ public class SignupActivity extends AppCompatActivity {
 
                         db.collection("users").document(uid).set(userMap)
                                 .addOnSuccessListener(unused -> {
+                                    signupProgressBar.setVisibility(android.view.View.GONE);
+                                    signupBtn.setEnabled(true);
                                     Toast.makeText(this, "Account created!", Toast.LENGTH_SHORT).show();
                                     startActivity(new Intent(this, MainActivity.class));
                                     finish();
                                 })
-                                .addOnFailureListener(e ->
-                                        Toast.makeText(this, "Firestore error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                                .addOnFailureListener(e -> {
+                                        signupProgressBar.setVisibility(android.view.View.GONE);
+                                        signupBtn.setEnabled(true);
+                                        Toast.makeText(this, "Firestore error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                });
                     } else {
+                        signupProgressBar.setVisibility(android.view.View.GONE);
+                        signupBtn.setEnabled(true);
                         String error = task.getException() != null ? task.getException().getMessage() : "Unknown error";
                         
                         // Provide user-friendly error messages

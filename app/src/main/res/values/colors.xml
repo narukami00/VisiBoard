@@ -23,6 +23,7 @@
     <!-- Text Colors -->
     <color name="text_primary">#1E272E</color>
     <color name="text_secondary">#57606F</color>
+    <color name="text_tertiary">#747d8c</color>
     <color name="text_hint">#A4B0BE</color>
     <color name="text_on_primary">#FFFFFF</color>
     <color name="text_light">#FFFFFF</color>

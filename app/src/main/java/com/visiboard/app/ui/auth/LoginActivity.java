@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -28,6 +29,7 @@ public class LoginActivity extends AppCompatActivity {
     private EditText emailInput, passwordInput;
     private Button loginBtn;
     private TextView goToSignup, forgotPassword;
+    private ProgressBar loginProgressBar;
     private FirebaseAuth auth;
 
     @Override
@@ -45,6 +47,7 @@ public class LoginActivity extends AppCompatActivity {
         loginBtn = findViewById(R.id.loginBtn);
         goToSignup = findViewById(R.id.goToSignup);
         forgotPassword = findViewById(R.id.forgotPassword);
+        loginProgressBar = findViewById(R.id.loginProgressBar);
 
         // If user is already logged in, go straight to MainActivity
         if (auth.getCurrentUser() != null) {
@@ -84,9 +87,15 @@ public class LoginActivity extends AppCompatActivity {
 
         Log.d(TAG, "Attempting to login with email: " + email);
         
+        loginProgressBar.setVisibility(View.VISIBLE);
+        loginBtn.setEnabled(false);
+        
         // Firebase login
         auth.signInWithEmailAndPassword(email, password)
                 .addOnCompleteListener(task -> {
+                    loginProgressBar.setVisibility(View.GONE);
+                    loginBtn.setEnabled(true);
+                    
                     if (task.isSuccessful()) {
                         Log.d(TAG, "Login successful for: " + email);
                         Toast.makeText(LoginActivity.this, "Login successful", Toast.LENGTH_SHORT).show();

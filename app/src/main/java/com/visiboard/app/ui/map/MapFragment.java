@@ -96,6 +96,8 @@ public class MapFragment extends Fragment {
         0xFF5FD4D4  // Dark Aqua
     };
 
+    private boolean isNavigating = false; // Flag to prevent location updates from overriding navigation
+
     private MapView mapView;
     private MapLibreMap mapLibreMap;
     private SymbolManager symbolManager;
@@ -174,8 +176,9 @@ public class MapFragment extends Fragment {
                                 String docId = data.has("docId") ? data.getString("docId") : null;
                                 String ownerId = data.has("userId") ? data.getString("userId") : null;
                                 String imageBase64 = data.has("imageBase64") ? data.getString("imageBase64") : null;
+                                boolean hasImage = data.has("hasImage") && data.getBoolean("hasImage");
 
-                                showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64);
+                                showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64, hasImage);
                             } catch (Exception e) {
                                 e.printStackTrace();
                             }
@@ -247,7 +250,7 @@ public class MapFragment extends Fragment {
     }
 
     // Add note marker
-    private void addNoteMarker(LatLng position, String fullNote, String shortNote, long timestamp, String docId, String userId) {
+    private void addNoteMarker(LatLng position, String fullNote, String shortNote, long timestamp, String docId, String userId, boolean hasImage) {
         if (symbolManager == null || mapLibreMap == null) return;
 
         View noteCardView = LayoutInflater.from(requireContext()).inflate(R.layout.note_card_layout, null);
@@ -281,6 +284,7 @@ public class MapFragment extends Fragment {
             data.put("timestamp", timestamp);
             if (docId != null) data.put("docId", docId);
             if (userId != null) data.put("userId", userId);
+            data.put("hasImage", hasImage);
             // We pass imageBase64 if available so we can show it immediately
             // Note: Storing large base64 strings in symbol data might be heavy for the map. 
             // If it causes performance issues, we should fetch it on click instead.
@@ -321,7 +325,7 @@ public class MapFragment extends Fragment {
     }
 
     // Show info window with delete, like, and comment
-    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId, String imageBase64) {
+    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId, String imageBase64, boolean hasImage) {
         View infoWindow = LayoutInflater.from(requireContext()).inflate(R.layout.custom_info_window, null);
 
         // Find views
@@ -338,10 +342,12 @@ public class MapFragment extends Fragment {
         LinearLayout commentSection = infoWindow.findViewById(R.id.comment_section);
         ImageView btnComment = infoWindow.findViewById(R.id.btn_comment);
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
-        // Note: Use View type if CardView is not imported, or full package name
+        android.widget.ImageButton btnEdit = infoWindow.findViewById(R.id.btn_edit_note);
         androidx.cardview.widget.CardView imageContainer = infoWindow.findViewById(R.id.cv_note_image_container);
         ImageView noteImage = infoWindow.findViewById(R.id.iv_note_image);
         ProgressBar imageLoading = infoWindow.findViewById(R.id.progress_image);
+
+        final String[] currentBase64Wrapper = {imageBase64};
 
         if (imageBase64 != null && !imageBase64.isEmpty()) {
             imageContainer.setVisibility(View.VISIBLE);
@@ -376,10 +382,18 @@ public class MapFragment extends Fragment {
             }
         } else if (docId != null && useCloudMode) {
              // Fetch from cloud
-             imageContainer.setVisibility(View.VISIBLE);
-             imageLoading.setVisibility(View.VISIBLE);
+             if (hasImage) {
+                 imageContainer.setVisibility(View.VISIBLE);
+                 imageLoading.setVisibility(View.VISIBLE);
+             } else {
+                 imageContainer.setVisibility(View.GONE);
+                 imageLoading.setVisibility(View.GONE);
+             }
              db.collection("notes").document(docId).get().addOnSuccessListener(doc -> {
                  String base64 = doc.getString("imageBase64");
+                 if (base64 != null) {
+                     currentBase64Wrapper[0] = base64;
+                 }
                  // Check backward compatibility
                  if (base64 != null && !base64.isEmpty()) {
                      noteImage.setVisibility(View.VISIBLE);
@@ -443,6 +457,19 @@ public class MapFragment extends Fragment {
         }
 
         androidx.appcompat.app.AlertDialog dialog = builder.create();
+        
+        // Show Edit button if owner and cloud mode
+        if (isOwner && useCloudMode && docId != null) {
+            btnEdit.setVisibility(View.VISIBLE);
+            btnEdit.setOnClickListener(v -> {
+                android.content.Intent intent = new android.content.Intent(requireContext(), com.visiboard.app.ui.create.CreateNoteActivity.class);
+                intent.putExtra("edit_note_id", docId);
+                intent.putExtra("edit_content", noteTextView.getText().toString());
+                intent.putExtra("edit_image_base64", currentBase64Wrapper[0]);
+                startActivity(intent);
+                dialog.dismiss();
+            });
+        }
 
         if (dialog.getWindow() != null)
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
@@ -825,9 +852,11 @@ public class MapFragment extends Fragment {
                                     if (note == null) note = doc.getString("text");
                                     String userId = doc.getString("userId");
                                     long timestamp = doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0L;
+                                    String b64 = doc.getString("imageBase64");
+                                    boolean hasImage = b64 != null && !b64.isEmpty();
                                     LatLng pos = new LatLng(lat, lon);
                                     addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                                            timestamp, doc.getId(), userId);
+                                            timestamp, doc.getId(), userId, hasImage);
                                 } catch (Exception e) {
                                     Log.e("MapFragment", "Error processing note: " + e.getMessage());
                                 }
@@ -842,7 +871,7 @@ public class MapFragment extends Fragment {
                     LatLng pos = new LatLng(obj.getDouble("lat"), obj.getDouble("lon"));
                     String note = obj.getString("note");
                     long timestamp = obj.has("timestamp") ? obj.getLong("timestamp") : 0L;
-                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null);
+                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null, false);
                 }
             } catch (Exception e) { e.printStackTrace(); }
         }
@@ -859,9 +888,12 @@ public class MapFragment extends Fragment {
         fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
             if (location != null && mapLibreMap != null) {
                 LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-                currentZoom = 15.0;
-                mapLibreMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, currentZoom));
                 updateUserLocationMarker(latLng);
+                // Only move camera if NOT navigating to a note
+                if (!isNavigating) {
+                    currentZoom = 15.0;
+                    mapLibreMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, currentZoom));
+                }
             }
         });
         
@@ -1233,35 +1265,45 @@ public class MapFragment extends Fragment {
             boolean openNoteWindow = getArguments().getBoolean("open_note_window", false);
             
             if (targetLat != 0 && targetLng != 0) {
+                isNavigating = true;
                 LatLng targetLocation = new LatLng(targetLat, targetLng);
-                
-                // Immediately move camera to target location (don't wait for anything)
-                if (mapLibreMap != null) {
-                    Log.d(TAG, "Navigating to note at: " + targetLat + ", " + targetLng);
-                    
-                    // First, immediately jump to location with medium zoom
-                    mapLibreMap.moveCamera(CameraUpdateFactory.newLatLngZoom(targetLocation, 16.0));
-                    
-                    // Then smoothly animate to closer zoom
-                    new android.os.Handler().postDelayed(() -> {
-                        if (mapLibreMap != null) {
-                            mapLibreMap.animateCamera(
-                                CameraUpdateFactory.newLatLngZoom(targetLocation, 18.0),
-                                800 // Smooth zoom animation
-                            );
+                navigateAndOpen(targetLocation, targetNoteId, openNoteWindow);
+            } else if (targetNoteId != null && !targetNoteId.isEmpty()) {
+                // Coordinates missing, fetch them
+                db.collection("notes").document(targetNoteId).get()
+                    .addOnSuccessListener(documentSnapshot -> {
+                        if (documentSnapshot.exists()) {
+                            com.google.firebase.firestore.GeoPoint gp = documentSnapshot.getGeoPoint("location");
+                            if (gp != null) {
+                                isNavigating = true;
+                                LatLng targetLocation = new LatLng(gp.getLatitude(), gp.getLongitude());
+                                navigateAndOpen(targetLocation, targetNoteId, openNoteWindow);
+                            }
                         }
-                    }, 300);
-                    
-                    if (openNoteWindow && targetNoteId != null) {
-                        // Wait for notes to load and animation to complete
-                        new android.os.Handler().postDelayed(() -> {
-                            openNoteWindowById(targetNoteId, targetLocation);
-                        }, 2000);
-                    }
-                }
-                
-                getArguments().clear();
+                    })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error fetching note location", e));
             }
+            
+            getArguments().clear();
+        }
+    }
+
+    private void navigateAndOpen(LatLng targetLocation, String noteId, boolean openWindow) {
+        if (mapLibreMap != null) {
+             // Animate zoom to 18.0
+             mapLibreMap.animateCamera(CameraUpdateFactory.newLatLngZoom(targetLocation, 18.0), 1000);
+             
+             if (openWindow && noteId != null) {
+                 // Delay opening the window to allow animation to finish
+                 new android.os.Handler().postDelayed(() -> {
+                     openNoteWindowById(noteId, targetLocation);
+                 }, 1200);
+             }
+
+             // Reset navigation flag after animation
+             new android.os.Handler().postDelayed(() -> {
+                 isNavigating = false;
+             }, 2000);
         }
     }
     
@@ -1279,7 +1321,8 @@ public class MapFragment extends Fragment {
                     
                     if (noteText != null && timestamp != null) {
                         Symbol targetSymbol = findSymbolAtLocation(location);
-                        showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId, imageBase64);
+                        boolean hasImage = imageBase64 != null && !imageBase64.isEmpty();
+                        showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId, imageBase64, hasImage);
                     }
                 }
             })

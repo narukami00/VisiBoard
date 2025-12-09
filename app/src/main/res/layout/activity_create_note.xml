@@ -84,6 +84,19 @@
                 tools:srcCompat="@tools:sample/backgrounds/scenic" />
 
             <ImageButton
+                android:id="@+id/btn_rotate_image"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/btn_remove_image"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/circle_background_translucent"
+                android:src="@drawable/ic_rotate_right"
+                android:padding="4dp"
+                app:tint="@android:color/white"/>
+
+            <ImageButton
                 android:id="@+id/btn_remove_image"
                 android:layout_width="32dp"
                 android:layout_height="32dp"

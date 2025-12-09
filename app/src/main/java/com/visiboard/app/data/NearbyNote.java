@@ -13,6 +13,9 @@ public class NearbyNote {
     private int likesCount;
     private int commentsCount;
     private double distance;
+    private String imageBase64;
+    private int imageWidth;
+    private int imageHeight;
 
     public NearbyNote() {
     }
@@ -69,4 +72,13 @@ public class NearbyNote {
 
     public double getDistance() { return distance; }
     public void setDistance(double distance) { this.distance = distance; }
+
+    public String getImageBase64() { return imageBase64; }
+    public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
+
+    public int getImageWidth() { return imageWidth; }
+    public void setImageWidth(int imageWidth) { this.imageWidth = imageWidth; }
+
+    public int getImageHeight() { return imageHeight; }
+    public void setImageHeight(int imageHeight) { this.imageHeight = imageHeight; }
 }

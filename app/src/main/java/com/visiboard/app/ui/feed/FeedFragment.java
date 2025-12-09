@@ -1,8 +1,5 @@
 package com.visiboard.app.ui.feed;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
-import android.location.Location;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -10,24 +7,26 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.Button;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationServices;
+import androidx.viewpager2.adapter.FragmentStateAdapter;
+import androidx.viewpager2.widget.ViewPager2;
+
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.GeoPoint;
-import com.google.firebase.firestore.Query;
 import com.visiboard.app.R;
 import com.visiboard.app.data.NearbyNote;
 import com.visiboard.app.data.Notification;
@@ -37,34 +36,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class FeedFragment extends Fragment {
+public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteClickListener, NotificationTabFragment.NotificationActionListener {
     
     private static final String TAG = "FeedFragment";
-    private static final double NEARBY_RADIUS_KM = 10.0;
     
-    private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipeRefresh;
-    private RecyclerView rvNotifications, rvNearbyNotes, rvSearchResults, rvFollowing;
-    private TextView tvNoNotifications, tvNoNearbyNotes, tvNoFollowing;
-    private Button btnClearNotifications, btnShowMoreNotifications, btnShowMoreNearby;
+    private TabLayout tabLayout;
+    private ViewPager2 viewPager;
+    private RecyclerView rvSearchResults;
+    private ImageButton btnMessages;
     private TextInputEditText etSearchUsers;
-    private NotificationAdapter notificationAdapter;
-    private NearbyNotesAdapter nearbyNotesAdapter;
     private UserSearchAdapter userSearchAdapter;
     private FollowingAdapter followingAdapter;
     
     private FirebaseAuth auth;
     private FirebaseFirestore db;
-    private FusedLocationProviderClient fusedLocationClient;
     
-    private Location currentLocation;
-    
-    // Show More functionality
-    private boolean showingAllNotifications = false;
-    private boolean showingAllNearby = false;
-    private List<Notification> allNotifications = new ArrayList<>();
-    private List<NearbyNote> allNearbyNotes = new ArrayList<>();
-    private static final int MAX_NOTIFICATIONS_PREVIEW = 5;
-    private static final int MAX_NEARBY_PREVIEW = 3;
+    private View customNotificationTab;
+    private TextView tvNotificationBadge;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -77,66 +65,42 @@ public class FeedFragment extends Fragment {
         
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
         
-        swipeRefresh = view.findViewById(R.id.swipe_refresh);
-        rvNotifications = view.findViewById(R.id.rv_notifications);
-        rvNearbyNotes = view.findViewById(R.id.rv_nearby_notes);
+        tabLayout = view.findViewById(R.id.tab_layout_feed);
+        viewPager = view.findViewById(R.id.view_pager_feed);
         rvSearchResults = view.findViewById(R.id.rv_search_results);
-        rvFollowing = view.findViewById(R.id.rv_following);
-        tvNoNotifications = view.findViewById(R.id.tv_no_notifications);
-        tvNoNearbyNotes = view.findViewById(R.id.tv_no_nearby_notes);
-        tvNoFollowing = view.findViewById(R.id.tv_no_following);
-        btnClearNotifications = view.findViewById(R.id.btn_clear_notifications);
-        btnShowMoreNotifications = view.findViewById(R.id.btn_show_more_notifications);
-        btnShowMoreNearby = view.findViewById(R.id.btn_show_more_nearby);
+        btnMessages = view.findViewById(R.id.btn_messages);
         etSearchUsers = view.findViewById(R.id.et_search_users);
         
-        setupSwipeRefresh();
-        setupRecyclerViews();
+        setupTabs();
         setupSearchBar();
-        setupClearButton();
-        setupShowMoreButtons();
-        loadUserLocation();
+        setupMessagesButton();
+        setupSearchRecyclerView();
     }
     
-    private void setupSwipeRefresh() {
-        swipeRefresh.setColorSchemeResources(
-            R.color.primary,
-            R.color.secondary,
-            R.color.accent
-        );
-        swipeRefresh.setOnRefreshListener(() -> {
-            loadUserLocation();
-            // Stop refreshing after 2 seconds max if location doesn't load
-            new android.os.Handler().postDelayed(() -> {
-                if (swipeRefresh != null && swipeRefresh.isRefreshing()) {
-                    swipeRefresh.setRefreshing(false);
-                }
-            }, 2000);
-        });
-    }
-    
-    @Override
-    public void onResume() {
-        super.onResume();
-        Log.d(TAG, "onResume - reloading data");
-        loadUserLocation();
-    }
-    
-    private void setupRecyclerViews() {
-        rvNotifications.setLayoutManager(new LinearLayoutManager(getContext()));
-        notificationAdapter = new NotificationAdapter(notification -> {
-            handleNotificationClick(notification);
-        });
-        rvNotifications.setAdapter(notificationAdapter);
+    private void setupTabs() {
+        FeedPagerAdapter pagerAdapter = new FeedPagerAdapter(this);
+        viewPager.setAdapter(pagerAdapter);
         
-        rvNearbyNotes.setLayoutManager(new LinearLayoutManager(getContext()));
-        nearbyNotesAdapter = new NearbyNotesAdapter(note -> {
-            navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
-        });
-        rvNearbyNotes.setAdapter(nearbyNotesAdapter);
-        
+        new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
+            View tabView = LayoutInflater.from(requireContext()).inflate(R.layout.layout_tab_custom, null);
+            TextView tvTitle = tabView.findViewById(R.id.tv_tab_title);
+            TextView tvBadge = tabView.findViewById(R.id.tv_tab_badge);
+            
+            if (position == 0) {
+                tvTitle.setText("Discover");
+                tvBadge.setVisibility(View.GONE);
+            } else {
+                tvTitle.setText("Notifications");
+                tvBadge.setVisibility(View.GONE);
+                customNotificationTab = tabView;
+                tvNotificationBadge = tvBadge;
+            }
+            tab.setCustomView(tabView);
+        }).attach();
+    }
+    
+    private void setupSearchRecyclerView() {
         rvSearchResults.setLayoutManager(new LinearLayoutManager(getContext()));
         userSearchAdapter = new UserSearchAdapter(user -> {
             showUserInfoDialog(user.getUserId());
@@ -145,15 +109,8 @@ public class FeedFragment extends Fragment {
             showSendMessageDialog(user);
         });
         rvSearchResults.setAdapter(userSearchAdapter);
-        
-        rvFollowing.setLayoutManager(new LinearLayoutManager(getContext()));
-        followingAdapter = new FollowingAdapter(
-            user -> showUserInfoDialog(user.getUserId()),
-            user -> showSendMessageDialog(user)
-        );
-        rvFollowing.setAdapter(followingAdapter);
     }
-    
+
     private void setupSearchBar() {
         etSearchUsers.addTextChangedListener(new TextWatcher() {
             @Override
@@ -173,116 +130,111 @@ public class FeedFragment extends Fragment {
             public void afterTextChanged(Editable s) {}
         });
     }
-    
-    private void setupClearButton() {
-        btnClearNotifications.setOnClickListener(v -> {
-            View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_confirmation, null);
-            TextView title = dialogView.findViewById(R.id.dialog_title);
-            TextView message = dialogView.findViewById(R.id.dialog_message);
-            Button btnConfirm = dialogView.findViewById(R.id.btn_confirm);
-            Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
-            
-            title.setText("Clear Notifications");
-            message.setText("Are you sure you want to clear all notifications?");
-            btnConfirm.setText("Clear");
-            
-            AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                .setView(dialogView)
-                .create();
-            
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+    private void searchUsers(String query) {
+        db.collection("users")
+            .orderBy("name")
+            .startAt(query)
+            .endAt(query + "\uf8ff")
+            .limit(10)
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                List<UserInfo> users = new ArrayList<>();
+                for (DocumentSnapshot doc : queryDocumentSnapshots) {
+                    UserInfo user = doc.toObject(UserInfo.class);
+                    if (user != null) {
+                        user.setUserId(doc.getId());
+                        if (!user.getUserId().equals(auth.getCurrentUser().getUid())) {
+                            users.add(user);
+                        }
+                    }
+                }
+                if (!users.isEmpty()) {
+                    rvSearchResults.setVisibility(View.VISIBLE);
+                    userSearchAdapter.setUsers(users);
+                } else {
+                    rvSearchResults.setVisibility(View.GONE);
+                }
+            })
+            .addOnFailureListener(e -> Log.e(TAG, "Error searching users", e));
+    }
+
+    private void setupMessagesButton() {
+        btnMessages.setOnClickListener(v -> showFollowingDialog());
+    }
+
+    // Callbacks
+    @Override
+    public void onNoteClick(NearbyNote note) {
+        navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
+    }
+
+    @Override
+    public void onNotificationClick(Notification notification) {
+        handleNotificationClick(notification);
+    }
+
+    @Override
+    public void onUnreadCountChanged(int count) {
+        if (tvNotificationBadge != null) {
+            if (count > 0) {
+                tvNotificationBadge.setText(String.valueOf(count));
+                tvNotificationBadge.setVisibility(View.VISIBLE);
+            } else {
+                tvNotificationBadge.setVisibility(View.GONE);
             }
-            
-            btnConfirm.setOnClickListener(v2 -> {
-                clearAllNotifications();
-                dialog.dismiss();
-            });
-            
-            btnCancel.setOnClickListener(v2 -> dialog.dismiss());
-            
-            dialog.show();
-        });
-    }
-    
-    private void setupShowMoreButtons() {
-        btnShowMoreNotifications.setOnClickListener(v -> toggleNotificationsView());
-        btnShowMoreNearby.setOnClickListener(v -> toggleNearbyNotesView());
-    }
-    
-    private void toggleNotificationsView() {
-        showingAllNotifications = !showingAllNotifications;
-        updateNotificationsDisplay();
-    }
-    
-    private void toggleNearbyNotesView() {
-        showingAllNearby = !showingAllNearby;
-        updateNearbyNotesDisplay();
-    }
-    
-    private void updateNotificationsDisplay() {
-        if (allNotifications.isEmpty()) {
-            tvNoNotifications.setVisibility(View.VISIBLE);
-            rvNotifications.setVisibility(View.GONE);
-            btnShowMoreNotifications.setVisibility(View.GONE);
-            return;
-        }
-        
-        List<Notification> displayList;
-        if (showingAllNotifications) {
-            displayList = allNotifications;
-        } else {
-            displayList = allNotifications.subList(0, Math.min(MAX_NOTIFICATIONS_PREVIEW, allNotifications.size()));
-        }
-        
-        tvNoNotifications.setVisibility(View.GONE);
-        rvNotifications.setVisibility(View.VISIBLE);
-        notificationAdapter.setNotifications(displayList);
-        
-        if (allNotifications.size() > MAX_NOTIFICATIONS_PREVIEW) {
-            btnShowMoreNotifications.setVisibility(View.VISIBLE);
-            btnShowMoreNotifications.setText(showingAllNotifications ? "Show Less" : "Show More (" + (allNotifications.size() - MAX_NOTIFICATIONS_PREVIEW) + " more)");
-        } else {
-            btnShowMoreNotifications.setVisibility(View.GONE);
         }
     }
-    
-    private void updateNearbyNotesDisplay() {
-        if (allNearbyNotes.isEmpty()) {
-            tvNoNearbyNotes.setVisibility(View.VISIBLE);
-            rvNearbyNotes.setVisibility(View.GONE);
-            btnShowMoreNearby.setVisibility(View.GONE);
-            return;
-        }
-        
-        List<NearbyNote> displayList;
-        if (showingAllNearby) {
-            displayList = allNearbyNotes;
-        } else {
-            displayList = allNearbyNotes.subList(0, Math.min(MAX_NEARBY_PREVIEW, allNearbyNotes.size()));
-        }
-        
-        tvNoNearbyNotes.setVisibility(View.GONE);
-        rvNearbyNotes.setVisibility(View.VISIBLE);
-        nearbyNotesAdapter.setNotes(displayList);
-        
-        if (allNearbyNotes.size() > MAX_NEARBY_PREVIEW) {
-            btnShowMoreNearby.setVisibility(View.VISIBLE);
-            btnShowMoreNearby.setText(showingAllNearby ? "Show Less" : "Show More (" + (allNearbyNotes.size() - MAX_NEARBY_PREVIEW) + " more)");
-        } else {
-            btnShowMoreNearby.setVisibility(View.GONE);
-        }
+
+    private void navigateToNoteOnMap(double lat, double lng, String noteId) {
+        Bundle args = new Bundle();
+        args.putDouble("target_lat", lat);
+        args.putDouble("target_lng", lng);
+        args.putString("target_note_id", noteId);
+        args.putBoolean("open_note_window", true);
+        Navigation.findNavController(requireView()).navigate(R.id.mapFragment, args);
     }
-    
+
     private void handleNotificationClick(Notification notification) {
-        if ("follow".equals(notification.getType())) {
+        String type = notification.getType();
+        Log.d(TAG, "Notification clicked: type=" + type + ", noteId=" + notification.getNoteId() + 
+              ", messageId=" + notification.getMessageId() + ", fromUser=" + notification.getFromUserId());
+
+        if (!notification.isRead()) {
+            db.collection("notifications").document(notification.getId())
+                .update("read", true);
+        }
+        
+        if ("follow".equals(type)) {
             showUserInfoDialog(notification.getFromUserId());
-        } else if ("message".equals(notification.getType())) {
+        } else if ("message".equals(type)) {
             showMessageDialog(notification.getMessageId());
         } else {
-            navigateToNoteOnMap(notification.getNoteLat(), notification.getNoteLng(), notification.getNoteId());
+             // Default to note navigation
+             String targetId = notification.getNoteId();
+             navigateToNoteOnMap(notification.getNoteLat(), notification.getNoteLng(), targetId);
         }
     }
+
+    private class FeedPagerAdapter extends FragmentStateAdapter {
+        public FeedPagerAdapter(Fragment fragment) {
+            super(fragment);
+        }
+
+        @NonNull
+        @Override
+        public Fragment createFragment(int position) {
+            if (position == 0) return new DiscoverTabFragment();
+            return new NotificationTabFragment();
+        }
+
+        @Override
+        public int getItemCount() {
+            return 2;
+        }
+    }
+    
+
     
     private void showMessageDialog(String messageId) {
         db.collection("messages").document(messageId).get()
@@ -356,63 +308,7 @@ public class FeedFragment extends Fragment {
         return "Just now";
     }
     
-    private void searchUsers(String query) {
-        String searchQuery = query.toLowerCase().trim();
-        Log.d(TAG, "Searching users with query: " + searchQuery);
-        
-        db.collection("users")
-            .get()
-            .addOnSuccessListener(queryDocumentSnapshots -> {
-                List<UserInfo> users = new ArrayList<>();
-                String currentUserId = auth.getCurrentUser().getUid();
-                
-                for (DocumentSnapshot doc : queryDocumentSnapshots) {
-                    try {
-                        String userId = doc.getId();
-                        if (userId.equals(currentUserId)) continue;
-                        
-                        String name = doc.getString("name");
-                        if (name != null && name.toLowerCase().contains(searchQuery)) {
-                            UserInfo user = doc.toObject(UserInfo.class);
-                            if (user != null) {
-                                user.setUserId(userId);
-                                users.add(user);
-                            }
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error parsing user: " + e.getMessage());
-                    }
-                }
-                
-                if (users.isEmpty()) {
-                    rvSearchResults.setVisibility(View.GONE);
-                } else {
-                    rvSearchResults.setVisibility(View.VISIBLE);
-                    userSearchAdapter.setUsers(users);
-                }
-            })
-            .addOnFailureListener(e -> {
-                Log.e(TAG, "Error searching users", e);
-                rvSearchResults.setVisibility(View.GONE);
-            });
-    }
-    
-    private void clearAllNotifications() {
-        String userId = auth.getCurrentUser().getUid();
-        
-        db.collection("notifications")
-            .whereEqualTo("toUserId", userId)
-            .get()
-            .addOnSuccessListener(queryDocumentSnapshots -> {
-                for (DocumentSnapshot doc : queryDocumentSnapshots) {
-                    doc.getReference().delete();
-                }
-                notificationAdapter.setNotifications(new ArrayList<>());
-                tvNoNotifications.setVisibility(View.VISIBLE);
-                rvNotifications.setVisibility(View.GONE);
-            })
-            .addOnFailureListener(e -> Log.e(TAG, "Error clearing notifications", e));
-    }
+
     
     private void showUserInfoDialog(String userId) {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_user_info, null);
@@ -502,229 +398,51 @@ public class FeedFragment extends Fragment {
         }
     }
     
-    private void loadUserLocation() {
-        if (ActivityCompat.checkSelfPermission(requireContext(), 
-                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "Location permission not granted");
-            if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-            return;
-        }
+
+    
+    private void showFollowingDialog() {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_following, null);
         
-        Log.d(TAG, "Getting user location...");
-        fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
-            if (location != null) {
-                currentLocation = location;
-                Log.d(TAG, "Location obtained: " + location.getLatitude() + ", " + location.getLongitude());
-                
-                // Track how many data loads are complete
-                final int[] completed = {0};
-                Runnable checkComplete = () -> {
-                    completed[0]++;
-                    if (completed[0] >= 3 && swipeRefresh != null) { // 3 = notifications, nearby, following
-                        swipeRefresh.setRefreshing(false);
-                    }
-                };
-                
-                loadNotifications(checkComplete);
-                loadNearbyNotes(checkComplete);
-                loadFollowingUsers(checkComplete);
-            } else {
-                Log.e(TAG, "Location is null");
-                if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
+        RecyclerView rvDialog = dialogView.findViewById(R.id.rv_following_dialog);
+        android.widget.ProgressBar pbLoading = dialogView.findViewById(R.id.pb_loading_following);
+        TextView tvNoData = dialogView.findViewById(R.id.tv_no_following_dialog);
+        Button btnClose = dialogView.findViewById(R.id.btn_close_dialog);
+        
+        rvDialog.setLayoutManager(new LinearLayoutManager(getContext()));
+        
+        FollowingAdapter dialogAdapter = new FollowingAdapter(
+            user -> showUserInfoDialog(user.getUserId()),
+            user -> {
+                // Dimiss dialog? Or keep open? Maybe keep open so they can msg multiple.
+                // Or easier: dismiss to show msg dialog
+                // dialog.dismiss(); // Need ref to dialog
+                showSendMessageDialog(user);
             }
-        }).addOnFailureListener(e -> {
-            Log.e(TAG, "Error getting location", e);
-            if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-        });
-    }
-    
-    private void loadNotifications() {
-        loadNotifications(null);
-    }
-    
-    private void loadNotifications(Runnable onComplete) {
-        String userId = auth.getCurrentUser().getUid();
-        Log.d(TAG, "Loading notifications for user: " + userId);
+        );
+        rvDialog.setAdapter(dialogAdapter);
         
-        db.collection("notifications")
-            .whereEqualTo("toUserId", userId)
-            .get()
-            .addOnSuccessListener(queryDocumentSnapshots -> {
-                List<Notification> notifications = new ArrayList<>();
-                Log.d(TAG, "Found " + queryDocumentSnapshots.size() + " notification documents");
-                
-                for (DocumentSnapshot doc : queryDocumentSnapshots) {
-                    try {
-                        Notification notification = doc.toObject(Notification.class);
-                        if (notification != null) {
-                            notification.setId(doc.getId());
-                            notifications.add(notification);
-                            Log.d(TAG, "Parsed notification: " + notification.getType() + " from " + notification.getFromUserName());
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error parsing notification: " + e.getMessage());
-                    }
-                }
-                
-                // Sort by timestamp descending
-                notifications.sort((a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()));
-                
-                allNotifications = notifications;
-                updateNotificationsDisplay();
-                
-                if (onComplete != null) onComplete.run();
-            })
-            .addOnFailureListener(e -> {
-                Log.e(TAG, "Error loading notifications", e);
-                tvNoNotifications.setVisibility(View.VISIBLE);
-                rvNotifications.setVisibility(View.GONE);
-                if (onComplete != null) onComplete.run();
-            });
-    }
-    
-    private void loadNearbyNotes() {
-        loadNearbyNotes(null);
-    }
-    
-    private void loadNearbyNotes(Runnable onComplete) {
-        if (currentLocation == null) {
-            Log.e(TAG, "Current location is null");
-            tvNoNearbyNotes.setVisibility(View.VISIBLE);
-            rvNearbyNotes.setVisibility(View.GONE);
-            if (onComplete != null) onComplete.run();
-            return;
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
         
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        
+        dialog.show();
+        
+        loadFollowingUsers(dialogAdapter, pbLoading, tvNoData, rvDialog);
+    }
+
+    private void loadFollowingUsers(FollowingAdapter adapter, View pbLoading, View tvNoData, View rvContent) {
+        pbLoading.setVisibility(View.VISIBLE);
+        tvNoData.setVisibility(View.GONE);
+        rvContent.setVisibility(View.GONE);
+        
         String userId = auth.getCurrentUser().getUid();
-        
-        db.collection("notes")
-            .get()
-            .addOnSuccessListener(queryDocumentSnapshots -> {
-                List<NearbyNote> nearbyNotes = new ArrayList<>();
-                
-                for (DocumentSnapshot doc : queryDocumentSnapshots) {
-                    try {
-                        String noteUserId = doc.getString("userId");
-                        if (noteUserId != null && noteUserId.equals(userId)) {
-                            continue;
-                        }
-                        
-                        GeoPoint location = doc.getGeoPoint("location");
-                        if (location == null) {
-                            // Try fallback to lat/lon
-                            Double lat = doc.getDouble("lat");
-                            Double lon = doc.getDouble("lon");
-                            if (lat != null && lon != null) {
-                                location = new GeoPoint(lat, lon);
-                            }
-                        }
-                        
-                        if (location != null) {
-                            double distance = calculateDistance(
-                                currentLocation.getLatitude(), 
-                                currentLocation.getLongitude(),
-                                location.getLatitude(), 
-                                location.getLongitude()
-                            );
-                            
-                            if (distance <= NEARBY_RADIUS_KM) {
-                                final NearbyNote note = new NearbyNote();
-                                note.setId(doc.getId());
-                                
-                                String text = doc.getString("text");
-                                if (text == null) text = doc.getString("note");
-                                
-                                note.setText(text);
-                                note.setSummary(doc.getString("summary"));
-                                note.setUserId(noteUserId);
-                                note.setLat(location.getLatitude());
-                                note.setLng(location.getLongitude());
-                                note.setTimestamp(doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0);
-                                
-                                // Get likes count
-                                Long likesCount = doc.getLong("likesCount");
-                                if (likesCount == null) likesCount = doc.getLong("likeCount");
-                                note.setLikesCount(likesCount != null ? likesCount.intValue() : 0);
-                                
-                                // Get comments count from subcollection for accuracy
-                                String noteId = doc.getId();
-                                db.collection("notes").document(noteId)
-                                    .collection("comments").get()
-                                    .addOnSuccessListener(comments -> {
-                                        note.setCommentsCount(comments.size());
-                                        nearbyNotesAdapter.notifyDataSetChanged();
-                                    })
-                                    .addOnFailureListener(e -> {
-                                        // Fallback to stored count
-                                        Long commentsCount = doc.getLong("commentsCount");
-                                        note.setCommentsCount(commentsCount != null ? commentsCount.intValue() : 0);
-                                    });
-                                
-                                note.setDistance(distance);
-                                
-                                // Get userName - if not in note, fetch from user profile
-                                String userName = doc.getString("userName");
-                                String userProfilePic = doc.getString("userProfilePic");
-                                
-                                if ((userName == null || userName.isEmpty()) && noteUserId != null) {
-                                    // Fetch from user collection
-                                    db.collection("users").document(noteUserId).get()
-                                        .addOnSuccessListener(userDoc -> {
-                                            String name = userDoc.getString("name");
-                                            String pic = userDoc.getString("profilePic");
-                                            note.setUserName(name != null ? name : "Anonymous");
-                                            note.setUserProfilePic(pic);
-                                            nearbyNotesAdapter.notifyDataSetChanged();
-                                        });
-                                } else {
-                                    note.setUserName(userName != null ? userName : "Anonymous");
-                                    note.setUserProfilePic(userProfilePic);
-                                }
-                                
-                                nearbyNotes.add(note);
-                            }
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error parsing note: " + e.getMessage());
-                    }
-                }
-                
-                nearbyNotes.sort((a, b) -> Double.compare(a.getDistance(), b.getDistance()));
-                
-                allNearbyNotes = nearbyNotes;
-                updateNearbyNotesDisplay();
-                
-                Log.d(TAG, "Found " + nearbyNotes.size() + " nearby notes");
-                if (onComplete != null) onComplete.run();
-            })
-            .addOnFailureListener(e -> {
-                Log.e(TAG, "Error loading nearby notes", e);
-                tvNoNearbyNotes.setVisibility(View.VISIBLE);
-                rvNearbyNotes.setVisibility(View.GONE);
-                if (onComplete != null) onComplete.run();
-            });
-    }
-    
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371;
-        
-        double latDistance = Math.toRadians(lat2 - lat1);
-        double lonDistance = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        
-        return R * c;
-    }
-    
-    private void loadFollowingUsers() {
-        loadFollowingUsers(null);
-    }
-    
-    private void loadFollowingUsers(Runnable onComplete) {
-        String userId = auth.getCurrentUser().getUid();
-        Log.d(TAG, "Loading following users for: " + userId);
         
         db.collection("users").document(userId)
             .collection("following")
@@ -732,18 +450,15 @@ public class FeedFragment extends Fragment {
             .addOnSuccessListener(querySnapshot -> {
                 List<UserInfo> following = new ArrayList<>();
                 int totalFollowing = querySnapshot.size();
-                Log.d(TAG, "Found " + totalFollowing + " following users");
                 
                 if (totalFollowing == 0) {
-                    rvFollowing.setVisibility(View.GONE);
-                    tvNoFollowing.setVisibility(View.VISIBLE);
-                    if (onComplete != null) onComplete.run();
+                    pbLoading.setVisibility(View.GONE);
+                    tvNoData.setVisibility(View.VISIBLE);
                     return;
                 }
                 
                 for (DocumentSnapshot doc : querySnapshot) {
                     String followedId = doc.getId();
-                    // Fetch user details
                     db.collection("users").document(followedId).get()
                         .addOnSuccessListener(userDoc -> {
                             if (userDoc.exists()) {
@@ -754,32 +469,30 @@ public class FeedFragment extends Fragment {
                                 user.setLastKnownLocation(userDoc.getString("lastKnownLocation"));
                                 following.add(user);
                                 
-                                // Update adapter when all users are loaded
                                 if (following.size() == totalFollowing) {
-                                    rvFollowing.setVisibility(View.VISIBLE);
-                                    tvNoFollowing.setVisibility(View.GONE);
-                                    followingAdapter.setUsers(following);
-                                    Log.d(TAG, "Loaded " + following.size() + " following users");
-                                    if (onComplete != null) onComplete.run();
+                                    pbLoading.setVisibility(View.GONE);
+                                    rvContent.setVisibility(View.VISIBLE);
+                                    adapter.setUsers(following);
                                 }
                             }
                         })
                         .addOnFailureListener(e -> {
-                            Log.e(TAG, "Error loading user: " + followedId, e);
-                            // Still count as processed to avoid hanging
-                            if (following.size() >= totalFollowing - 1 && onComplete != null) {
-                                onComplete.run();
+                            // handle error
+                            if (following.size() >= totalFollowing - 1) {
+                                pbLoading.setVisibility(View.GONE);
+                                rvContent.setVisibility(View.VISIBLE);
+                                adapter.setUsers(following);
                             }
                         });
                 }
             })
             .addOnFailureListener(e -> {
-                Log.e(TAG, "Error loading following list", e);
-                rvFollowing.setVisibility(View.GONE);
-                tvNoFollowing.setVisibility(View.VISIBLE);
-                if (onComplete != null) onComplete.run();
+                Log.e(TAG, "Error loading following", e);
+                pbLoading.setVisibility(View.GONE);
+                tvNoData.setVisibility(View.VISIBLE);
             });
     }
+
     
     private void showSendMessageDialog(UserInfo recipient) {
         View dialogView = LayoutInflater.from(requireContext())
@@ -873,14 +586,5 @@ public class FeedFragment extends Fragment {
         db.collection("notifications").add(notification);
     }
     
-    private void navigateToNoteOnMap(double lat, double lng, String noteId) {
-        Bundle args = new Bundle();
-        args.putDouble("target_lat", lat);
-        args.putDouble("target_lng", lng);
-        args.putString("target_note_id", noteId);
-        args.putBoolean("open_note_window", true);
-        
-        Navigation.findNavController(requireView())
-            .navigate(R.id.mapFragment, args);
-    }
+
 }

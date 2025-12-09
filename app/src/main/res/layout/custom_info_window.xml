@@ -82,6 +82,16 @@
                     android:elevation="2dp"
                     android:visibility="gone" />
 
+                <ImageButton
+                    android:id="@+id/btn_edit_note"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_edit"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="8dp"
+                    android:visibility="gone"
+                    android:contentDescription="Edit Note" />
+
             </LinearLayout>
 
             <!-- Divider -->
