@@ -12,6 +12,7 @@ public class Note {
     public String summary;
     public double lat;
     public double lng;
+    public String imageUrl;
     public int status; // 0=pending,1=syncing,2=synced
     public long timestamp;
 }

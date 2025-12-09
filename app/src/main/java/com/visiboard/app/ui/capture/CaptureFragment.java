@@ -42,6 +42,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
+import com.google.firebase.Timestamp;
 import com.visiboard.app.R;
 
 import java.io.File;
@@ -67,9 +68,18 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private TextView tvNotesCount;
     private TextView tvRadiusValue;
     private ProgressBar progressLoading;
+    private ImageButton btnMenuToggle;
+    private static boolean isArVisible = true;
+    
+    // Menu Views
+    private androidx.cardview.widget.CardView cvArMenu;
+    private android.widget.LinearLayout itemResetLocation;
+    private android.widget.LinearLayout itemToggleVisibility;
+    private TextView tvMenuVisibility;
+    private android.widget.ImageView ivMenuEye;
+
     private ImageButton btnCameraToggle;
     private ImageButton btnCapture;
-    private ImageButton btnRefreshLocation;
     private FrameLayout btnRadius;
     private RadarView radarView;
     
@@ -121,7 +131,12 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         progressLoading = view.findViewById(R.id.progress_loading);
         btnCameraToggle = view.findViewById(R.id.btn_camera_toggle);
         btnCapture = view.findViewById(R.id.btn_capture);
-        btnRefreshLocation = view.findViewById(R.id.btn_refresh_location);
+        btnMenuToggle = view.findViewById(R.id.btn_menu_toggle);
+        cvArMenu = view.findViewById(R.id.cv_ar_menu);
+        itemResetLocation = view.findViewById(R.id.item_reset_location);
+        itemToggleVisibility = view.findViewById(R.id.item_toggle_visibility);
+        tvMenuVisibility = view.findViewById(R.id.tv_menu_visibility);
+        ivMenuEye = view.findViewById(R.id.iv_menu_eye);
         btnRadius = view.findViewById(R.id.btn_radius);
         radarView = view.findViewById(R.id.radar_view);
         
@@ -162,6 +177,15 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     }
     
     private void setupButtonListeners() {
+        // Initialize UI state
+        if (arOverlay != null) {
+            arOverlay.setVisibility(isArVisible ? View.VISIBLE : View.GONE);
+        }
+        if (tvMenuVisibility != null && ivMenuEye != null) {
+             tvMenuVisibility.setText(isArVisible ? "Hide Notes" : "Show Notes");
+             ivMenuEye.setImageResource(isArVisible ? R.drawable.ic_eye_visible : R.drawable.ic_eye_hidden);
+        }
+    
         // Camera toggle button
         btnCameraToggle.setOnClickListener(v -> {
             v.animate().scaleX(0.8f).scaleY(0.8f).setDuration(100)
@@ -177,8 +201,43 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                 .withEndAction(() -> {
                     v.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
                     capturePhoto();
+                    // Hide menu if open
+                    if (cvArMenu.getVisibility() == View.VISIBLE) {
+                        cvArMenu.setVisibility(View.GONE);
+                    }
                 });
         });
+
+        // Menu Toggle
+        if (btnMenuToggle != null) {
+            btnMenuToggle.setOnClickListener(v -> {
+                if (cvArMenu.getVisibility() == View.VISIBLE) {
+                    cvArMenu.animate().alpha(0f).scaleY(0.8f).setDuration(150)
+                        .withEndAction(() -> cvArMenu.setVisibility(View.GONE)).start();
+                } else {
+                    cvArMenu.setAlpha(0f);
+                    cvArMenu.setScaleY(0.8f);
+                    cvArMenu.setVisibility(View.VISIBLE);
+                    cvArMenu.animate().alpha(1f).scaleY(1f).setDuration(150).start();
+                }
+            });
+        }
+        
+        // Reset Location
+        if (itemResetLocation != null) {
+            itemResetLocation.setOnClickListener(v -> {
+                cvArMenu.setVisibility(View.GONE); // Close menu
+                loadUserLocation();
+            });
+        }
+        
+        // Toggle Visibility (Menu Item)
+        if (itemToggleVisibility != null) {
+            itemToggleVisibility.setOnClickListener(v -> {
+                cvArMenu.setVisibility(View.GONE); // Close menu
+                toggleArVisibility();
+            });
+        }
         
         // Radius selection button
         btnRadius.setOnClickListener(v -> {
@@ -188,16 +247,8 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     cycleRadius();
                 });
         });
-        
-        // Refresh location button
-        if (btnRefreshLocation != null) {
-            btnRefreshLocation.setOnClickListener(v -> {
-                v.animate().rotationBy(360).setDuration(500).start();
-                loadUserLocation();
-            });
-        }
     }
-    
+
     private void toggleCamera() {
         if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
             currentCameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA;
@@ -224,12 +275,43 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
             radarView.setMaxDistance((float) currentRadiusMeters);
         }
     }
+
+    private void toggleArVisibility() {
+        isArVisible = !isArVisible;
+        arOverlay.setVisibility(isArVisible ? View.VISIBLE : View.GONE);
+        
+        if (isArVisible) {
+            // Force full update (add views if missing) after layout is ready
+            arOverlay.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override
+                public void onGlobalLayout() {
+                    arOverlay.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    // Use updateARView instead of updateARViewPositions to ensure views are ADDED if they were invalid before/size 0
+                    updateARView();
+                }
+            });
+        }
+        
+        // Update menu item
+        if (tvMenuVisibility != null && ivMenuEye != null) {
+             tvMenuVisibility.setText(isArVisible ? "Hide Notes" : "Show Notes");
+             ivMenuEye.setImageResource(isArVisible ? R.drawable.ic_eye_visible : R.drawable.ic_eye_hidden);
+        }
+        
+        Toast.makeText(requireContext(), isArVisible ? "Notes Visible" : "Notes Hidden", Toast.LENGTH_SHORT).show();
+    }
     
     private void capturePhoto() {
         Bitmap previewBitmap = cameraPreview.getBitmap();
         if (previewBitmap != null) {
             Log.d(TAG, "Captured bitmap: " + previewBitmap.getWidth() + "x" + previewBitmap.getHeight());
-            Bitmap finalBitmap = compositeBitmapWithOverlay(previewBitmap);
+            Bitmap finalBitmap;
+            if (isArVisible) {
+                finalBitmap = compositeBitmapWithOverlay(previewBitmap);
+            } else {
+                // If notes hidden, just save the raw preview (no overlay)
+                finalBitmap = previewBitmap;
+            }
             saveBitmapAndNavigate(finalBitmap);
         } else {
             Toast.makeText(requireContext(), "Failed to capture camera view", Toast.LENGTH_SHORT).show();
@@ -495,6 +577,8 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                                 arNote.distance = distance;
                                 arNote.userId = noteUserId;
                                 arNote.userName = "User"; // Default
+                                Long ts = doc.getLong("timestamp");
+                                arNote.timestamp = (ts != null) ? ts : System.currentTimeMillis();
                                 
                                 arNote.bearing = calculateBearing(
                                     virtualLocation.getLatitude(),
@@ -553,6 +637,21 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         if (nearbyNotes.isEmpty()) {
             tvNotesCount.setText("No notes nearby");
             arOverlay.removeAllViews();
+            return;
+        }
+        
+        // Check if layout is ready - if size is 0, we can't position notes
+        if (arOverlay.getWidth() == 0 || arOverlay.getHeight() == 0) {
+            if (arOverlay.getVisibility() == View.VISIBLE) {
+                // Wait for layout pass
+                arOverlay.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        arOverlay.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                        updateARView(); // Retry updating
+                    }
+                });
+            }
             return;
         }
         
@@ -754,12 +853,16 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         TextView tvUserName = noteView.findViewById(R.id.tv_user_name);
         TextView tvNoteText = noteView.findViewById(R.id.tv_note_text);
         TextView tvDistance = noteView.findViewById(R.id.tv_distance);
+        TextView tvTimeAgo = noteView.findViewById(R.id.tv_time_ago);
         CircleImageView ivUserAvatar = noteView.findViewById(R.id.iv_user_avatar);
         androidx.cardview.widget.CardView cardView = noteView.findViewById(R.id.ar_note_card);
         
         tvUserName.setText(note.userName != null ? note.userName : "User");
         tvNoteText.setText(note.text != null ? note.text : "");
-        tvDistance.setText(String.format("%.1fm", note.distance));
+        tvDistance.setText(String.format("%.0fm", note.distance));
+        if (tvTimeAgo != null) {
+            tvTimeAgo.setText(getTimeAgo(note.timestamp));
+        }
         
         // Assign random color to card
         int[] colors = {
@@ -982,6 +1085,19 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         return (float) ((bearing + 360) % 360);
     }
     
+    private String getTimeAgo(long timestamp) {
+        if (timestamp <= 0) return "Just now";
+        long now = System.currentTimeMillis();
+        long diff = now - timestamp;
+        
+        if (diff < 60 * 1000) return "Just now";
+        if (diff < 60 * 60 * 1000) return (diff / (60 * 1000)) + "m ago";
+        if (diff < 24 * 60 * 60 * 1000) return (diff / (60 * 60 * 1000)) + "h ago";
+        if (diff < 7 * 24 * 60 * 60 * 1000) return (diff / (24 * 60 * 60 * 1000)) + "d ago";
+        if (diff < 365L * 24 * 60 * 60 * 1000) return (diff / (7 * 24 * 60 * 60 * 1000)) + "w ago";
+        return (diff / (365L * 24 * 60 * 60 * 1000)) + "y ago";
+    }
+    
     private static class ARNote {
         String id;
         String text;
@@ -992,5 +1108,6 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         double longitude;
         double distance;
         float bearing;
+        long timestamp;
     }
 }

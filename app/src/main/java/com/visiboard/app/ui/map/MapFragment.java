@@ -20,6 +20,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -172,8 +173,9 @@ public class MapFragment extends Fragment {
                                 long timestamp = data.getLong("timestamp");
                                 String docId = data.has("docId") ? data.getString("docId") : null;
                                 String ownerId = data.has("userId") ? data.getString("userId") : null;
+                                String imageBase64 = data.has("imageBase64") ? data.getString("imageBase64") : null;
 
-                                showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId);
+                                showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64);
                             } catch (Exception e) {
                                 e.printStackTrace();
                             }
@@ -192,14 +194,9 @@ public class MapFragment extends Fragment {
                 return;
             }
 
-            fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
-                if (location != null) {
-                    LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
-                    showAddNoteDialog(currentLatLng); // 👈 add note exactly at your location
-                } else {
-                    Toast.makeText(requireContext(), "Unable to get current location", Toast.LENGTH_SHORT).show();
-                }
-            });
+            // Launch CreateNoteActivity
+            android.content.Intent intent = new android.content.Intent(requireContext(), com.visiboard.app.ui.create.CreateNoteActivity.class);
+            startActivity(intent);
         });
 
         // Switch between local and firestore
@@ -284,6 +281,25 @@ public class MapFragment extends Fragment {
             data.put("timestamp", timestamp);
             if (docId != null) data.put("docId", docId);
             if (userId != null) data.put("userId", userId);
+            // We pass imageBase64 if available so we can show it immediately
+            // Note: Storing large base64 strings in symbol data might be heavy for the map. 
+            // If it causes performance issues, we should fetch it on click instead.
+            // But for now, let's assume we can fetch it on click if it's not in data.
+            // ACTUALLY, let's NOT put large base64 in symbol data. It will bloat the map style source.
+            // We should fetch the note document on click if we want the image, OR just pass null here 
+            // and let showCustomInfoWindow fetch it? 
+            // showCustomInfoWindow takes the string directly.
+            // Let's modify the click listener in onCreateView to fetch the document if needed?
+            // Existing logic: symbolManager.addClickListener parses data.
+            // Decision: Do NOT put base64 in symbol data. Fetch it from Firestore in user interaction if not present,
+            // or better yet, the loadSavedNotes listener already has the doc.
+            // BUT the symbols are created from snapshots.
+            // Let's rely on fetching the document in showCustomInfoWindow or before calling it?
+            // The existing code for 'openNoteWindowById' fetches the doc.
+            // The 'click' listener uses symbol data. 
+            // Let's UPDATE the click listener to fetch the document fresh to get the image, 
+            // to avoid storing megabytes of data in the map source.
+            
             Gson gson = new Gson();
             JsonElement jsonData = gson.fromJson(data.toString(), JsonElement.class);
 
@@ -305,7 +321,7 @@ public class MapFragment extends Fragment {
     }
 
     // Show info window with delete, like, and comment
-    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId) {
+    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId, String imageBase64) {
         View infoWindow = LayoutInflater.from(requireContext()).inflate(R.layout.custom_info_window, null);
 
         // Find views
@@ -322,6 +338,84 @@ public class MapFragment extends Fragment {
         LinearLayout commentSection = infoWindow.findViewById(R.id.comment_section);
         ImageView btnComment = infoWindow.findViewById(R.id.btn_comment);
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
+        // Note: Use View type if CardView is not imported, or full package name
+        androidx.cardview.widget.CardView imageContainer = infoWindow.findViewById(R.id.cv_note_image_container);
+        ImageView noteImage = infoWindow.findViewById(R.id.iv_note_image);
+        ProgressBar imageLoading = infoWindow.findViewById(R.id.progress_image);
+
+        if (imageBase64 != null && !imageBase64.isEmpty()) {
+            imageContainer.setVisibility(View.VISIBLE);
+            noteImage.setVisibility(View.VISIBLE);
+            // Decode Base64
+            try {
+                byte[] decodedString = android.util.Base64.decode(imageBase64, android.util.Base64.DEFAULT);
+                Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                noteImage.setImageBitmap(decodedByte);
+                
+                // Aspect Ratio Toggle logic
+                noteImage.setOnClickListener(v -> {
+                    androidx.constraintlayout.widget.ConstraintLayout.LayoutParams params = 
+                        (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) noteImage.getLayoutParams();
+                    
+                    String currentRatio = params.dimensionRatio;
+                    // Start cycle
+                    String nextRatio = "1:1";
+                    if ("1:1".equals(currentRatio)) nextRatio = "4:3";
+                    else if ("4:3".equals(currentRatio)) nextRatio = "16:9";
+                    else if ("16:9".equals(currentRatio)) nextRatio = "3:4";
+                    else if ("3:4".equals(currentRatio)) nextRatio = "9:16";
+                    else if ("9:16".equals(currentRatio)) nextRatio = "1:1"; // Loop back
+                    
+                    params.dimensionRatio = nextRatio;
+                    noteImage.setLayoutParams(params);
+                    Toast.makeText(requireContext(), "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                imageContainer.setVisibility(View.GONE);
+            }
+        } else if (docId != null && useCloudMode) {
+             // Fetch from cloud
+             imageContainer.setVisibility(View.VISIBLE);
+             imageLoading.setVisibility(View.VISIBLE);
+             db.collection("notes").document(docId).get().addOnSuccessListener(doc -> {
+                 String base64 = doc.getString("imageBase64");
+                 // Check backward compatibility
+                 if (base64 != null && !base64.isEmpty()) {
+                     noteImage.setVisibility(View.VISIBLE);
+                     try {
+                        byte[] decodedString = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                        Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                        noteImage.setImageBitmap(decodedByte);
+                        
+                        noteImage.setOnClickListener(v -> {
+                             androidx.constraintlayout.widget.ConstraintLayout.LayoutParams params = 
+                                (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) noteImage.getLayoutParams();
+                            String currentRatio = params.dimensionRatio;
+                            String nextRatio = "1:1";
+                            if ("1:1".equals(currentRatio)) nextRatio = "4:3";
+                            else if ("4:3".equals(currentRatio)) nextRatio = "16:9";
+                            else if ("16:9".equals(currentRatio)) nextRatio = "3:4";
+                            else if ("3:4".equals(currentRatio)) nextRatio = "9:16";
+                            else if ("9:16".equals(currentRatio)) nextRatio = "1:1";
+                            params.dimensionRatio = nextRatio;
+                            noteImage.setLayoutParams(params);
+                            Toast.makeText(requireContext(), "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
+                        });
+                     } catch (Exception e) { e.printStackTrace(); }
+                 } else {
+                     imageContainer.setVisibility(View.GONE);
+                 }
+                 imageLoading.setVisibility(View.GONE);
+             }).addOnFailureListener(e -> {
+                 imageLoading.setVisibility(View.GONE);
+                 imageContainer.setVisibility(View.GONE);
+             });
+             
+        } else {
+            imageContainer.setVisibility(View.GONE);
+            imageLoading.setVisibility(View.GONE);
+        }
 
 
         noteTextView.setText(noteText);
@@ -1181,10 +1275,11 @@ public class MapFragment extends Fragment {
                     
                     Long timestamp = doc.getLong("timestamp");
                     String userId = doc.getString("userId");
+                    String imageBase64 = doc.getString("imageBase64");
                     
                     if (noteText != null && timestamp != null) {
                         Symbol targetSymbol = findSymbolAtLocation(location);
-                        showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId);
+                        showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId, imageBase64);
                     }
                 }
             })

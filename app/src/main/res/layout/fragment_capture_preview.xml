@@ -43,7 +43,7 @@
         android:background="@drawable/bg_gradient_bottom"
         android:padding="24dp"
         android:gravity="center"
-        android:weightSum="2">
+        android:weightSum="3">
 
         <!-- Retake Button -->
         <Button
@@ -51,14 +51,15 @@
             android:layout_width="0dp"
             android:layout_height="56dp"
             android:layout_weight="1"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="4dp"
             android:background="@drawable/bg_button_secondary"
             android:text="Retake"
-            android:textColor="@color/button_text_secondary"
-            android:textSize="16sp"
+            android:textColor="@color/button_text_primary"
+            android:textSize="14sp"
             android:textStyle="bold"
             android:fontFamily="@font/poppins_semibold"
-            android:elevation="4dp"/>
+            android:elevation="4dp"
+            app:backgroundTint="#666666"/>
 
         <!-- Save Button -->
         <Button
@@ -66,14 +67,31 @@
             android:layout_width="0dp"
             android:layout_height="56dp"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/bg_button_primary"
             android:text="Save"
             android:textColor="@color/button_text_primary"
-            android:textSize="16sp"
+            android:textSize="14sp"
             android:textStyle="bold"
             android:fontFamily="@font/poppins_semibold"
             android:elevation="4dp"/>
+
+        <!-- Post Button -->
+        <Button
+            android:id="@+id/btn_post_note"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_button_primary"
+            android:text="Post"
+            android:textColor="@color/button_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/poppins_semibold"
+            android:elevation="4dp"
+            app:backgroundTint="#9C27B0"/>
 
     </LinearLayout>
 

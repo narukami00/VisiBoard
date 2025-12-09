@@ -1,4 +1,5 @@
 package com.visiboard.app.ui.capture;
+import android.content.Intent;
 
 import android.content.ContentValues;
 import android.graphics.Bitmap;
@@ -35,6 +36,7 @@ public class CapturePreviewFragment extends Fragment {
     private ImageView ivCapturedImage;
     private Button btnSave;
     private Button btnRetake;
+    private Button btnPostNote;
     private ProgressBar progressSaving;
     
     private String imageUri;
@@ -48,6 +50,7 @@ public class CapturePreviewFragment extends Fragment {
         ivCapturedImage = view.findViewById(R.id.iv_captured_image);
         btnSave = view.findViewById(R.id.btn_save);
         btnRetake = view.findViewById(R.id.btn_retake);
+        btnPostNote = view.findViewById(R.id.btn_post_note);
         progressSaving = view.findViewById(R.id.progress_saving);
         
         if (getArguments() != null) {
@@ -79,6 +82,13 @@ public class CapturePreviewFragment extends Fragment {
         btnRetake.setOnClickListener(v -> {
             // Navigate back to capture fragment
             requireActivity().onBackPressed();
+        });
+        btnPostNote.setOnClickListener(v -> {
+            if (imageUri != null) {
+                Intent intent = new Intent(requireActivity(), com.visiboard.app.ui.create.CreateNoteActivity.class);
+                intent.putExtra("image_uri", imageUri);
+                startActivity(intent);
+            }
         });
     }
     

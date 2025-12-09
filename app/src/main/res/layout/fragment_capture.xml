@@ -59,18 +59,19 @@
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
+            <!-- Menu Button (Top Left) -->
             <ImageButton
-                android:id="@+id/btn_refresh_location"
+                android:id="@+id/btn_menu_toggle"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:layout_alignParentStart="true"
                 android:layout_centerVertical="true"
                 android:layout_marginStart="16dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_refresh"
+                android:src="@drawable/ic_menu_white"
                 android:scaleType="fitCenter"
                 android:padding="8dp"
-                android:contentDescription="Refresh Location" />
+                android:contentDescription="Menu" />
 
             <com.visiboard.app.ui.capture.RadarView
                 android:id="@+id/radar_view"
@@ -148,6 +149,92 @@
         </FrameLayout>
 
     </RelativeLayout>
+
+    <!-- Dropdown Menu (Overlay) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cv_ar_menu"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="70dp"
+        android:layout_marginStart="16dp"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="#CC000000"
+        android:visibility="gone">
+        
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingVertical="8dp">
+
+            <!-- Reset Location Item -->
+            <LinearLayout
+                android:id="@+id/item_reset_location"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:minWidth="180dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:background="?attr/selectableItemBackground">
+                
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_refresh"
+                    app:tint="@android:color/white"/>
+                    
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Reset Location"
+                    android:textColor="@android:color/white"
+                    android:layout_marginStart="12dp"
+                    android:fontFamily="@font/poppins_regular"/>
+            </LinearLayout>
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#33FFFFFF"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="4dp"/>
+
+            <!-- Toggle Visibility Item -->
+            <LinearLayout
+                android:id="@+id/item_toggle_visibility"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:minWidth="180dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:background="?attr/selectableItemBackground">
+                
+                <ImageView
+                    android:id="@+id/iv_menu_eye"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_eye_visible"
+                    app:tint="@android:color/white"/>
+                    
+                <TextView
+                    android:id="@+id/tv_menu_visibility"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Hide Notes"
+                    android:textColor="@android:color/white"
+                    android:layout_marginStart="12dp"
+                    android:fontFamily="@font/poppins_regular"/>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
 
     <!-- Loading Indicator -->
     <ProgressBar
