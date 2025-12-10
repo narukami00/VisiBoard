@@ -33,7 +33,7 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
     @Override
     public NoteViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_nearby_note, parent, false);
+                .inflate(R.layout.item_profile_note, parent, false);
         return new NoteViewHolder(view);
     }
 
@@ -54,18 +54,16 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
     }
 
     class NoteViewHolder extends RecyclerView.ViewHolder {
-        TextView tvUserName, tvDistance, tvTime, tvNoteText, tvLikesCount, tvCommentsCount;
-        CircleImageView ivUserAvatar;
+        TextView tvTime, tvNoteText, tvLikesCount, tvCommentsCount;
+        ImageView ivNoteImage;
 
         NoteViewHolder(@NonNull View itemView) {
             super(itemView);
-            tvUserName = itemView.findViewById(R.id.tv_user_name);
-            tvDistance = itemView.findViewById(R.id.tv_distance);
             tvTime = itemView.findViewById(R.id.tv_time);
             tvNoteText = itemView.findViewById(R.id.tv_note_text);
             tvLikesCount = itemView.findViewById(R.id.tv_likes_count);
             tvCommentsCount = itemView.findViewById(R.id.tv_comments_count);
-            ivUserAvatar = itemView.findViewById(R.id.iv_user_avatar);
+            ivNoteImage = itemView.findViewById(R.id.iv_note_image);
 
             itemView.setOnClickListener(v -> {
                 int position = getAdapterPosition();
@@ -76,11 +74,6 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
         }
 
         void bind(NearbyNote note) {
-            tvUserName.setText(note.getUserName() != null ? note.getUserName() : "Anonymous");
-            
-            // Hide distance for profile notes
-            tvDistance.setVisibility(View.GONE);
-            
             tvTime.setText(getTimeAgo(note.getTimestamp()));
             
             String displayText = note.getSummary() != null && !note.getSummary().isEmpty() 
@@ -90,9 +83,20 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
             tvLikesCount.setText(String.valueOf(note.getLikesCount()));
             tvCommentsCount.setText(String.valueOf(note.getCommentsCount()));
             
-            // Load profile picture asynchronously with caching
-            com.visiboard.app.utils.ImageCache.getInstance()
-                .loadBase64Image(note.getUserProfilePic(), ivUserAvatar, R.drawable.ic_profile);
+            // Handle Image
+            if (note.getImageBase64() != null && !note.getImageBase64().isEmpty()) {
+                ivNoteImage.setVisibility(View.VISIBLE);
+                try {
+                    byte[] decodedString = Base64.decode(note.getImageBase64(), Base64.DEFAULT);
+                    Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                    ivNoteImage.setImageBitmap(decodedByte);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    ivNoteImage.setVisibility(View.GONE);
+                }
+            } else {
+                ivNoteImage.setVisibility(View.GONE);
+            }
         }
 
         private String getTimeAgo(long timestamp) {

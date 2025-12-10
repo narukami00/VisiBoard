@@ -52,7 +52,7 @@ public class UserFollowAdapter extends RecyclerView.Adapter<UserFollowAdapter.Us
     @Override
     public UserViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_user_follow, parent, false);
+                .inflate(R.layout.item_follow_card, parent, false);
         return new UserViewHolder(view);
     }
 

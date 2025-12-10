@@ -1,396 +1,412 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/swipeRefreshLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background_light">
 
-    <!-- View All Notes Button (Top Left) -->
-    <ImageView
-        android:id="@+id/btn_view_all_notes"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_gravity="top|start"
-        android:layout_margin="16dp"
-        android:src="@drawable/ic_map"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="6dp"
-        app:tint="@color/primaryDark"
-        android:elevation="4dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:contentDescription="View All Notes" />
-
-    <!-- Theme Toggle Button -->
-    <ImageView
-        android:id="@+id/theme_toggle_icon"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="60dp"
-        android:src="@drawable/ic_moon"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="6dp"
-        app:tint="@color/primaryDark"
-        android:elevation="4dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:contentDescription="Toggle Theme" />
-
-    <!-- Logout Icon -->
-    <ImageView
-        android:id="@+id/logout_icon"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_gravity="top|end"
-        android:layout_margin="16dp"
-        android:src="@drawable/ic_logout"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="6dp"
-        app:tint="@color/primaryDark"
-        android:elevation="4dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:contentDescription="Logout" />
-
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipeRefreshLayout"
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="56dp">
+        android:fillViewport="true">
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scrollbars="none"
-        android:padding="16dp">
-
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:paddingBottom="24dp">
+            android:paddingBottom="40dp">
 
-        <!-- Profile Section -->
-        <de.hdodenhof.circleimageview.CircleImageView
-            android:id="@+id/profileImage"
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:layout_marginTop="16dp"
-            android:elevation="6dp"
-            android:src="@drawable/ic_profile"
-            android:contentDescription="@string/profile_image"
-            android:layout_gravity="center" />
+            <!-- 1. Header Background -->
+            <View
+                android:id="@+id/header_background"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:background="@drawable/gradient_profile_header"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
 
-        <TextView
-            android:id="@+id/profileName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="User Name"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="@font/poppins_semibold"
-            android:layout_marginTop="12dp"
-            android:textColor="@color/text_primary" />
-
-        <TextView
-            android:id="@+id/profileEmail"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="email@example.com"
-            android:textSize="14sp"
-            android:textColor="@color/text_secondary"
-            android:fontFamily="@font/poppins_regular"
-            android:layout_marginBottom="4dp" />
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
-
+            <!-- Pattern Overlay (Optional, using alpha) -->
             <ImageView
                 android:layout_width="match_parent"
-                android:layout_height="16dp"
-                android:layout_marginEnd="6dp"
-                android:src="@drawable/ic_my_location"
-                android:tint="@color/text_secondary" />
+                android:layout_height="220dp"
+                android:src="@drawable/ic_pattern_circle"
+                android:scaleType="centerCrop"
+                android:alpha="0.1"
+                app:tint="#FFFFFF"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" 
+                tools:ignore="ContentDescription" />
 
-            <TextView
-                android:id="@+id/tv_location"
+            <!-- Top Icons (Map, Theme, Logout) -->
+            <ImageView
+                android:id="@+id/btn_view_all_notes"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_map"
+                android:padding="8dp"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#20FFFFFF"
+                app:tint="#FFFFFF"
+                android:layout_margin="16dp"
+                android:elevation="4dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                android:contentDescription="View Map" />
+
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Location"
-                android:textSize="13sp"
-                android:textColor="@color/text_secondary"
-                android:fontFamily="@font/poppins_regular"
-                android:visibility="gone" />
-
-        </LinearLayout>
-
-        <!-- Followers/Following Section -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginBottom="16dp">
-
-            <!-- Followers -->
-            <LinearLayout
-                android:id="@+id/followers_section"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="8dp">
-
-                <TextView
-                    android:id="@+id/tv_followers_count"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/primary"
-                    android:fontFamily="@font/poppins_semibold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Followers"
-                    android:textSize="13sp"
-                    android:textColor="@color/text_secondary"
-                    android:fontFamily="@font/poppins_regular" />
-
-            </LinearLayout>
-
-            <!-- Divider -->
-            <View
-                android:layout_width="1dp"
-                android:layout_height="40dp"
-                android:background="@color/divider" />
-
-            <!-- Following -->
-            <LinearLayout
-                android:id="@+id/following_section"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="8dp">
-
-                <TextView
-                    android:id="@+id/tv_following_count"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/primary"
-                    android:fontFamily="@font/poppins_semibold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Following"
-                    android:textSize="12sp"
-                    android:maxLines="1"
-                    android:ellipsize="none"
-                    android:textColor="@color/text_secondary"
-                    android:fontFamily="@font/poppins_regular" />
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <!-- Stats Section -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginBottom="24dp"
-            android:weightSum="2">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center">
-
-                <TextView
-                    android:id="@+id/tv_total_notes"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/primary"
-                    android:fontFamily="@font/poppins_semibold"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Total Notes"
-                    android:textSize="13sp"
-                    android:textColor="@color/text_secondary"
-                    android:fontFamily="@font/poppins_regular" />
-            </LinearLayout>
-
-            <!-- Vertical Divider -->
-            <View
-                android:layout_width="1dp"
-                android:layout_height="40dp"
-                android:background="@color/divider" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center">
-
-                <TextView
-                    android:id="@+id/tv_total_likes"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/primary"
-                    android:fontFamily="@font/poppins_semibold"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Total Likes"
-                    android:textSize="13sp"
-                    android:textColor="@color/text_secondary"
-                    android:fontFamily="@font/poppins_regular" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- Milestone Section -->
-        <androidx.cardview.widget.CardView
-            android:id="@+id/milestone_card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:elevation="8dp"
-            android:layout_marginBottom="24dp"
-            app:cardCornerRadius="20dp"
-            app:cardBackgroundColor="@color/card_background">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp"
-                android:gravity="center_horizontal"
-                android:background="@drawable/gradient_milestone">
+                android:orientation="horizontal"
+                android:layout_margin="16dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
                 <ImageView
-                    android:id="@+id/iv_tier_icon"
-                    android:layout_width="70dp"
-                    android:layout_height="70dp"
-                    android:src="@drawable/ic_default_tier"
-                    android:layout_marginBottom="12dp"
-                    android:elevation="4dp" />
+                    android:id="@+id/theme_toggle_icon"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_moon"
+                    android:padding="8dp"
+                    android:background="@drawable/bg_circle_glass"
+                    android:backgroundTint="#20FFFFFF"
+                    app:tint="#FFFFFF"
+                    android:layout_marginEnd="8dp"
+                    android:elevation="4dp"
+                    android:contentDescription="Toggle Theme" />
 
-                <TextView
-                    android:id="@+id/tv_milestone"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="No Tier Yet"
-                    android:textColor="@color/primaryDark"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:fontFamily="@font/poppins_semibold" />
-
-                <ProgressBar
-                    android:id="@+id/progress_milestone"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="12dp"
-                    android:progressTint="@color/primary"
-                    android:progressBackgroundTint="@color/divider"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="10dp"
-                    android:max="100"
-                    android:progress="0" />
-
-                <TextView
-                    android:id="@+id/tv_milestone_progress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0 / 100 until Bronze"
-                    android:textColor="@color/secondary"
-                    android:textSize="14sp"
-                    android:fontFamily="@font/poppins_regular" />
+                <ImageView
+                    android:id="@+id/logout_icon"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_logout"
+                    android:padding="8dp"
+                    android:background="@drawable/bg_circle_glass"
+                    android:backgroundTint="#20FFFFFF"
+                    app:tint="#FFFFFF"
+                    android:elevation="4dp"
+                    android:contentDescription="Logout" />
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
 
-        <!-- Recent Notes Section -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:elevation="8dp"
-            app:cardCornerRadius="20dp"
-            app:cardBackgroundColor="@color/card_background"
-            android:layout_marginBottom="24dp">
+            <!-- 2. Profile Picture (Overlapping) -->
+            <de.hdodenhof.circleimageview.CircleImageView
+                android:id="@+id/profileImage"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:src="@drawable/ic_profile"
+                app:civ_border_width="4dp"
+                app:civ_border_color="@color/card_background"
+                android:elevation="8dp"
+                app:layout_constraintTop_toBottomOf="@id/header_background"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintBottom_toBottomOf="@id/header_background" />
+
+            <!-- 3. User Info -->
+            <TextView
+                android:id="@+id/profileName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="User Name"
+                android:textSize="22sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:fontFamily="@font/poppins_semibold"
+                android:layout_marginTop="12dp"
+                app:layout_constraintTop_toBottomOf="@id/profileImage"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <TextView
+                android:id="@+id/profileEmail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="user@example.com"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:fontFamily="@font/poppins_regular"
+                app:layout_constraintTop_toBottomOf="@id/profileName"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:id="@+id/location_container"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                app:layout_constraintTop_toBottomOf="@id/profileEmail"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_my_location"
+                    app:tint="@color/text_tertiary"
+                    android:layout_marginEnd="4dp" />
 
                 <TextView
+                    android:id="@+id/tv_location"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Recent Notes"
-                    android:textSize="16sp"
-                    android:textColor="@color/primaryDark"
-                    android:textStyle="bold"
-                    android:fontFamily="@font/poppins_semibold"
-                    android:layout_marginBottom="10dp" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rv_recent_notes"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:nestedScrollingEnabled="false"/>
-
-                <TextView
-                    android:id="@+id/tv_no_recent_notes"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="No recent notes yet"
-                    android:textSize="14sp"
-                    android:textColor="@color/secondary"
+                    android:text="Location"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_tertiary"
                     android:fontFamily="@font/poppins_regular"
-                    android:gravity="center"
-                    android:padding="16dp"
-                    android:visibility="gone" />
+                    android:visibility="visible" />
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
 
-        </LinearLayout>
-    </ScrollView>
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            <!-- 4. Stats Row (Followers/Following/Notes) -->
+            <LinearLayout
+                android:id="@+id/stats_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="24dp"
+                android:baselineAligned="false"
+                app:layout_constraintTop_toBottomOf="@id/location_container">
 
-</FrameLayout>
+                <!-- Notes -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/tv_total_notes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Notes"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="30dp"
+                    android:background="@color/divider"
+                    android:layout_gravity="center_vertical" />
+
+                <!-- Followers -->
+                <LinearLayout
+                    android:id="@+id/followers_section"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView
+                        android:id="@+id/tv_followers_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Followers"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+                
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="30dp"
+                    android:background="@color/divider"
+                    android:layout_gravity="center_vertical" />
+
+                <!-- Following -->
+                <LinearLayout
+                    android:id="@+id/following_section"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <TextView
+                        android:id="@+id/tv_following_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Following"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 5. Hero Tier Card -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/milestone_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="6dp"
+                app:cardBackgroundColor="@color/card_background"
+                app:layout_constraintTop_toBottomOf="@id/stats_container">
+
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="20dp">
+                    
+                    <!-- Background Pattern/Gradient could go here -->
+                    
+                    <ImageView
+                        android:id="@+id/iv_tier_icon"
+                        android:layout_width="60dp"
+                        android:layout_height="60dp"
+                        android:src="@drawable/ic_default_tier"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+                        
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_toEndOf="@id/iv_tier_icon"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="16dp"
+                        android:orientation="vertical">
+                        
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Current Rank"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary"
+                            android:fontFamily="@font/poppins_regular" />
+                            
+                        <TextView
+                            android:id="@+id/tv_milestone"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Silver Tier"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/primaryDark"
+                            android:fontFamily="@font/poppins_semibold" />
+                            
+                        <ProgressBar
+                            android:id="@+id/progress_milestone"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="8dp"
+                            android:layout_marginTop="8dp"
+                            android:progressDrawable="@drawable/custom_progress_drawable" 
+                            android:progressTint="@color/primary"
+                            android:max="100"
+                            android:progress="50" />
+                            
+                        <TextView
+                            android:id="@+id/tv_milestone_progress"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="250 / 500 Likes"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_tertiary" />
+                    </LinearLayout>
+                    
+                    <!-- Total Likes floating badge -->
+                    <TextView
+                        android:id="@+id/tv_total_likes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentTop="true"
+                        android:layout_alignParentEnd="true"
+                        android:text="0 Likes"
+                        android:textSize="12sp"
+                        android:textColor="@color/primary"
+                        android:background="@drawable/bg_capsule_light"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingBottom="2dp"
+                        android:visibility="gone"/>
+
+                </RelativeLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 6. Recent Notes Section -->
+            <TextView
+                android:id="@+id/tv_recent_header"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Recent Updates"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:fontFamily="@font/poppins_semibold"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="32dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/milestone_card" />
+
+            <!-- We'll use a horizontal or vertical list here. Let's stick to Vertical for now but styled -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_recent_notes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:clipToPadding="false"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingBottom="24dp"
+                android:nestedScrollingEnabled="false"
+                app:layout_constraintTop_toBottomOf="@id/tv_recent_header" />
+
+            <TextView
+                android:id="@+id/tv_no_recent_notes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No recent activity to show"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:fontFamily="@font/poppins_regular"
+                android:gravity="center"
+                android:padding="32dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/tv_recent_header" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

@@ -56,6 +56,7 @@ public class ProfileFragment extends Fragment {
     private RecyclerView rvRecentNotes;
     private RecentNotesAdapter recentNotesAdapter;
     private SwipeRefreshLayout swipeRefreshLayout;
+    private LinearLayout locationContainer;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -112,6 +113,7 @@ public class ProfileFragment extends Fragment {
         progressMilestone = view.findViewById(R.id.progress_milestone);
         logoutIcon = view.findViewById(R.id.logout_icon);
         swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
+        locationContainer = view.findViewById(R.id.location_container);
 
         swipeRefreshLayout.setOnRefreshListener(this::refreshData);
         swipeRefreshLayout.setColorSchemeResources(R.color.primary);
@@ -225,7 +227,7 @@ public class ProfileFragment extends Fragment {
                         
                         if (!locationText.isEmpty()) {
                             tvLocation.setText(locationText);
-                            tvLocation.setVisibility(View.VISIBLE);
+                            locationContainer.setVisibility(View.VISIBLE);
                             
                             // Save to Firestore
                             String uid = auth.getCurrentUser().getUid();
@@ -440,6 +442,10 @@ public class ProfileFragment extends Fragment {
                                 Long likesCount = doc.getLong("likeCount");
                                 if (likesCount == null) likesCount = doc.getLong("likesCount"); // fallback to old field name
                                 note.setLikesCount(likesCount != null ? likesCount.intValue() : 0);
+                                
+                                // Get Image
+                                String imageBase64 = doc.getString("imageBase64");
+                                note.setImageBase64(imageBase64);
                                 
                                 // Get comments count from subcollection for accuracy
                                 String noteIdForComments = doc.getId();
@@ -802,10 +808,15 @@ public class ProfileFragment extends Fragment {
         
         // Set initial tab state
         if (showFollowing) {
-            followingTab.setBackgroundResource(R.drawable.btn_primary_selector);
-            followingTab.setTextColor(getResources().getColor(R.color.button_text_primary, null));
-            followersTab.setBackgroundResource(R.drawable.btn_secondary_selector);
-            followersTab.setTextColor(getResources().getColor(R.color.button_text_secondary, null));
+            followingTab.setBackgroundResource(R.drawable.bg_button_gradient);
+            followingTab.setTextColor(getResources().getColor(R.color.white, null));
+            followersTab.setBackgroundResource(0);
+            followersTab.setTextColor(getResources().getColor(R.color.text_secondary, null));
+        } else {
+             followersTab.setBackgroundResource(R.drawable.bg_button_gradient);
+             followersTab.setTextColor(getResources().getColor(R.color.white, null));
+             followingTab.setBackgroundResource(0);
+             followingTab.setTextColor(getResources().getColor(R.color.text_secondary, null));
         }
         
         // Load initial list
@@ -813,19 +824,19 @@ public class ProfileFragment extends Fragment {
         
         // Tab switching
         followersTab.setOnClickListener(v -> {
-            followersTab.setBackgroundResource(R.drawable.btn_primary_selector);
-            followersTab.setTextColor(getResources().getColor(R.color.button_text_primary, null));
-            followingTab.setBackgroundResource(R.drawable.btn_secondary_selector);
-            followingTab.setTextColor(getResources().getColor(R.color.button_text_secondary, null));
+            followersTab.setBackgroundResource(R.drawable.bg_button_gradient);
+            followersTab.setTextColor(getResources().getColor(R.color.white, null));
+            followingTab.setBackgroundResource(0);
+            followingTab.setTextColor(getResources().getColor(R.color.text_secondary, null));
             isFollowingList[0] = false;
             loadUsersList(false, adapter, emptyState);
         });
         
         followingTab.setOnClickListener(v -> {
-            followingTab.setBackgroundResource(R.drawable.btn_primary_selector);
-            followingTab.setTextColor(getResources().getColor(R.color.button_text_primary, null));
-            followersTab.setBackgroundResource(R.drawable.btn_secondary_selector);
-            followersTab.setTextColor(getResources().getColor(R.color.button_text_secondary, null));
+            followingTab.setBackgroundResource(R.drawable.bg_button_gradient);
+            followingTab.setTextColor(getResources().getColor(R.color.white, null));
+            followersTab.setBackgroundResource(0);
+            followersTab.setTextColor(getResources().getColor(R.color.text_secondary, null));
             isFollowingList[0] = true;
             loadUsersList(true, adapter, emptyState);
         });
