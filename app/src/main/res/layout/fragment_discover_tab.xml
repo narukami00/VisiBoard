@@ -22,6 +22,11 @@
             android:layout_gravity="center"
             android:visibility="gone"/>
 
+        <include 
+            android:id="@+id/shimmer_view_container"
+            layout="@layout/layout_shimmer_feed"
+            android:visibility="gone"/>
+
     </FrameLayout>
 
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

@@ -40,14 +40,19 @@ public class ImageCache {
         return instance;
     }
     
+    // Backward compatibility overload
     public void loadBase64Image(String base64String, ImageView imageView, int placeholderResId) {
+        loadBase64Image(null, base64String, imageView, placeholderResId);
+    }
+    
+    public void loadBase64Image(String cacheKey, String base64String, ImageView imageView, int placeholderResId) {
         if (base64String == null || base64String.isEmpty()) {
             imageView.setImageResource(placeholderResId);
             return;
         }
         
-        // Generate cache key (hash of base64 string)
-        final String key = String.valueOf(base64String.hashCode());
+        // Use provided key (Note ID) or fallback to hash if null (though caller should provide ID)
+        final String key = cacheKey != null ? cacheKey : String.valueOf(base64String.hashCode());
         
         // Check memory cache
         Bitmap cachedBitmap = memoryCache.get(key);

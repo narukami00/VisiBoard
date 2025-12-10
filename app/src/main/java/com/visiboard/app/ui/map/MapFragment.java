@@ -40,6 +40,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.visiboard.app.R;
 import com.visiboard.app.data.Comment;
+import com.facebook.shimmer.ShimmerFrameLayout;
 
 import java.text.SimpleDateFormat;
 
@@ -344,10 +345,10 @@ public class MapFragment extends Fragment {
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
         android.widget.ImageButton btnEdit = infoWindow.findViewById(R.id.btn_edit_note);
         androidx.cardview.widget.CardView imageContainer = infoWindow.findViewById(R.id.cv_note_image_container);
-        ImageView noteImage = infoWindow.findViewById(R.id.iv_note_image);
-        ProgressBar imageLoading = infoWindow.findViewById(R.id.progress_image);
+    ImageView noteImage = infoWindow.findViewById(R.id.iv_note_image);
+    com.facebook.shimmer.ShimmerFrameLayout shimmer = infoWindow.findViewById(R.id.shimmer_view_container);
 
-        final String[] currentBase64Wrapper = {imageBase64};
+    final String[] currentBase64Wrapper = {imageBase64};
 
         if (imageBase64 != null && !imageBase64.isEmpty()) {
             imageContainer.setVisibility(View.VISIBLE);
@@ -374,30 +375,35 @@ public class MapFragment extends Fragment {
                     
                     params.dimensionRatio = nextRatio;
                     noteImage.setLayoutParams(params);
-                    Toast.makeText(requireContext(), "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
-                });
+                // Toast.makeText(requireContext(), "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
+            });
             } catch (Exception e) {
                 e.printStackTrace();
                 imageContainer.setVisibility(View.GONE);
             }
         } else if (docId != null && useCloudMode) {
-             // Fetch from cloud
-             if (hasImage) {
-                 imageContainer.setVisibility(View.VISIBLE);
-                 imageLoading.setVisibility(View.VISIBLE);
-             } else {
-                 imageContainer.setVisibility(View.GONE);
-                 imageLoading.setVisibility(View.GONE);
+         // Fetch from cloud
+         if (hasImage) {
+             imageContainer.setVisibility(View.VISIBLE);
+             shimmer.setVisibility(View.VISIBLE);
+             shimmer.startShimmer();
+         } else {
+             imageContainer.setVisibility(View.GONE);
+             shimmer.setVisibility(View.GONE);
+             shimmer.stopShimmer();
+         }
+         db.collection("notes").document(docId).get().addOnSuccessListener(doc -> {
+             String base64 = doc.getString("imageBase64");
+             if (base64 != null) {
+                 currentBase64Wrapper[0] = base64;
              }
-             db.collection("notes").document(docId).get().addOnSuccessListener(doc -> {
-                 String base64 = doc.getString("imageBase64");
-                 if (base64 != null) {
-                     currentBase64Wrapper[0] = base64;
-                 }
-                 // Check backward compatibility
-                 if (base64 != null && !base64.isEmpty()) {
-                     noteImage.setVisibility(View.VISIBLE);
-                     try {
+             // Check backward compatibility
+             shimmer.stopShimmer();
+             shimmer.setVisibility(View.GONE);
+             
+             if (base64 != null && !base64.isEmpty()) {
+                 noteImage.setVisibility(View.VISIBLE);
+                 try {
                         byte[] decodedString = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
                         Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
                         noteImage.setImageBitmap(decodedByte);
@@ -420,15 +426,18 @@ public class MapFragment extends Fragment {
                  } else {
                      imageContainer.setVisibility(View.GONE);
                  }
-                 imageLoading.setVisibility(View.GONE);
+                 shimmer.setVisibility(View.GONE);
+                 shimmer.stopShimmer();
              }).addOnFailureListener(e -> {
-                 imageLoading.setVisibility(View.GONE);
+                 shimmer.setVisibility(View.GONE);
+                 shimmer.stopShimmer();
                  imageContainer.setVisibility(View.GONE);
              });
              
         } else {
             imageContainer.setVisibility(View.GONE);
-            imageLoading.setVisibility(View.GONE);
+            shimmer.setVisibility(View.GONE);
+            shimmer.stopShimmer();
         }
 
 

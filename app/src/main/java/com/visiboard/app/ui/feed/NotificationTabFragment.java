@@ -55,6 +55,7 @@ public class NotificationTabFragment extends Fragment {
     
     public interface NotificationActionListener {
         void onNotificationClick(Notification notification);
+        void onReplyClick(Notification notification);
         void onUnreadCountChanged(int count);
     }
     
@@ -96,9 +97,16 @@ public class NotificationTabFragment extends Fragment {
     
     private void setupRecyclerView() {
         rvNotifications.setLayoutManager(new LinearLayoutManager(getContext()));
-        notificationAdapter = new NotificationAdapter(notification -> {
-            // Mark as read or handle click
-            if (actionListener != null) actionListener.onNotificationClick(notification);
+        notificationAdapter = new NotificationAdapter(new NotificationAdapter.OnNotificationClickListener() {
+            @Override
+            public void onNotificationClick(Notification notification) {
+                if (actionListener != null) actionListener.onNotificationClick(notification);
+            }
+
+            @Override
+            public void onReplyClick(Notification notification) {
+                if (actionListener != null) actionListener.onReplyClick(notification);
+            }
         });
         rvNotifications.setAdapter(notificationAdapter);
         setupSwipeToDelete();
@@ -191,7 +199,8 @@ public class NotificationTabFragment extends Fragment {
     }
 
     private void setupSwipeToDelete() {
-        ItemTouchHelper.SimpleCallback callback = new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
+        // Only allow swiping to the LEFT (end to start)
+        ItemTouchHelper.SimpleCallback callback = new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
             @Override
             public boolean onMove(@NonNull RecyclerView r, @NonNull RecyclerView.ViewHolder v, @NonNull RecyclerView.ViewHolder t) {
                 return false;
@@ -215,17 +224,16 @@ public class NotificationTabFragment extends Fragment {
                         }).show();
             }
             
-            // ... Copy draw logic or simplify it ...
-             @Override
+            @Override
             public void onChildDraw(@NonNull Canvas c, @NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, float dX, float dY, int actionState, boolean isCurrentlyActive) {
                 if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
                      View itemView = viewHolder.itemView;
                     Paint p = new Paint();
                     p.setColor(Color.parseColor("#EF5350")); // Red
-                     if (dX < 0) { // Left
+                    
+                     if (dX < 0) { // Left swipe
+                         // Draw red background from right edge to swipe position
                          c.drawRect((float) itemView.getRight() + dX, (float) itemView.getTop(), (float) itemView.getRight(), (float) itemView.getBottom(), p);
-                     } else if (dX > 0) { // Right
-                         c.drawRect((float) itemView.getLeft(), (float) itemView.getTop(), (float) itemView.getLeft() + dX, (float) itemView.getBottom(), p);
                      }
                 }
                 super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);

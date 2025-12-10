@@ -22,6 +22,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
 
     public interface OnNotificationClickListener {
         void onNotificationClick(Notification notification);
+        void onReplyClick(Notification notification);
     }
 
     public NotificationAdapter(OnNotificationClickListener listener) {
@@ -51,7 +52,7 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         this.notifications = notifications;
         notifyDataSetChanged();
     }
-
+    
     public Notification getItem(int position) {
         return notifications.get(position);
     }
@@ -69,6 +70,8 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
     class NotificationViewHolder extends RecyclerView.ViewHolder {
         TextView tvNotificationText, tvNotificationTime;
         ImageView ivUserAvatar, ivNotificationIcon;
+        View viewUnreadIndicator;
+        com.google.android.material.button.MaterialButton btnReply;
 
         NotificationViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -76,6 +79,8 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             tvNotificationTime = itemView.findViewById(R.id.tv_notification_time);
             ivUserAvatar = itemView.findViewById(R.id.iv_user_avatar);
             ivNotificationIcon = itemView.findViewById(R.id.iv_notification_icon);
+            viewUnreadIndicator = itemView.findViewById(R.id.view_unread_indicator);
+            btnReply = itemView.findViewById(R.id.btn_reply);
 
             itemView.setOnClickListener(v -> {
                 int position = getAdapterPosition();
@@ -83,6 +88,15 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
                     listener.onNotificationClick(notifications.get(position));
                 }
             });
+            
+            if (btnReply != null) {
+                btnReply.setOnClickListener(v -> {
+                    int position = getAdapterPosition();
+                    if (position != RecyclerView.NO_POSITION && listener != null) {
+                        listener.onReplyClick(notifications.get(position));
+                    }
+                });
+            }
         }
 
         void bind(Notification notification) {
@@ -111,6 +125,19 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             tvNotificationText.setText(text);
             tvNotificationTime.setText(getTimeAgo(notification.getTimestamp()));
             ivNotificationIcon.setImageResource(iconRes);
+            
+            if (viewUnreadIndicator != null) {
+                viewUnreadIndicator.setVisibility(notification.isRead() ? View.INVISIBLE : View.VISIBLE);
+            }
+            
+            if (btnReply != null) {
+                // Show reply button only for messages
+                if ("message".equals(notification.getType())) {
+                    btnReply.setVisibility(View.VISIBLE);
+                } else {
+                    btnReply.setVisibility(View.GONE);
+                }
+            }
             
             // Load profile picture asynchronously with caching
             com.visiboard.app.utils.ImageCache.getInstance()

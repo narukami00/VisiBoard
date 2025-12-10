@@ -175,6 +175,17 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
     }
 
     @Override
+    public void onReplyClick(Notification notification) {
+        if (notification.getFromUserId() != null && !notification.getFromUserId().equals("anonymous")) {
+            UserInfo recipient = new UserInfo();
+            recipient.setUserId(notification.getFromUserId());
+            recipient.setName(notification.getFromUserName());
+            recipient.setProfilePic(notification.getFromUserProfilePic());
+            showSendMessageDialog(recipient);
+        }
+    }
+
+    @Override
     public void onUnreadCountChanged(int count) {
         if (tvNotificationBadge != null) {
             if (count > 0) {
@@ -208,7 +219,7 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         if ("follow".equals(type)) {
             showUserInfoDialog(notification.getFromUserId());
         } else if ("message".equals(type)) {
-            showMessageDialog(notification.getMessageId());
+            showMessageDialog(notification);
         } else {
              // Default to note navigation
              String targetId = notification.getNoteId();
@@ -234,63 +245,55 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         }
     }
     
-
-    
-    private void showMessageDialog(String messageId) {
-        db.collection("messages").document(messageId).get()
-            .addOnSuccessListener(doc -> {
-                if (doc.exists()) {
-                    View dialogView = LayoutInflater.from(requireContext())
-                        .inflate(R.layout.dialog_view_message, null);
-                    
-                    de.hdodenhof.circleimageview.CircleImageView ivSender = dialogView.findViewById(R.id.iv_sender_avatar);
-                    TextView tvSender = dialogView.findViewById(R.id.tv_sender_name);
-                    TextView tvTime = dialogView.findViewById(R.id.tv_message_time);
-                    TextView tvMessage = dialogView.findViewById(R.id.tv_message_text);
-                    Button btnClose = dialogView.findViewById(R.id.btn_close);
-                    
-                    String senderName = doc.getString("fromUserName");
-                    String senderPic = doc.getString("fromUserProfilePic");
-                    Long timestamp = doc.getLong("timestamp");
-                    String messageText = doc.getString("messageText");
-                    
-                    tvSender.setText(senderName != null ? senderName : "Anonymous");
-                    tvMessage.setText(messageText);
-                    tvTime.setText(getTimeAgo(timestamp != null ? timestamp : 0));
-                    
-                    // Load profile picture
-                    if (senderPic != null && !senderPic.isEmpty()) {
-                        try {
-                            byte[] bytes = android.util.Base64.decode(senderPic, android.util.Base64.DEFAULT);
-                            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                            ivSender.setImageBitmap(bitmap);
-                        } catch (Exception e) {
-                            ivSender.setImageResource(R.drawable.ic_profile);
-                        }
-                    } else {
-                        ivSender.setImageResource(R.drawable.ic_profile);
-                    }
-                    
-                    AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                        .setView(dialogView)
-                        .create();
-                    
-                    if (dialog.getWindow() != null) {
-                        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-                    }
-                    
-                    btnClose.setOnClickListener(v -> dialog.dismiss());
-                    
-                    dialog.show();
-                    
-                    // Mark as read
-                    doc.getReference().update("read", true);
-                }
-            })
-            .addOnFailureListener(e -> {
-                android.widget.Toast.makeText(requireContext(), 
-                    "Failed to load message", android.widget.Toast.LENGTH_SHORT).show();
-            });
+    private void showMessageDialog(Notification notification) {
+        View dialogView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.dialog_view_message, null);
+        
+        de.hdodenhof.circleimageview.CircleImageView ivSender = dialogView.findViewById(R.id.iv_sender_avatar);
+        TextView tvSender = dialogView.findViewById(R.id.tv_sender_name);
+        TextView tvTime = dialogView.findViewById(R.id.tv_message_time);
+        TextView tvMessage = dialogView.findViewById(R.id.tv_message_text);
+        Button btnClose = dialogView.findViewById(R.id.btn_close);
+        
+        // Use data from Notification object (No Fetching!)
+        String senderName = notification.getFromUserName();
+        String senderPic = notification.getFromUserProfilePic();
+        Long timestamp = notification.getTimestamp();
+        String messageText = notification.getMessageText();
+        
+        tvSender.setText(senderName != null ? senderName : "Anonymous");
+        tvMessage.setText(messageText != null ? messageText : "Message not available");
+        tvTime.setText(getTimeAgo(timestamp != null ? timestamp : 0));
+        
+        // Load profile picture
+        if (senderPic != null && !senderPic.isEmpty()) {
+            try {
+                // Use ImageCache if possible, or manual decode
+                com.visiboard.app.utils.ImageCache.getInstance()
+                    .loadBase64Image(senderPic, ivSender, R.drawable.ic_profile);
+            } catch (Exception e) {
+                ivSender.setImageResource(R.drawable.ic_profile);
+            }
+        } else {
+            ivSender.setImageResource(R.drawable.ic_profile);
+        }
+        
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        
+        dialog.show();
+        
+        // Mark message as read in background
+        if (notification.getMessageId() != null) {
+            db.collection("messages").document(notification.getMessageId()).update("read", true);
+        }
     }
     
     private String getTimeAgo(long timestamp) {
@@ -406,7 +409,11 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         RecyclerView rvDialog = dialogView.findViewById(R.id.rv_following_dialog);
         android.widget.ProgressBar pbLoading = dialogView.findViewById(R.id.pb_loading_following);
         TextView tvNoData = dialogView.findViewById(R.id.tv_no_following_dialog);
-        Button btnClose = dialogView.findViewById(R.id.btn_close_dialog);
+        ImageButton btnCloseHeader = dialogView.findViewById(R.id.btn_close_header);
+        TextInputEditText etSearch = dialogView.findViewById(R.id.et_search_following);
+        
+        // List to hold all users for filtering
+        final List<UserInfo> allFollowingList = new ArrayList<>();
         
         rvDialog.setLayoutManager(new LinearLayoutManager(getContext()));
         
@@ -425,19 +432,42 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                 .setView(dialogView)
                 .create();
         
+
+        
+        btnCloseHeader.setOnClickListener(v -> dialog.dismiss());
+        
+        // Search Filter
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String query = s.toString().toLowerCase().trim();
+                if (allFollowingList.isEmpty()) return;
+                
+                List<UserInfo> filtered = new ArrayList<>();
+                for (UserInfo user : allFollowingList) {
+                    if (user.getName() != null && user.getName().toLowerCase().contains(query)) {
+                        filtered.add(user);
+                    }
+                }
+                dialogAdapter.setUsers(filtered);
+            }
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+        
+        dialog.show();
+        
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
             dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
         
-        btnClose.setOnClickListener(v -> dialog.dismiss());
-        
-        dialog.show();
-        
-        loadFollowingUsers(dialogAdapter, pbLoading, tvNoData, rvDialog);
+        loadFollowingUsers(dialogAdapter, pbLoading, tvNoData, rvDialog, allFollowingList);
     }
 
-    private void loadFollowingUsers(FollowingAdapter adapter, View pbLoading, View tvNoData, View rvContent) {
+    private void loadFollowingUsers(FollowingAdapter adapter, View pbLoading, View tvNoData, View rvContent, List<UserInfo> allFollowingList) {
         pbLoading.setVisibility(View.VISIBLE);
         tvNoData.setVisibility(View.GONE);
         rvContent.setVisibility(View.GONE);
@@ -448,7 +478,6 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             .collection("following")
             .get()
             .addOnSuccessListener(querySnapshot -> {
-                List<UserInfo> following = new ArrayList<>();
                 int totalFollowing = querySnapshot.size();
                 
                 if (totalFollowing == 0) {
@@ -456,6 +485,13 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                     tvNoData.setVisibility(View.VISIBLE);
                     return;
                 }
+                
+                // Clear list just in case
+                allFollowingList.clear();
+                
+                // Show list container immediately for progressive loading
+                pbLoading.setVisibility(View.GONE);
+                rvContent.setVisibility(View.VISIBLE);
                 
                 for (DocumentSnapshot doc : querySnapshot) {
                     String followedId = doc.getId();
@@ -467,22 +503,22 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                                 user.setName(userDoc.getString("name"));
                                 user.setProfilePic(userDoc.getString("profilePic"));
                                 user.setLastKnownLocation(userDoc.getString("lastKnownLocation"));
-                                following.add(user);
                                 
-                                if (following.size() == totalFollowing) {
-                                    pbLoading.setVisibility(View.GONE);
-                                    rvContent.setVisibility(View.VISIBLE);
-                                    adapter.setUsers(following);
-                                }
+                                allFollowingList.add(user);
+                                
+                                // Sort alphabetically
+                                java.util.Collections.sort(allFollowingList, (u1, u2) -> {
+                                    String n1 = u1.getName() != null ? u1.getName() : "";
+                                    String n2 = u2.getName() != null ? u2.getName() : "";
+                                    return n1.compareToIgnoreCase(n2);
+                                });
+                                
+                                // Update adapter incrementally
+                                adapter.setUsers(new ArrayList<>(allFollowingList));
                             }
                         })
                         .addOnFailureListener(e -> {
-                            // handle error
-                            if (following.size() >= totalFollowing - 1) {
-                                pbLoading.setVisibility(View.GONE);
-                                rvContent.setVisibility(View.VISIBLE);
-                                adapter.setUsers(following);
-                            }
+                            // handle error silently for individual user
                         });
                 }
             })

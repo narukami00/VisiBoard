@@ -169,8 +169,8 @@ public class CreateNoteActivity extends AppCompatActivity {
                 else if ("9:16".equals(currentRatio)) nextRatio = "1:1";
                 
                 params.dimensionRatio = nextRatio;
-                ivPreview.setLayoutParams(params);
-                Toast.makeText(this, "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
+            ivPreview.setLayoutParams(params);
+            // Toast.makeText(this, "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
             }
         });
 

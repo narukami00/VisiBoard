@@ -64,7 +64,7 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Foll
     class FollowingViewHolder extends RecyclerView.ViewHolder {
         TextView tvUserName, tvUserLocation;
         CircleImageView ivUserAvatar;
-        ImageView btnSendMessage;
+        com.google.android.material.button.MaterialButton btnSendMessage;
 
         FollowingViewHolder(@NonNull View itemView) {
             super(itemView);
