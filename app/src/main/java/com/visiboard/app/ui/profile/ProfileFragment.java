@@ -25,6 +25,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -38,6 +39,7 @@ import com.visiboard.app.R;
 import com.visiboard.app.data.NearbyNote;
 import com.visiboard.app.ui.auth.LoginActivity;
 import com.visiboard.app.utils.ThemeManager;
+import com.visiboard.app.utils.ImageCache;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -60,22 +62,8 @@ public class ProfileFragment extends Fragment {
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
+    private ProfileViewModel viewModel;
     
-    // Caching to improve performance
-    private static String cachedName;
-    private static String cachedProfilePic;
-    private static Long cachedFollowersCount;
-    private static Long cachedFollowingCount;
-    
-    // Extended caching
-    private static Integer cachedTotalNotes;
-    private static Integer cachedTotalLikes;
-    private static List<NearbyNote> cachedRecentNotes;
-    private static String cachedTier;
-    private static Integer cachedTierProgress;
-    private static Integer cachedTierMax;
-    private static Integer cachedTierIconRes;
-
     private final int PICK_IMAGE = 101;
     private String base64Image = "";
 
@@ -120,22 +108,30 @@ public class ProfileFragment extends Fragment {
 
         auth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
+        viewModel = new ViewModelProvider(this).get(ProfileViewModel.class);
         
         // Setup RecyclerView
         rvRecentNotes.setLayoutManager(new LinearLayoutManager(getContext()));
+        rvRecentNotes.setHasFixedSize(true);
         recentNotesAdapter = new RecentNotesAdapter(note -> {
             navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
         });
         rvRecentNotes.setAdapter(recentNotesAdapter);
 
-        loadUserData();
-        loadUserStats();
-        updateUserLocation();
+        setupViewModelObservers();
+        
+        // Only load data if needed
+        if (viewModel.shouldRefreshData()) {
+            loadUserData();
+            loadUserStats();
+            updateUserLocation();
+        }
 
         profileImage.setOnClickListener(v -> pickImage());
         logoutIcon.setOnClickListener(v -> showLogoutConfirmation());
         view.findViewById(R.id.btn_view_all_notes).setOnClickListener(v -> showAllNotesDialog());
         nameText.setOnClickListener(v -> showEditNameDialog());
+        view.findViewById(R.id.btn_about).setOnClickListener(v -> showAboutDialog());
         
         // Theme toggle
         ImageView themeToggle = view.findViewById(R.id.theme_toggle_icon);
@@ -197,6 +193,72 @@ public class ProfileFragment extends Fragment {
 
         return view;
     }
+    
+    private void setupViewModelObservers() {
+        viewModel.getUserName().observe(getViewLifecycleOwner(), name -> {
+            if (name != null) nameText.setText(name);
+        });
+        
+        viewModel.getUserEmail().observe(getViewLifecycleOwner(), email -> {
+            if (email != null) emailText.setText(email);
+        });
+        
+        viewModel.getProfilePicBase64().observe(getViewLifecycleOwner(), base64 -> {
+            if (base64 != null && !base64.isEmpty()) {
+                ImageCache.getInstance().loadBase64Image("profile_pic", base64, profileImage, R.drawable.ic_profile);
+            }
+        });
+        
+        viewModel.getLocation().observe(getViewLifecycleOwner(), location -> {
+            if (location != null && !location.isEmpty()) {
+                tvLocation.setText(location);
+                locationContainer.setVisibility(View.VISIBLE);
+            }
+        });
+        
+        viewModel.getTotalNotes().observe(getViewLifecycleOwner(), total -> {
+            if (total != null) tvTotalNotes.setText(String.valueOf(total));
+        });
+        
+        viewModel.getTotalLikes().observe(getViewLifecycleOwner(), total -> {
+            if (total != null) tvTotalLikes.setText(String.valueOf(total));
+        });
+        
+        viewModel.getFollowersCount().observe(getViewLifecycleOwner(), count -> {
+            if (count != null) tvFollowersCount.setText(String.valueOf(count));
+        });
+        
+        viewModel.getFollowingCount().observe(getViewLifecycleOwner(), count -> {
+            if (count != null) tvFollowingCount.setText(String.valueOf(count));
+        });
+        
+        viewModel.getCurrentTier().observe(getViewLifecycleOwner(), tier -> {
+            if (tier != null) tvMilestone.setText(tier);
+        });
+        
+        viewModel.getTierProgress().observe(getViewLifecycleOwner(), progress -> {
+            if (progress != null) progressMilestone.setProgress(progress);
+        });
+        
+        viewModel.getTierMax().observe(getViewLifecycleOwner(), max -> {
+            if (max != null) progressMilestone.setMax(max);
+        });
+        
+        viewModel.getTierIconRes().observe(getViewLifecycleOwner(), res -> {
+            if (res != null) ivTierIcon.setImageResource(res);
+        });
+        
+        viewModel.getRecentNotes().observe(getViewLifecycleOwner(), notes -> {
+            if (notes != null && !notes.isEmpty()) {
+                rvRecentNotes.setVisibility(View.VISIBLE);
+                tvNoRecentNotes.setVisibility(View.GONE);
+                recentNotesAdapter.setNotes(notes);
+            } else {
+                rvRecentNotes.setVisibility(View.GONE);
+                tvNoRecentNotes.setVisibility(View.VISIBLE);
+            }
+        });
+    }
 
     private void updateUserLocation() {
         if (ActivityCompat.checkSelfPermission(requireContext(), 
@@ -248,52 +310,38 @@ public class ProfileFragment extends Fragment {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
-        emailText.setText(user.getEmail());
-        
-        // Load from cache first for instant display
-        if (cachedName != null) {
-            nameText.setText(cachedName);
-        }
-        if (cachedProfilePic != null && !cachedProfilePic.isEmpty()) {
-            try {
-                byte[] bytes = Base64.decode(cachedProfilePic, Base64.DEFAULT);
-                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                profileImage.setImageBitmap(bitmap);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-        if (cachedFollowersCount != null) {
-            tvFollowersCount.setText(String.valueOf(cachedFollowersCount));
-        }
-        if (cachedFollowingCount != null) {
-            tvFollowingCount.setText(String.valueOf(cachedFollowingCount));
-        }
+        viewModel.setUserEmail(user.getEmail());
 
-        // Then load fresh data from Firestore with caching enabled
         String uid = user.getUid();
+        
+        // Try cache first for instant display
         db.collection("users").document(uid)
                 .get(com.google.firebase.firestore.Source.CACHE)
                 .addOnSuccessListener(cachedDoc -> {
-                    if (cachedDoc.exists()) {
-                        updateUserDataUI(cachedDoc);
+                    if (cachedDoc.exists() && isAdded()) {
+                        updateUserDataFromDoc(cachedDoc);
                     }
-                    // Then get fresh data
+                    // Then get fresh data in background
                     db.collection("users").document(uid).get()
-                            .addOnSuccessListener(this::updateUserDataUI)
+                            .addOnSuccessListener(doc -> {
+                                if (isAdded()) updateUserDataFromDoc(doc);
+                            })
                             .addOnFailureListener(e -> 
                                     Log.e("ProfileFragment", "Error loading user data: " + e.getMessage()));
                 })
                 .addOnFailureListener(e -> {
                     // Cache miss, load from server
                     db.collection("users").document(uid).get()
-                            .addOnSuccessListener(this::updateUserDataUI)
+                            .addOnSuccessListener(doc -> {
+                                if (isAdded()) updateUserDataFromDoc(doc);
+                            })
                             .addOnFailureListener(err -> 
                                     Log.e("ProfileFragment", "Error loading user data: " + err.getMessage()));
                 });
     }
 
     private void refreshData() {
+        viewModel.invalidateCache();
         loadUserData();
         loadUserStats();
     }
@@ -304,45 +352,23 @@ public class ProfileFragment extends Fragment {
         }
     }
     
-    private void updateUserDataUI(com.google.firebase.firestore.DocumentSnapshot doc) {
-        if (!isAdded()) return;
-        if (doc.exists()) {
-            String name = doc.getString("name");
-            if (name != null) {
-                nameText.setText(name);
-                cachedName = name;
-            }
+    private void updateUserDataFromDoc(com.google.firebase.firestore.DocumentSnapshot doc) {
+        if (!isAdded() || !doc.exists()) return;
+        
+        String name = doc.getString("name");
+        if (name != null) viewModel.setUserName(name);
 
-            String location = doc.getString("lastKnownLocation");
-            if (location != null && !location.isEmpty()) {
-                tvLocation.setText(location);
-                tvLocation.setVisibility(View.VISIBLE);
-            }
+        String location = doc.getString("lastKnownLocation");
+        if (location != null) viewModel.setLocation(location);
 
-            // Load followers and following counts
-            Long followersCount = doc.getLong("followersCount");
-            Long followingCount = doc.getLong("followingCount");
-            if (followersCount != null) {
-                tvFollowersCount.setText(String.valueOf(followersCount));
-                cachedFollowersCount = followersCount;
-            }
-            if (followingCount != null) {
-                tvFollowingCount.setText(String.valueOf(followingCount));
-                cachedFollowingCount = followingCount;
-            }
+        Long followersCount = doc.getLong("followersCount");
+        if (followersCount != null) viewModel.setFollowersCount(followersCount);
+        
+        Long followingCount = doc.getLong("followingCount");
+        if (followingCount != null) viewModel.setFollowingCount(followingCount);
 
-            String pic = doc.getString("profilePic");
-            if (pic != null && !pic.isEmpty()) {
-                try {
-                    byte[] bytes = Base64.decode(pic, Base64.DEFAULT);
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                    profileImage.setImageBitmap(bitmap);
-                    cachedProfilePic = pic;
-                } catch (IllegalArgumentException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
+        String pic = doc.getString("profilePic");
+        if (pic != null && !pic.isEmpty()) viewModel.setProfilePicBase64(pic);
     }
 
     private void loadUserStats() {
@@ -350,20 +376,6 @@ public class ProfileFragment extends Fragment {
         if (user == null) {
             swipeRefreshLayout.setRefreshing(false);
             return;
-        }
-
-        // Load from cache first
-        if (cachedTotalNotes != null) tvTotalNotes.setText(String.valueOf(cachedTotalNotes));
-        if (cachedTotalLikes != null) tvTotalLikes.setText(String.valueOf(cachedTotalLikes));
-        if (cachedTier != null) tvMilestone.setText(cachedTier);
-        if (cachedTierProgress != null) progressMilestone.setProgress(cachedTierProgress);
-        if (cachedTierMax != null) progressMilestone.setMax(cachedTierMax);
-        if (cachedTierIconRes != null) ivTierIcon.setImageResource(cachedTierIconRes);
-        
-        if (cachedRecentNotes != null && !cachedRecentNotes.isEmpty()) {
-            rvRecentNotes.setVisibility(View.VISIBLE);
-            tvNoRecentNotes.setVisibility(View.GONE);
-            recentNotesAdapter.setNotes(cachedRecentNotes);
         }
 
         String uid = user.getUid();
@@ -386,8 +398,7 @@ public class ProfileFragment extends Fragment {
                         }
                         
                         int totalNotes = querySnapshot.size();
-                        tvTotalNotes.setText(String.valueOf(totalNotes));
-                        cachedTotalNotes = totalNotes;
+                        viewModel.setTotalNotes(totalNotes);
 
                         // Calculate total likes across all notes
                         int totalLikes = 0;
@@ -440,126 +451,91 @@ public class ProfileFragment extends Fragment {
                                 
                                 // Get likes count - check both field names
                                 Long likesCount = doc.getLong("likeCount");
-                                if (likesCount == null) likesCount = doc.getLong("likesCount"); // fallback to old field name
+                                if (likesCount == null) likesCount = doc.getLong("likesCount");
                                 note.setLikesCount(likesCount != null ? likesCount.intValue() : 0);
                                 
                                 // Get Image
                                 String imageBase64 = doc.getString("imageBase64");
                                 note.setImageBase64(imageBase64);
                                 
-                                // Get comments count from subcollection for accuracy
-                                String noteIdForComments = doc.getId();
-                                db.collection("notes").document(noteIdForComments)
-                                    .collection("comments").get()
-                                    .addOnSuccessListener(comments -> {
-                                        if (!isAdded()) return;
-                                        note.setCommentsCount(comments.size());
-                                        recentNotesAdapter.notifyDataSetChanged();
-                                    })
-                                    .addOnFailureListener(e -> {
-                                        // Fallback to stored count
-                                        Long commentsCount = doc.getLong("commentsCount");
-                                        note.setCommentsCount(commentsCount != null ? commentsCount.intValue() : 0);
-                                    });
-                                
                                 recentNotes.add(note);
                             }
                             
-                            // Calculate total likes
-                            for (com.google.firebase.firestore.DocumentSnapshot doc : docs) {
-                                Long likeCount = doc.getLong("likeCount");
-                                if (likeCount == null) likeCount = doc.getLong("likesCount"); // fallback to old field name
-                                if (likeCount != null) {
-                                    totalLikes += likeCount.intValue();
-                                }
-                            }
-                            
-                            // Show recent notes
-                            if (!recentNotes.isEmpty()) {
-                                rvRecentNotes.setVisibility(View.VISIBLE);
-                                tvNoRecentNotes.setVisibility(View.GONE);
-                                recentNotesAdapter.setNotes(recentNotes);
-                                cachedRecentNotes = new ArrayList<>(recentNotes);
-                            } else {
-                                rvRecentNotes.setVisibility(View.GONE);
-                                tvNoRecentNotes.setVisibility(View.VISIBLE);
-                                cachedRecentNotes = new ArrayList<>();
-                            }
-                        } else {
-                            rvRecentNotes.setVisibility(View.GONE);
-                            tvNoRecentNotes.setVisibility(View.VISIBLE);
-                            cachedRecentNotes = new ArrayList<>();
+                            // Calculate total likes - Optimized: Read from user profile instead of summing manually
+                            // totalLikes is now fetched from user doc
                         }
                         
-                        tvTotalLikes.setText(String.valueOf(totalLikes));
-                        cachedTotalLikes = totalLikes;
+                        // Use stored totalLikes from User Document
+                        Long storedLikes = currentUserDoc.getLong("totalLikes");
+                        if (storedLikes != null) {
+                            totalLikes = storedLikes.intValue();
+                        } else {
+                            // Only sum manually if field is missing (fallback)
+                            if (totalLikes == 0 && !querySnapshot.isEmpty()) {
+                                for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                                    Long likeCount = doc.getLong("likeCount");
+                                    if (likeCount == null) likeCount = doc.getLong("likesCount");
+                                    if (likeCount != null) {
+                                        totalLikes += likeCount.intValue();
+                                    }
+                                }
+                            }
+                        }
+                        
+                        viewModel.setTotalLikes(totalLikes);
+                        viewModel.setRecentNotes(recentNotes);
 
-                        // Determine tier and progress (based on likes now for better gamification)
+                        // Determine tier and progress
                         int tierIndex = -1;
                         for (int i = 0; i < milestones.length; i++) {
                             if (totalLikes >= milestones[i]) tierIndex = i;
                         }
 
                         String currentTier;
+                        String tierText;
+                        int iconRes;
+                        int maxProgress;
+                        int currentProgress;
+                        String progressText;
 
                         if (tierIndex == -1) {
                             currentTier = "None";
-                            String text = "No Tier Yet";
-                            tvMilestone.setText(text);
-                            cachedTier = text;
-                            
-                            ivTierIcon.setImageResource(R.drawable.ic_default_tier);
-                            cachedTierIconRes = R.drawable.ic_default_tier;
-                            
-                            progressMilestone.setMax(milestones[0]);
-                            cachedTierMax = milestones[0];
-                            
-                            progressMilestone.setProgress(totalLikes);
-                            cachedTierProgress = totalLikes;
-                            
-                            tvMilestoneProgress.setText(totalLikes + " / " + milestones[0] + " likes to Bronze");
+                            tierText = "No Tier Yet";
+                            iconRes = R.drawable.ic_default_tier;
+                            maxProgress = milestones[0];
+                            currentProgress = totalLikes;
+                            progressText = totalLikes + " / " + milestones[0] + " likes to Bronze";
                         } else if (tierIndex < milestones.length - 1) {
                             currentTier = milestoneTiers[tierIndex];
-                            String text = "Current Tier: " + currentTier;
-                            tvMilestone.setText(text);
-                            cachedTier = text;
-                            
-                            ivTierIcon.setImageResource(milestoneIcons[tierIndex]);
-                            cachedTierIconRes = milestoneIcons[tierIndex];
-                            
+                            tierText = "Current Tier: " + currentTier;
+                            iconRes = milestoneIcons[tierIndex];
                             int nextGoal = milestones[tierIndex + 1];
-                            progressMilestone.setMax(nextGoal);
-                            cachedTierMax = nextGoal;
-                            
-                            progressMilestone.setProgress(totalLikes);
-                            cachedTierProgress = totalLikes;
-                            
-                            tvMilestoneProgress.setText(totalLikes + " / " + nextGoal + " likes to " + milestoneTiers[tierIndex + 1]);
+                            maxProgress = nextGoal;
+                            currentProgress = totalLikes;
+                            progressText = totalLikes + " / " + nextGoal + " likes to " + milestoneTiers[tierIndex + 1];
                         } else {
                             currentTier = "Platinum";
-                            String text = "Max Tier: Platinum";
-                            tvMilestone.setText(text);
-                            cachedTier = text;
-                            
-                            ivTierIcon.setImageResource(milestoneIcons[milestoneIcons.length - 1]);
-                            cachedTierIconRes = milestoneIcons[milestoneIcons.length - 1];
-                            
-                            progressMilestone.setMax(milestones[milestones.length - 1]);
-                            cachedTierMax = milestones[milestones.length - 1];
-                            
-                            progressMilestone.setProgress(milestones[milestones.length - 1]);
-                            cachedTierProgress = milestones[milestones.length - 1];
-                            
-                            tvMilestoneProgress.setText("Maxed Out");
+                            tierText = "Max Tier: Platinum";
+                            iconRes = milestoneIcons[milestoneIcons.length - 1];
+                            maxProgress = milestones[milestones.length - 1];
+                            currentProgress = milestones[milestones.length - 1];
+                            progressText = "Maxed Out";
                         }
                         
+                        viewModel.setCurrentTier(tierText);
+                        viewModel.setTierIconRes(iconRes);
+                        viewModel.setTierMax(maxProgress);
+                        viewModel.setTierProgress(currentProgress);
+                        tvMilestoneProgress.setText(progressText);
+                        
+                        viewModel.setDataLoaded(true);
                         swipeRefreshLayout.setRefreshing(false);
 
-                        // 🔹 UPDATE TIER IN DATABASE
+                        // Update tier in database in background
                         db.collection("users").document(uid)
                                 .update("currentTier", currentTier)
                                 .addOnFailureListener(e ->
-                                        safeToast("Tier update failed: " + e.getMessage())
+                                        Log.e("ProfileFragment", "Tier update failed: " + e.getMessage())
                                 );
                     })
                     .addOnFailureListener(e -> {
@@ -608,7 +584,10 @@ public class ProfileFragment extends Fragment {
 
         String uid = user.getUid();
         db.collection("users").document(uid).update("profilePic", base64Image)
-                .addOnSuccessListener(unused -> safeToast("Profile picture updated"))
+                .addOnSuccessListener(unused -> {
+                    viewModel.setProfilePicBase64(base64Image);
+                    safeToast("Profile picture updated");
+                })
                 .addOnFailureListener(e -> safeToast("Failed to update: " + e.getMessage()));
     }
 
@@ -632,10 +611,44 @@ public class ProfileFragment extends Fragment {
                     }
                 })
                 .setNegativeButton("Cancel", null)
-                .create();
-
-        dialog.show();
+                .show();
     }
+    
+    private void showAboutDialog() {
+        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_about, null);
+        TextView tvThankYou = dialogView.findViewById(R.id.tv_thank_you);
+        com.google.android.material.button.MaterialButton btnGithub = dialogView.findViewById(R.id.btn_github);
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
+            .setView(dialogView)
+            .create();
+            
+        btnGithub.setOnClickListener(v -> {
+            try {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/narukami00/VisiBoard"));
+                startActivity(browserIntent);
+            } catch (Exception e) {
+                safeToast("Could not open link");
+            }
+        });
+        
+        if (dialog.getWindow() != null)
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            
+        dialog.show();
+        
+        // Thank you animation
+        tvThankYou.animate()
+            .alpha(1f)
+            .scaleX(1.1f)
+            .scaleY(1.1f)
+            .setDuration(1000)
+            .withEndAction(() -> 
+                tvThankYou.animate().scaleX(1f).scaleY(1f).setDuration(500).start()
+            )
+            .start();
+    }
+
 
     private void updateUserName(String newName) {
         FirebaseUser user = auth.getCurrentUser();
@@ -644,8 +657,7 @@ public class ProfileFragment extends Fragment {
         String uid = user.getUid();
         db.collection("users").document(uid).update("name", newName)
                 .addOnSuccessListener(unused -> {
-                    nameText.setText(newName);
-                    cachedName = newName;
+                    viewModel.setUserName(newName);
                     safeToast("Name updated successfully");
                 })
                 .addOnFailureListener(e -> safeToast("Failed to update name: " + e.getMessage()));
@@ -1223,5 +1235,26 @@ public class ProfileFragment extends Fragment {
 
     private void updateThemeIcon(ImageView themeToggle, boolean isDarkMode) {
         themeToggle.setImageResource(isDarkMode ? R.drawable.ic_sun : R.drawable.ic_moon);
+    }
+    
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // Clear references to prevent memory leaks
+        if (recentNotesAdapter != null) {
+            recentNotesAdapter.setNotes(new ArrayList<>());
+        }
+        swipeRefreshLayout = null;
+        recentNotesAdapter = null;
+    }
+    
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Refresh data if it's stale (older than cache duration)
+        if (viewModel.shouldRefreshData()) {
+            loadUserData();
+            loadUserStats();
+        }
     }
 }

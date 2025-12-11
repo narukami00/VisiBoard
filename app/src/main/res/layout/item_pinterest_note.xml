@@ -65,6 +65,14 @@
                 android:shadowDy="1"
                 android:shadowRadius="2" />
 
+            <ImageView
+                android:id="@+id/btn_share"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_share"
+                app:tint="@android:color/white"
+                android:layout_marginStart="8dp"/>
+
         </LinearLayout>
         
         <!-- Distance Badge (Optional, good for context) -->

@@ -22,6 +22,7 @@ public class NearbyNotesAdapter extends RecyclerView.Adapter<NearbyNotesAdapter.
 
     public interface OnNoteClickListener {
         void onNoteClick(NearbyNote note);
+        void onShareClick(NearbyNote note);
     }
 
     public NearbyNotesAdapter(OnNoteClickListener listener) {
@@ -72,6 +73,16 @@ public class NearbyNotesAdapter extends RecyclerView.Adapter<NearbyNotesAdapter.
                     listener.onNoteClick(notes.get(position));
                 }
             });
+            
+            View btnShare = itemView.findViewById(R.id.btn_share);
+            if (btnShare != null) {
+                btnShare.setOnClickListener(v -> {
+                    int position = getAdapterPosition();
+                    if (position != RecyclerView.NO_POSITION && listener != null) {
+                        listener.onShareClick(notes.get(position));
+                    }
+                });
+            }
         }
 
         void bind(NearbyNote note) {

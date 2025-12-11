@@ -67,6 +67,7 @@ public class DiscoverTabFragment extends Fragment {
     
     public interface NoteClickListener {
         void onNoteClick(NearbyNote note);
+        void onShareClick(NearbyNote note);
     }
     
     public void setNoteClickListener(NoteClickListener listener) {
@@ -119,28 +120,25 @@ public class DiscoverTabFragment extends Fragment {
         setupRecyclerView();
         setupSwipeRefresh();
         
-        // if (feedViewModel != null && feedViewModel.isDataLoaded() && !feedViewModel.getAllPinterestNotes().isEmpty()) { // Original logic
-        //     pinterestFeedAdapter.setNotes(feedViewModel.getAllPinterestNotes());
-        //     if (currentLocation == null) {
-        //          fetchLocationSilently();
-        //     }
-        // } else {
-        //     loadUserLocation();
-        // }
-
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            loadUserLocation();
+        // Only load data if ViewModel doesn't have it yet
+        if (!feedViewModel.isDataLoaded() || feedViewModel.getAllPinterestNotes().isEmpty()) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                loadUserLocation();
+            } else {
+                requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
+            }
         } else {
-            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
+            // Use cached data
+            pinterestFeedAdapter.setNotes(feedViewModel.getAllPinterestNotes());
+            pbLoading.setVisibility(View.GONE);
+            shimmerContainer.setVisibility(View.GONE);
+            if (pulseAnimator != null) pulseAnimator.cancel();
+            
+            // Silently fetch location for distance calculations
+            if (currentLocation == null) {
+                fetchLocationSilently();
+            }
         }
-        
-       // Check if data already exists in ViewModel
-       if (feedViewModel.isDataLoaded() && !feedViewModel.getAllPinterestNotes().isEmpty()) {
-           pinterestFeedAdapter.setNotes(feedViewModel.getAllPinterestNotes());
-           pbLoading.setVisibility(View.GONE);
-           shimmerContainer.setVisibility(View.GONE);
-           if (pulseAnimator != null) pulseAnimator.cancel();
-       } 
     }
     
     private void fetchLocationSilently() {
@@ -184,8 +182,16 @@ public class DiscoverTabFragment extends Fragment {
     }
     
     private void setupRecyclerView() {
-        pinterestFeedAdapter = new PinterestFeedAdapter(note -> {
-             if (noteClickListener != null) noteClickListener.onNoteClick(note);
+        pinterestFeedAdapter = new PinterestFeedAdapter(new PinterestFeedAdapter.OnNoteClickListener() {
+            @Override
+            public void onNoteClick(NearbyNote note) {
+                if (noteClickListener != null) noteClickListener.onNoteClick(note);
+            }
+
+            @Override
+            public void onShareClick(NearbyNote note) {
+                 if (noteClickListener != null) noteClickListener.onShareClick(note);
+            }
         });
         
         StaggeredGridLayoutManager layoutManager = new StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL);
@@ -282,13 +288,20 @@ public class DiscoverTabFragment extends Fragment {
                 feedViewModel.setLoading(false);
                 swipeRefresh.setRefreshing(false); 
                 pbLoading.setVisibility(View.GONE);
-                if (!isNextPage) stopShimmer(); // Stop even if empty
+                pinterestFeedAdapter.setShowEndMessage(true); // Show End Message
+                if (!isNextPage) stopShimmer(); 
                 return;
             }
             
             feedViewModel.setLastVisible(queryDocumentSnapshots.getDocuments().get(queryDocumentSnapshots.size() - 1));
             // Ensure we strictly check fetched size
-            if (queryDocumentSnapshots.size() < 50) feedViewModel.setLastPage(true);
+            if (queryDocumentSnapshots.size() < 50) {
+                feedViewModel.setLastPage(true);
+                // Don't show end message immediately here because we still have notes to show.
+                // It will be shown when user scrolls down and next load returns empty, or handled by adapter?
+                // Better: if it IS the last page, we can just show the end message at the bottom of THIS list.
+                pinterestFeedAdapter.setShowEndMessage(true);
+            }
             
             // Offload parsing to background thread to prevent UI freeze
             new Thread(() -> {
@@ -351,26 +364,19 @@ public class DiscoverTabFragment extends Fragment {
                     // 1. SHUFFLE EVERYTHING -> True Randomness
                     Collections.shuffle(fetchedNotes);
                     
-                    // 2. Insert Fidget Boxes at fixed intervals - RANDOM TYPES
-                    String[] types = {"bubble", "spinner", "switch", "gravity"};
+                    // 2. Removed Manual Insertion - handled by optimizeItemOrder gaps logic
+                    // Also randomly inject some WIDE fidgets (Switch/Gravity) into the source list
+                    // because optimizeItemOrder primarily injects filller (small/tall) fidgets.
                     
-                    if (fetchedNotes.size() > 12) {
-                        NearbyNote f1 = new NearbyNote(); 
-                        String type = types[(int)(Math.random() * types.length)];
-                        f1.setId("fidget_" + type + "_" + System.currentTimeMillis() + "_1"); 
-                        fetchedNotes.add(12, f1);
-                    }
-                    if (fetchedNotes.size() > 26) {
-                        NearbyNote f2 = new NearbyNote(); 
-                        String type = types[(int)(Math.random() * types.length)];
-                        f2.setId("fidget_" + type + "_" + System.currentTimeMillis() + "_2");
-                        fetchedNotes.add(26, f2);
-                    }
-                     if (fetchedNotes.size() > 40) {
-                        NearbyNote f3 = new NearbyNote(); 
-                        String type = types[(int)(Math.random() * types.length)];
-                        f3.setId("fidget_" + type + "_" + System.currentTimeMillis() + "_3");
-                        fetchedNotes.add(40, f3);
+                    String[] wideTypes = {"switch", "gravity"};
+                    if (fetchedNotes.size() > 10) {
+                         // Insert 1 or 2 wide widgets randomly in the list
+                         int pos1 = 5 + (int)(Math.random() * 10);
+                         if (pos1 < fetchedNotes.size()) {
+                             NearbyNote f = new NearbyNote();
+                             f.setId("fidget_" + wideTypes[(int)(Math.random() * wideTypes.length)] + "_" + System.nanoTime());
+                             fetchedNotes.add(pos1, f);
+                         }
                     }
                     
                     // 3. OPTIMIZE LAYOUT TO REDUCE GAPS (Tetris)
@@ -380,8 +386,8 @@ public class DiscoverTabFragment extends Fragment {
                     Log.e(TAG, "Error parsing notes in bg", e);
                 }
                 
-                // Back to Main Thread
-                if (getActivity() != null) {
+                // Back to Main Thread - Check if fragment is still attached
+                if (isAdded() && getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
                         // 3. Update ViewModel & Adapter
                          if (!isNextPage) {
@@ -432,80 +438,135 @@ public class DiscoverTabFragment extends Fragment {
     }
     
     private void optimizeItemOrder(List<NearbyNote> notes) {
-        // Simulate StaggeredGridLayoutManager (Gap Strategy NONE)
+        // "Smart Tetris" Packing with Fidget Injection
+        // Instead of swapping, we now insert new Fidget gadgets to fill gaps!
+        
+        List<NearbyNote> optimized = new ArrayList<>();
         double col1Height = 0;
         double col2Height = 0;
         
-        for (int i = 0; i < notes.size(); i++) {
-            NearbyNote item = notes.get(i);
-            boolean isFullSpan = isFullSpan(item);
+        // Fidget Types config (Strings replaces Knob)
+        String[] tallFidgets = {"lava"}; // 3:4
+        String[] squareFidgets = {"trace", "strings", "bubble"}; // 1:1
+        String[] wideFidgets = {"switch", "gravity"}; // Full Span
+        String[] smallFidgets = {"spinner"}; // Small/Squat
+        
+        // Track inserted fidget count to avoid flooding
+        int fidgetsInserted = 0;
+        int maxFidgets = 6; // Reduced max per 50 items (User req: "frequency is too much")
+        
+        // Spacing Tracker: Size of 'optimized' list when last fidget was added
+        int lastFidgetInsertionSize = -20; // Allow early one (-20 to start safely)
+        
+        // We iterate through original notes and treat them as a "Queue"
+        int index = 0;
+        
+        while (index < notes.size()) {
+            NearbyNote item = notes.get(index);
             
-            // Aspect Ratio (approximate height logic)
-            double itemHeight = 1.0; 
-            if (item.getImageWidth() > 0 && item.getImageHeight() > 0) {
-                 itemHeight = (double) item.getImageHeight() / item.getImageWidth();
-            } else if (item.getId() != null && item.getId().startsWith("fidget")) {
-                itemHeight = 0.8; // Fidgets usually squat
-            } else {
-                itemHeight = 0.3; // Text notes usually short
-            }
+            // Check for gaps before placing item
+            double diff = Math.abs(col1Height - col2Height);
+            boolean isGap = diff > 0.6; 
             
-            // If full span, check for gap
-            if (isFullSpan) {
-                double diff = Math.abs(col1Height - col2Height);
-                // If significant gap (> 0.4 aspect ratio, roughly half an image)
-                if (diff > 0.4) {
-                    // Find a filler (non-full-span) from upcoming items
-                    int fillerIndex = -1;
-                    for (int j = i + 1; j < Math.min(notes.size(), i + 10); j++) { // Look ahead 10
-                         if (!isFullSpan(notes.get(j))) {
-                             fillerIndex = j;
-                             break;
-                         }
-                    }
-                    
-                    if (fillerIndex != -1) {
-                         // Swap
-                         NearbyNote filler = notes.get(fillerIndex);
-                         notes.set(fillerIndex, item);
-                         notes.set(i, filler);
-                         
-                         // Recalculate component for newly placed FIRST item (the filler)
-                         item = filler;
-                         isFullSpan = false;
-                         if (item.getImageWidth() > 0 && item.getImageHeight() > 0) {
-                             itemHeight = (double) item.getImageHeight() / item.getImageWidth();
-                         } else {
-                             itemHeight = 0.3; 
-                         }
-                         // Fall through to place the filler normally
-                    }
+            // LOGIC FIX 1: Spacing Check (At least 8 items apart)
+            boolean isSpaced = (optimized.size() - lastFidgetInsertionSize) > 8;
+            
+            // LOGIC FIX 2: End of List Protection (Don't fill gaps in last 5 items)
+            boolean isNearEnd = (index >= notes.size() - 5);
+            
+            if (isGap && fidgetsInserted < maxFidgets && isSpaced && !isNearEnd) {
+                // Gap detected & Conditions met! Fill it.
+                NearbyNote filler = new NearbyNote();
+                String type;
+                double fillerHeight;
+                
+                // Determine gap type
+                if (diff > 1.2) { // Tall gap
+                     type = tallFidgets[(int)(Math.random() * tallFidgets.length)];
+                     fillerHeight = 1.33; 
+                } else if (diff > 0.8) { // Square-ish gap
+                     type = squareFidgets[(int)(Math.random() * squareFidgets.length)];
+                     fillerHeight = 1.0;
+                } else { // Small gap
+                     type = smallFidgets[(int)(Math.random() * smallFidgets.length)];
+                     fillerHeight = 0.5;
                 }
+                
+                filler.setId("fidget_" + type + "_" + System.nanoTime()); // Unique ID
+                
+                // Add to the shorter column
+                if (col1Height <= col2Height) {
+                    col1Height += fillerHeight;
+                } else {
+                    col2Height += fillerHeight;
+                }
+                
+                optimized.add(filler);
+                fidgetsInserted++;
+                lastFidgetInsertionSize = optimized.size(); // Update marker
+                
+                // Loop continues to check if gap is filled or place next item
+                continue; 
             }
             
-            // Place Item
+            // Place original item
+            boolean isFullSpan = isFullSpan(item);
+            double itemHeight = getItemHeight(item);
+            
+            // If it's a full span item (like Switch/Gravity or wide image)
+            // We should ensure columns are roughly even before placing it
             if (isFullSpan) {
-                // Takes max height of both, adds its height
+                // Force sync columns if possible using small fillers? 
+                // For now, just place it.
                 double maxHeight = Math.max(col1Height, col2Height);
                 col1Height = maxHeight + itemHeight;
                 col2Height = maxHeight + itemHeight;
             } else {
-                // Adds to shortest column
                 if (col1Height <= col2Height) {
                     col1Height += itemHeight;
                 } else {
                     col2Height += itemHeight;
                 }
             }
+            
+            optimized.add(item);
+            index++;
+            
+            // Random chance to scatter wide widgets (Switch/Gravity) if we have long run of notes?
+            // (Handled by the inputs having them, or we could inject them sparsely too)
         }
+        
+        // Inject random wide fidget occasionally if we didn't use many gap fillers?
+        // Or just trust the input list has them? 
+        // Let's rely on gap filling primarily.
+        
+        // Move content back to original list
+        notes.clear();
+        notes.addAll(optimized);
+    }
+    
+    private double getItemHeight(NearbyNote item) {
+        if (item.getId() != null && item.getId().startsWith("fidget")) {
+             String id = item.getId();
+             if (id.contains("lava")) return 1.33;
+             if (id.contains("trace") || id.contains("strings") || id.contains("bubble")) return 1.0;
+             if (id.contains("switch") || id.contains("gravity")) return 0.6; // Full span but short
+             if (id.contains("spinner")) return 0.5;
+             return 1.0;
+        }
+        if (item.getImageWidth() > 0 && item.getImageHeight() > 0) {
+             return (double) item.getImageHeight() / item.getImageWidth();
+        }
+        return 0.3; // Text note default
     }
     
     private boolean isFullSpan(NearbyNote note) {
         if (note.getId() != null) {
-            if (note.getId().startsWith("fidget_switch") || note.getId().startsWith("fidget_gravity")) {
+            String id = note.getId();
+            if (id.startsWith("fidget_switch") || id.startsWith("fidget_gravity")) {
                 return true;
             }
-            if (note.getId().startsWith("fidget")) return false; // Other fidgets are half
+            if (id.startsWith("fidget")) return false; 
         }
         // Wide image check (must match Adapter logic)
         return note.getImageWidth() > 0 && note.getImageHeight() > 0 && 
@@ -521,5 +582,36 @@ public class DiscoverTabFragment extends Fragment {
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
+    }
+    
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // Clean up to prevent memory leaks
+        if (pulseAnimator != null) {
+            pulseAnimator.cancel();
+            pulseAnimator = null;
+        }
+        if (rvPinterestFeed != null) {
+            rvPinterestFeed.setAdapter(null);
+        }
+        pinterestFeedAdapter = null;
+        swipeRefresh = null;
+    }
+    
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (pulseAnimator != null) {
+            pulseAnimator.pause();
+        }
+    }
+    
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (pulseAnimator != null && pulseAnimator.isPaused()) {
+            pulseAnimator.resume();
+        }
     }
 }

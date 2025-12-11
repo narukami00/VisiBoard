@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Button;
+import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -160,13 +161,18 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
     }
 
     private void setupMessagesButton() {
-        btnMessages.setOnClickListener(v -> showFollowingDialog());
+        btnMessages.setOnClickListener(v -> showFollowingDialog(null));
     }
 
     // Callbacks
     @Override
     public void onNoteClick(NearbyNote note) {
         navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
+    }
+
+    @Override
+    public void onShareClick(NearbyNote note) {
+        showFollowingDialog(note);
     }
 
     @Override
@@ -220,10 +226,14 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             showUserInfoDialog(notification.getFromUserId());
         } else if ("message".equals(type)) {
             showMessageDialog(notification);
+        } else if ("shared_note".equals(type)) {
+            showSharedNoteView(notification);
         } else {
              // Default to note navigation
              String targetId = notification.getNoteId();
-             navigateToNoteOnMap(notification.getNoteLat(), notification.getNoteLng(), targetId);
+             if (targetId != null) {
+                 navigateToNoteOnMap(notification.getNoteLat(), notification.getNoteLng(), targetId);
+             }
         }
     }
 
@@ -403,7 +413,7 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
     
 
     
-    private void showFollowingDialog() {
+    private void showFollowingDialog(@Nullable NearbyNote noteToShare) {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_following, null);
         
         RecyclerView rvDialog = dialogView.findViewById(R.id.rv_following_dialog);
@@ -411,26 +421,37 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         TextView tvNoData = dialogView.findViewById(R.id.tv_no_following_dialog);
         ImageButton btnCloseHeader = dialogView.findViewById(R.id.btn_close_header);
         TextInputEditText etSearch = dialogView.findViewById(R.id.et_search_following);
+        TextView tvTitle = dialogView.findViewById(R.id.dialog_title); // ID was dialog_title
+        
+        // Update Title if sharing
+        if (noteToShare != null) {
+            if (tvTitle != null) {
+                tvTitle.setText("Share Note");
+            }
+        }
         
         // List to hold all users for filtering
         final List<UserInfo> allFollowingList = new ArrayList<>();
         
         rvDialog.setLayoutManager(new LinearLayoutManager(getContext()));
         
-        FollowingAdapter dialogAdapter = new FollowingAdapter(
-            user -> showUserInfoDialog(user.getUserId()),
-            user -> {
-                // Dimiss dialog? Or keep open? Maybe keep open so they can msg multiple.
-                // Or easier: dismiss to show msg dialog
-                // dialog.dismiss(); // Need ref to dialog
-                showSendMessageDialog(user);
-            }
-        );
-        rvDialog.setAdapter(dialogAdapter);
-        
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
                 .setView(dialogView)
                 .create();
+
+        FollowingAdapter dialogAdapter = new FollowingAdapter(
+            user -> showUserInfoDialog(user.getUserId()),
+            user -> {
+                if (noteToShare != null) {
+                     sendSharedNote(user, noteToShare);
+                     dialog.dismiss();
+                } else {
+                     showSendMessageDialog(user);
+                     // dialog.dismiss(); // Optional: keep open to message multiple?
+                }
+            }
+        );
+        rvDialog.setAdapter(dialogAdapter);
         
 
         
@@ -623,4 +644,164 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
     }
     
 
+    private void sendSharedNote(UserInfo recipient, NearbyNote note) {
+        String fromUserId = auth.getCurrentUser().getUid();
+        
+        db.collection("users").document(fromUserId).get()
+            .addOnSuccessListener(doc -> {
+                String fromUserName = doc.getString("name");
+                String fromUserProfilePic = doc.getString("profilePic");
+                
+                String messageText = "Shared a note: " + (note.getText() != null ? note.getText() : "Image Note");
+                
+                Map<String, Object> message = new HashMap<>();
+                message.put("fromUserId", fromUserId);
+                message.put("fromUserName", fromUserName);
+                message.put("fromUserProfilePic", fromUserProfilePic);
+                message.put("toUserId", recipient.getUserId());
+                message.put("messageText", messageText);
+                message.put("timestamp", System.currentTimeMillis());
+                message.put("anonymous", false);
+                message.put("read", false);
+                message.put("type", "shared_note");
+                
+                // Note Data Snapshot
+                message.put("noteId", note.getId());
+                message.put("noteText", note.getText());
+                message.put("noteImage", note.getImageBase64());
+                message.put("noteLat", note.getLat());
+                message.put("noteLng", note.getLng());
+                message.put("noteLikes", note.getLikesCount());
+                message.put("noteComments", note.getCommentsCount());
+                
+                // Save message
+                db.collection("messages").add(message)
+                    .addOnSuccessListener(docRef -> {
+                        // Create notification
+                        Map<String, Object> notification = new HashMap<>();
+                        notification.put("toUserId", recipient.getUserId());
+                        notification.put("fromUserId", fromUserId);
+                        notification.put("fromUserName", fromUserName);
+                        notification.put("fromUserProfilePic", fromUserProfilePic);
+                        notification.put("type", "shared_note");
+                        notification.put("messageId", docRef.getId());
+                        notification.put("messageText", "Shared a note with you");
+                        notification.put("timestamp", System.currentTimeMillis());
+                        notification.put("read", false);
+                        
+                        // Note extras for notification
+                        notification.put("noteId", note.getId());
+                        notification.put("noteLat", note.getLat());
+                        notification.put("noteLng", note.getLng());
+                        notification.put("noteText", note.getText());
+                        notification.put("noteImage", note.getImageBase64());
+                        notification.put("noteLikes", note.getLikesCount());
+                        notification.put("noteComments", note.getCommentsCount());
+                        
+                        db.collection("notifications").add(notification);
+                        
+                        android.widget.Toast.makeText(requireContext(), 
+                            "Note shared!", android.widget.Toast.LENGTH_SHORT).show();
+                    })
+                    .addOnFailureListener(e -> {
+                        android.widget.Toast.makeText(requireContext(), 
+                            "Failed to share note", android.widget.Toast.LENGTH_SHORT).show();
+                    });
+            });
+    }
+
+    private void showSharedNoteView(Notification notification) {
+        View dialogView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.dialog_view_shared_note, null);
+        
+        de.hdodenhof.circleimageview.CircleImageView ivSender = dialogView.findViewById(R.id.iv_sender_avatar);
+        TextView tvSender = dialogView.findViewById(R.id.tv_sender_name);
+        TextView tvTime = dialogView.findViewById(R.id.tv_message_time);
+        Button btnClose = dialogView.findViewById(R.id.btn_close);
+        
+        // Note Card Views
+        androidx.cardview.widget.CardView cvNote = dialogView.findViewById(R.id.cv_shared_note);
+        ImageView ivNoteImage = dialogView.findViewById(R.id.iv_note_image);
+        TextView tvNoteText = dialogView.findViewById(R.id.tv_note_text);
+        TextView tvLikes = dialogView.findViewById(R.id.tv_likes_count);
+        TextView tvComments = dialogView.findViewById(R.id.tv_comments_count);
+        
+        // Sender Info
+        tvSender.setText(notification.getFromUserName() != null ? notification.getFromUserName() : "User");
+        tvTime.setText("Shared a note • " + getTimeAgo(notification.getTimestamp()));
+        
+        String senderPic = notification.getFromUserProfilePic();
+        if (senderPic != null && !senderPic.isEmpty()) {
+            com.visiboard.app.utils.ImageCache.getInstance()
+                .loadBase64Image(senderPic, ivSender, R.drawable.ic_profile);
+        }
+
+        // Note Content
+        String text = notification.getMessageText(); // Might be "Shared a note.." or actual text depending on field
+        // Actually we put note details in extras
+        
+        // Extract note details from notification fields I added
+        // The Notification model might need to support accessing the dynamic map or we just use specific getters if they existed. 
+        // Since Notification class is simple, I should rely on the fact that Firestore doc -> Notification object mapping 
+        // might miss extra fields if they aren't in the class. 
+        // BUT, the Notification object passed to handleNotificationClick comes from Firestore.
+        // Wait, Notification.java (Step 37 was Message.java... I didn't see Notification.java fully).
+        // If Notification.java doesn't have these fields, I can't access them via getters.
+        // However, I can fetch the MESSAGE document which definitely has them.
+        
+        // BETTER APPROACH: Fetch the message document using messageId to get full details.
+        
+        if (notification.getMessageId() != null) {
+             db.collection("messages").document(notification.getMessageId()).get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        String noteText = doc.getString("noteText");
+                        String noteImage = doc.getString("noteImage");
+                        String noteId = doc.getString("noteId");
+                        Double lat = doc.getDouble("noteLat");
+                        Double lng = doc.getDouble("noteLng");
+                        
+                        Long likes = doc.getLong("noteLikes");
+                        Long comments = doc.getLong("noteComments");
+                        
+                        tvNoteText.setText(noteText != null && !noteText.isEmpty() ? noteText : "");
+                        tvLikes.setText(String.valueOf(likes != null ? likes : 0));
+                        tvComments.setText(String.valueOf(comments != null ? comments : 0));
+                        
+                        if (noteImage != null && !noteImage.isEmpty()) {
+                            ivNoteImage.setVisibility(View.VISIBLE);
+                            com.visiboard.app.utils.ImageCache.getInstance()
+                                .loadBase64Image(noteImage, ivNoteImage, R.drawable.placeholder_image);
+                        } else {
+                            ivNoteImage.setVisibility(View.GONE);
+                        }
+                        
+                        // Click navigation
+                        cvNote.setOnClickListener(v -> {
+                             if (lat != null && lng != null && noteId != null) {
+                                  navigateToNoteOnMap(lat, lng, noteId);
+                                  // Close dialog?
+                             }
+                        });
+                    }
+                });
+        }
+        
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+        
+        // Mark read
+        if (notification.getId() != null) { // Notification ID might be missing if constructed locally? 
+            // The notification passed to handleNotificationClick usually comes from Adapter which gets it from Firestore with ID.
+             db.collection("notifications").document(notification.getId()).update("read", true);
+        }
+    }
 }

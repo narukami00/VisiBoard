@@ -52,6 +52,8 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
 
     private FirebaseFirestore db;
     private FirebaseAuth auth;
+    
+    private com.google.firebase.firestore.ListenerRegistration commentsListener;
 
     private CommentsListAdapter.OnUserClickListener userClickListener;
 
@@ -147,7 +149,7 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
 
         android.util.Log.d("CommentsSheet", "Loading comments for note: " + noteId);
 
-        db.collection("notes").document(noteId).collection("comments")
+        commentsListener = db.collection("notes").document(noteId).collection("comments")
                 .orderBy("timestamp", Query.Direction.ASCENDING)
                 .addSnapshotListener((value, error) -> {
                     if (error != null) {
@@ -285,6 +287,13 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        
+        // Remove Firestore listener to prevent memory leak
+        if (commentsListener != null) {
+            commentsListener.remove();
+            commentsListener = null;
+        }
+        
         // Clear cache to free memory
         if (adapter != null) {
             adapter.clearCache();

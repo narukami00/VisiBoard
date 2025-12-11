@@ -25,15 +25,21 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
     private static final int VIEW_TYPE_LOADING = 2;
     private static final int VIEW_TYPE_FIDGET_BUBBLE = 10;
     private static final int VIEW_TYPE_FIDGET_SPINNER = 11;
-    private static final int VIEW_TYPE_FIDGET_SWITCH = 12;
+    // VIEW_TYPE_FIDGET_SWITCH removed
     private static final int VIEW_TYPE_FIDGET_GRAVITY = 13;
+    private static final int VIEW_TYPE_FIDGET_LAVA = 14;
+    private static final int VIEW_TYPE_FIDGET_TRACE = 15;
+    private static final int VIEW_TYPE_FIDGET_STRINGS = 16;
+    private static final int VIEW_TYPE_FIDGET_FLUID = 17;
 
     private List<NearbyNote> notes = new ArrayList<>();
     private OnNoteClickListener listener;
     private boolean isLoading = false;
+    private boolean isEndMessage = false;
 
     public interface OnNoteClickListener {
         void onNoteClick(NearbyNote note);
+        void onShareClick(NearbyNote note);
     }
 
     public PinterestFeedAdapter(OnNoteClickListener listener) {
@@ -46,22 +52,42 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             if (loading) {
                 notifyItemInserted(notes.size());
             } else {
-                notifyItemRemoved(notes.size());
+                if (!isEndMessage) {
+                    notifyItemRemoved(notes.size());
+                } else {
+                    notifyItemChanged(notes.size());
+                }
+            }
+        }
+    }
+
+    public void setShowEndMessage(boolean show) {
+        if (this.isEndMessage != show) {
+            this.isEndMessage = show;
+            if (show) {
+                if (!isLoading) notifyItemInserted(notes.size());
+                else notifyItemChanged(notes.size());
+            } else {
+                if (!isLoading) notifyItemRemoved(notes.size());
             }
         }
     }
 
     @Override
     public int getItemViewType(int position) {
-        if (isLoading && position == notes.size()) {
+        if ((isLoading || isEndMessage) && position == notes.size()) {
             return VIEW_TYPE_LOADING;
         }
         NearbyNote note = notes.get(position);
         if (note.getId() != null && note.getId().startsWith("fidget")) { 
              String id = note.getId();
              if (id.contains("spinner")) return VIEW_TYPE_FIDGET_SPINNER;
-             if (id.contains("switch")) return VIEW_TYPE_FIDGET_SWITCH;
+             // Switch removed
              if (id.contains("gravity")) return VIEW_TYPE_FIDGET_GRAVITY;
+             if (id.contains("lava")) return VIEW_TYPE_FIDGET_LAVA;
+             if (id.contains("trace")) return VIEW_TYPE_FIDGET_TRACE;
+             if (id.contains("strings")) return VIEW_TYPE_FIDGET_STRINGS;
+             if (id.contains("fluid")) return VIEW_TYPE_FIDGET_FLUID;
              return VIEW_TYPE_FIDGET_BUBBLE; // Default
         }
         return (note.getImageBase64() != null && !note.getImageBase64().isEmpty()) ? VIEW_TYPE_IMAGE : VIEW_TYPE_TEXT;
@@ -79,12 +105,21 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
         } else if (viewType == VIEW_TYPE_FIDGET_SPINNER) {
              View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_spinner, parent, false);
             return new FidgetSpinnerViewHolder(view);
-        } else if (viewType == VIEW_TYPE_FIDGET_SWITCH) {
-             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_switch, parent, false);
-            return new FidgetSwitchViewHolder(view);
+        } else if (viewType == VIEW_TYPE_FIDGET_FLUID) {
+             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_fluid, parent, false);
+            return new SimpleFidgetViewHolder(view);
         } else if (viewType == VIEW_TYPE_FIDGET_GRAVITY) {
              View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_gravity, parent, false);
             return new FidgetGravityViewHolder(view);
+        } else if (viewType == VIEW_TYPE_FIDGET_LAVA) {
+             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_lava, parent, false);
+            return new SimpleFidgetViewHolder(view);
+        } else if (viewType == VIEW_TYPE_FIDGET_TRACE) {
+             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_trace, parent, false);
+            return new SimpleFidgetViewHolder(view);
+        } else if (viewType == VIEW_TYPE_FIDGET_STRINGS) {
+             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_strings, parent, false);
+            return new SimpleFidgetViewHolder(view);
         } else if (viewType == VIEW_TYPE_TEXT) {
             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_pinterest_text, parent, false);
             return new TextNoteViewHolder(view);
@@ -120,7 +155,8 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             // Fidgets and Text Notes spanning logic
             if (type >= 10) { // All Fidgets
                 isFullSpan = false; // Let them fit in columns mostly, except maybe gravity?
-                if (type == VIEW_TYPE_FIDGET_GRAVITY || type == VIEW_TYPE_FIDGET_SWITCH) isFullSpan = true;
+                if (type == VIEW_TYPE_FIDGET_GRAVITY) isFullSpan = true;
+                // Lava, Trace, Knob, Bubble, Spinner are single span fillers
             } else if (type == VIEW_TYPE_IMAGE) {
                 // Wide images
                 NearbyNote n = notes.get(position);
@@ -212,89 +248,15 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
         }
     }
     
-    class FidgetSwitchViewHolder extends RecyclerView.ViewHolder {
-        GridLayout grid;
-        View btnShuffle, btnReset;
-        int[] colors = {0xFFFF5252, 0xFF448AFF, 0xFF69F0AE, 0xFFFFD740, 0xFFE040FB, 0xFF536DFE, 0xFFFF6E40, 0xFF00E5FF};
-        
-        FidgetSwitchViewHolder(View itemView) {
-            super(itemView);
-            grid = itemView.findViewById(R.id.gl_tiles);
-            btnShuffle = itemView.findViewById(R.id.btn_shuffle);
-            btnReset = itemView.findViewById(R.id.btn_reset);
-            
-            // Manual traversal fallback if ids not found (unlikely now but keeping safety)
-            if (grid == null && itemView instanceof ViewGroup) {
-                ViewGroup card = (ViewGroup) itemView;
-                if (card.getChildCount() > 0) {
-                     ViewGroup rootLinear = (ViewGroup) card.getChildAt(0);
-                     // rootLinear has Header(Linear) and Grid(Grid)
-                     if (rootLinear.getChildCount() > 1 && rootLinear.getChildAt(1) instanceof GridLayout) {
-                         grid = (GridLayout) rootLinear.getChildAt(1);
-                         ViewGroup header = (ViewGroup) rootLinear.getChildAt(0);
-                         if (header.getChildCount() >= 3) {
-                             btnShuffle = header.getChildAt(1);
-                             btnReset = header.getChildAt(2);
-                         }
-                     }
-                }
-            }
+    // Switch VH removed
 
-            if (grid != null) {
-                // Initialize tiles
-                for(int i=0; i<grid.getChildCount(); i++) {
-                     final View tile = grid.getChildAt(i);
-                     tile.setOnClickListener(v -> {
-                         int randomColor = colors[(int)(Math.random() * colors.length)];
-                         animateTile(v, randomColor);
-                         try { v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP); } catch (Exception e){} 
-                     });
-                     tile.setOnLongClickListener(v -> {
-                         animateTile(v, Color.parseColor("#EEEEEE")); // Erase
-                         v.performHapticFeedback(0);
-                         return true;
-                     });
-                }
-                
-                if (btnShuffle != null) {
-                    btnShuffle.setOnClickListener(v -> {
-                        v.animate().rotationBy(360).setDuration(500).start();
-                        for(int i=0; i<grid.getChildCount(); i++) {
-                            View tile = grid.getChildAt(i);
-                            int randomColor = colors[(int)(Math.random() * colors.length)];
-                            // Stagger animation slightly
-                            tile.postDelayed(() -> animateTile(tile, randomColor), i * 20L);
-                        }
-                    });
-                }
-                
-                if (btnReset != null) {
-                    btnReset.setOnClickListener(v -> {
-                        v.animate().rotationBy(-360).setDuration(500).start();
-                        for(int i=0; i<grid.getChildCount(); i++) {
-                            View tile = grid.getChildAt(i);
-                             tile.postDelayed(() -> animateTile(tile, Color.parseColor("#EEEEEE")), i * 10L);
-                        }
-                    });
-                }
-            }
-        }
-        
-        private void animateTile(View v, int color) {
-            // Apply color to drawable so we keep rounded corners
-            if (v.getBackground() != null) {
-                v.getBackground().mutate().setTint(color);
-            }
-            // Pop animation
-            v.animate().scaleX(0.8f).scaleY(0.8f).setDuration(100)
-                .withEndAction(() -> {
-                     v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).setInterpolator(new android.view.animation.OvershootInterpolator()).start();
-                }).start();
-        }
-    }
     
     class FidgetGravityViewHolder extends RecyclerView.ViewHolder {
         FidgetGravityViewHolder(View itemView) { super(itemView); }
+    }
+    
+    class SimpleFidgetViewHolder extends RecyclerView.ViewHolder {
+        SimpleFidgetViewHolder(View itemView) { super(itemView); }
     }
 
     class ImageNoteViewHolder extends RecyclerView.ViewHolder {
@@ -314,6 +276,16 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
                     listener.onNoteClick(notes.get(position));
                 }
             });
+            
+            View btnShare = itemView.findViewById(R.id.btn_share);
+            if (btnShare != null) {
+                btnShare.setOnClickListener(v -> {
+                    int position = getAdapterPosition();
+                    if (position != RecyclerView.NO_POSITION && listener != null) {
+                        listener.onShareClick(notes.get(position));
+                    }
+                });
+            }
         }
 
         void bind(NearbyNote note) {
@@ -359,6 +331,16 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
                     listener.onNoteClick(notes.get(position));
                 }
             });
+
+            View btnShare = itemView.findViewById(R.id.btn_share);
+            if (btnShare != null) {
+                btnShare.setOnClickListener(v -> {
+                    int position = getAdapterPosition();
+                    if (position != RecyclerView.NO_POSITION && listener != null) {
+                        listener.onShareClick(notes.get(position));
+                    }
+                });
+            }
         }
 
         void bind(NearbyNote note) {

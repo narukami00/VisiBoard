@@ -11,6 +11,13 @@ import android.hardware.SensorManager;
 import android.util.AttributeSet;
 import android.view.View;
 
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Gravity Ball Fidget.
+ * NOW WITH MULTI-BALLS!
+ */
 public class GravityBallView extends View implements SensorEventListener {
 
     private Paint paint;
@@ -25,6 +32,8 @@ public class GravityBallView extends View implements SensorEventListener {
     private static class Point { float x, y; Point(float x, float y){this.x=x; this.y=y;} }
     private java.util.LinkedList<Point> trail = new java.util.LinkedList<>();
     private static final int TRAIL_LENGTH = 15;
+    
+    private int themeColor = 0xFF00E5FF; // Cyan Default
 
     public GravityBallView(Context context) {
         super(context);
@@ -44,6 +53,30 @@ public class GravityBallView extends View implements SensorEventListener {
         if (sensorManager != null) {
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         }
+    }
+    
+    public void randomizeColor() {
+        float[] hsv = new float[3];
+        hsv[0] = (float) (Math.random() * 360);
+        hsv[1] = 0.8f + (float)(Math.random() * 0.2f); // High Saturation
+        hsv[2] = 1.0f; // Max Value
+        themeColor = Color.HSVToColor(hsv);
+        invalidate();
+    }
+    
+    @Override
+    public boolean onTouchEvent(android.view.MotionEvent event) {
+        if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+            randomizeColor();
+            performClick();
+            return true;
+        }
+        return true; // Consume event
+    }
+    
+    @Override
+    public boolean performClick() {
+        return super.performClick();
     }
     
     public void startSensor() {
@@ -70,10 +103,10 @@ public class GravityBallView extends View implements SensorEventListener {
         super.onDraw(canvas);
         
         // Physics
-        xVel -= xAccel * 0.8f; // Increased sensitivity
+        xVel -= xAccel * 0.8f; 
         yVel += yAccel * 0.8f;
         
-        // Slightly higher damping for control
+        // Damping
         xVel *= 0.92f;
         yVel *= 0.92f;
         
@@ -93,12 +126,12 @@ public class GravityBallView extends View implements SensorEventListener {
         // Draw Trail
         for (int i = 0; i < trail.size(); i++) {
             Point p = trail.get(i);
-            // Alpha fades from 255 to 0
+            // Alpha fades
             int alpha = (int) (255 * (1.0f - (float)i / TRAIL_LENGTH));
-            // Size also shrinks slightly
+            // Size shrinks
             float scale = 1.0f - ((float)i / TRAIL_LENGTH) * 0.5f;
             
-            paint.setColor(Color.CYAN);
+            paint.setColor(themeColor);
             paint.setAlpha(alpha);
             canvas.drawCircle(p.x, p.y, ballRadius * scale, paint);
         }
@@ -122,15 +155,6 @@ public class GravityBallView extends View implements SensorEventListener {
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) { }
     
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        stopSensor();
-    }
-    
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        startSensor();
-    }
+    @Override protected void onDetachedFromWindow() { super.onDetachedFromWindow(); stopSensor(); }
+    @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); startSensor(); }
 }

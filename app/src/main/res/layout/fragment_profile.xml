@@ -66,6 +66,19 @@
                 app:layout_constraintTop_toTopOf="parent">
 
                 <ImageView
+                    android:id="@+id/btn_about"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_about_outline"
+                    android:padding="8dp"
+                    android:background="@drawable/bg_circle_glass"
+                    android:backgroundTint="#20FFFFFF"
+                    app:tint="#FFFFFF"
+                    android:layout_marginEnd="8dp"
+                    android:elevation="4dp"
+                    android:contentDescription="About" />
+
+                <ImageView
                     android:id="@+id/theme_toggle_icon"
                     android:layout_width="40dp"
                     android:layout_height="40dp"

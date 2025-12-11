@@ -120,6 +120,10 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
                     text = notification.getFromUserName() + " sent you a message";
                     iconRes = R.drawable.ic_send;
                     break;
+                case "shared_note":
+                    text = notification.getFromUserName() + " shared a note with you";
+                    iconRes = R.drawable.ic_share;
+                    break;
             }
 
             tvNotificationText.setText(text);

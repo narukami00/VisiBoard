@@ -50,4 +50,9 @@ public class UserInfo {
 
     public int getFollowingCount() { return followingCount; }
     public void setFollowingCount(int followingCount) { this.followingCount = followingCount; }
+
+    // New field for Legends feature
+    private int totalLikes;
+    public int getTotalLikes() { return totalLikes; }
+    public void setTotalLikes(int totalLikes) { this.totalLikes = totalLikes; }
 }
