@@ -57,11 +57,13 @@ public class DiscoverTabFragment extends Fragment {
     private Location currentLocation;
     
     private boolean isLoading = false;
+    private volatile boolean isFragmentDestroyed = false;
     
     private FeedViewModel feedViewModel;
     private ActivityResultLauncher<String> requestPermissionLauncher;
     
     private ObjectAnimator pulseAnimator;
+    private Thread imageProcessingThread;
 
     private NoteClickListener noteClickListener;
     
@@ -87,10 +89,12 @@ public class DiscoverTabFragment extends Fragment {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        isFragmentDestroyed = false;
         db = FirebaseFirestore.getInstance();
         auth = FirebaseAuth.getInstance();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
-        feedViewModel = new ViewModelProvider(requireActivity()).get(FeedViewModel.class);
+        // Scope ViewModel to Parent Fragment (FeedFragment) so it survives tab switches but dies when leaving Feed
+        feedViewModel = new ViewModelProvider(requireParentFragment()).get(FeedViewModel.class);
         
         requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
             if (isGranted) loadUserLocation();
@@ -238,19 +242,22 @@ public class DiscoverTabFragment extends Fragment {
         
         try {
              fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                if (isFragmentDestroyed || !isAdded()) return;
                 currentLocation = location;
                 loadPinterestFeed(false);
             }).addOnFailureListener(e -> {
+                if (isFragmentDestroyed || !isAdded()) return;
                 Log.e(TAG, "Error getting location", e);
                 loadPinterestFeed(false);
             });
         } catch (SecurityException e) {
             Log.e(TAG, "Security exception getting location", e);
-            loadPinterestFeed(false);
+            if (!isFragmentDestroyed && isAdded()) loadPinterestFeed(false);
         }
     }
 
     private void loadPinterestFeed(boolean isNextPage) {
+        if (!isAdded() || getContext() == null) return; // Immediate safety check
         if (auth.getCurrentUser() == null) return;
         if (feedViewModel == null) return;
         if (feedViewModel.isLoading()) return;
@@ -258,7 +265,7 @@ public class DiscoverTabFragment extends Fragment {
         feedViewModel.setLoading(true);
         
         if (!isNextPage) {
-            swipeRefresh.setRefreshing(true);
+            if (swipeRefresh != null) swipeRefresh.setRefreshing(true);
             feedViewModel.setLastPage(false);
             feedViewModel.setLastVisible(null);
             
@@ -281,14 +288,20 @@ public class DiscoverTabFragment extends Fragment {
         }
             
         query.get().addOnSuccessListener(queryDocumentSnapshots -> {
+            // Critical safety check: Don't process if fragment is destroyed or detached
+            if (isFragmentDestroyed || !isAdded() || getContext() == null) {
+                Log.d(TAG, "Fragment detached, aborting data processing");
+                return;
+            }
+            
             boolean isEmpty = queryDocumentSnapshots.isEmpty();
             
             if (isEmpty) {
                 feedViewModel.setLastPage(true);
                 feedViewModel.setLoading(false);
-                swipeRefresh.setRefreshing(false); 
-                pbLoading.setVisibility(View.GONE);
-                pinterestFeedAdapter.setShowEndMessage(true); // Show End Message
+                if (swipeRefresh != null) swipeRefresh.setRefreshing(false); 
+                if (pbLoading != null) pbLoading.setVisibility(View.GONE);
+                if (pinterestFeedAdapter != null) pinterestFeedAdapter.setShowEndMessage(true);
                 if (!isNextPage) stopShimmer(); 
                 return;
             }
@@ -297,30 +310,47 @@ public class DiscoverTabFragment extends Fragment {
             // Ensure we strictly check fetched size
             if (queryDocumentSnapshots.size() < 50) {
                 feedViewModel.setLastPage(true);
-                // Don't show end message immediately here because we still have notes to show.
-                // It will be shown when user scrolls down and next load returns empty, or handled by adapter?
-                // Better: if it IS the last page, we can just show the end message at the bottom of THIS list.
                 pinterestFeedAdapter.setShowEndMessage(true);
             }
             
-            // Offload parsing to background thread to prevent UI freeze
-            new Thread(() -> {
+            // Safety Check: If Fragment is destroyed/detached, don't start background processing
+            if (isFragmentDestroyed || !isAdded() || getContext() == null) {
+                Log.w(TAG, "Fragment destroyed/detached before processing. Aborting.");
+                feedViewModel.setLoading(false);
+                return;
+            }
+
+            final java.io.File cacheDir = getContext().getCacheDir();
+            
+            // Single Background Thread: Parse Metadata AND Save Images
+            imageProcessingThread = new Thread(() -> {
                 List<NearbyNote> fetchedNotes = new ArrayList<>();
                 try {
                     for (DocumentSnapshot doc : queryDocumentSnapshots) {
-                         String b64 = doc.getString("imageBase64");
+                         // Check for interruption or fragment destroyed
+                         if (Thread.currentThread().isInterrupted() || isFragmentDestroyed) {
+                             Log.d(TAG, "Thread stopped - Fragment destroyed or interrupted");
+                             return;
+                         }
+
+                         // 1. Parse Metadata
+                         final NearbyNote note = new NearbyNote();
+                         note.setId(doc.getId());
+                         
+                         String text = doc.getString("text");
+                         if (text == null) text = doc.getString("note");
+                         note.setText(text);
+                         note.setSummary(doc.getString("summary"));
+                         note.setUserId(doc.getString("userId"));
+                         note.setUserName(doc.getString("userName"));
+                         note.setUserProfilePic(doc.getString("userProfilePic"));
+                         
                          GeoPoint location = doc.getGeoPoint("location");
-                         // Check for Number vs String issues
-                         int imgWidth = 0;
-                         int imgHeight = 0;
-                         Object wObj = doc.get("imageWidth");
-                         Object hObj = doc.get("imageHeight");
-                         if (wObj instanceof Number) imgWidth = ((Number) wObj).intValue();
-                         else if (wObj instanceof String) try { imgWidth = Integer.parseInt((String) wObj); } catch(Exception e){}
+                         note.setLat(location != null ? location.getLatitude() : 0);
+                         note.setLng(location != null ? location.getLongitude() : 0);
+                         note.setTimestamp(doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0);
                          
-                         if (hObj instanceof Number) imgHeight = ((Number) hObj).intValue();
-                         else if (hObj instanceof String) try { imgHeight = Integer.parseInt((String) hObj); } catch(Exception e){}
-                         
+                         // Distance
                          double distance = 0;
                          if (location != null && currentLocation != null) {
                              distance = calculateDistance(
@@ -330,47 +360,90 @@ public class DiscoverTabFragment extends Fragment {
                                  location.getLongitude()
                              );
                          }
+                         note.setDistance(distance);
                          
-                         final NearbyNote note = new NearbyNote();
-                         note.setId(doc.getId());
-                         String text = doc.getString("text");
-                         if (text == null) text = doc.getString("note");
-                         note.setText(text);
-                         note.setSummary(doc.getString("summary"));
-                         note.setUserId(doc.getString("userId"));
-                         note.setUserName(doc.getString("userName"));
-                         note.setUserProfilePic(doc.getString("userProfilePic"));
-                         note.setLat(location != null ? location.getLatitude() : 0);
-                         note.setLng(location != null ? location.getLongitude() : 0);
-                         note.setTimestamp(doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0);
-                         note.setImageBase64(b64);
-                         note.setImageWidth(imgWidth);
-                         note.setImageHeight(imgHeight);
-                         
-                         // Robust Like Count Parsing
+                         // Like Count
                          int likes = 0;
                          Object likesObj = doc.get("likesCount");
                          if (likesObj == null) likesObj = doc.get("likeCount");
-                         
                          if (likesObj instanceof Number) likes = ((Number) likesObj).intValue();
                          else if (likesObj instanceof String) try { likes = Integer.parseInt((String) likesObj); } catch(Exception e){}
-                         
                          note.setLikesCount(likes);
-                         note.setDistance(distance);
+                         
+                         // Dimensions
+                         int imgWidth = 0;
+                         int imgHeight = 0;
+                         Object wObj = doc.get("imageWidth");
+                         Object hObj = doc.get("imageHeight");
+                         if (wObj instanceof Number) imgWidth = ((Number) wObj).intValue();
+                         else if (wObj instanceof String) try { imgWidth = Integer.parseInt((String) wObj); } catch(Exception e){}
+                         if (hObj instanceof Number) imgHeight = ((Number) hObj).intValue();
+                         else if (hObj instanceof String) try { imgHeight = Integer.parseInt((String) hObj); } catch(Exception e){}
+                         
+                         note.setImageWidth(imgWidth);
+                         note.setImageHeight(imgHeight);
+                         
+                         // 2. Process Image (Disk Cache Optimization)
+                         String b64 = doc.getString("imageBase64");
+                         if (b64 != null && !b64.isEmpty()) {
+                             try {
+                                 // Check interruption again before heavy IO
+                                 if (Thread.currentThread().isInterrupted()) return;
+
+                                 java.io.File file = new java.io.File(cacheDir, "note_" + doc.getId() + ".jpg");
+                                 
+                                 // Check if exists, if not save it
+                                 if (!file.exists()) {
+                                     byte[] decodedString = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                                     
+                                     // Decode with sampling to reduce memory (Optimization from user)
+                                     android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+                                     options.inJustDecodeBounds = true;
+                                     android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length, options);
+                                     
+                                     // Calculate sample size (max 1200px)
+                                     int maxDim = Math.max(options.outWidth, options.outHeight);
+                                     options.inSampleSize = maxDim > 1200 ? maxDim / 1200 : 1;
+                                     options.inJustDecodeBounds = false;
+                                     options.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;
+                                     
+                                     // Check interruption before decode
+                                     if (Thread.currentThread().isInterrupted()) return;
+                                     
+                                     android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(
+                                         decodedString, 0, decodedString.length, options);
+                                     
+                                     if (bitmap != null) {
+                                         // Save compressed version
+                                         java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
+                                         bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, fos);
+                                         fos.flush();
+                                         fos.close();
+                                         bitmap.recycle(); // Free memory immediately
+                                     }
+                                 }
+                                 note.setLocalImagePath(file.getAbsolutePath());
+                                 note.setImageBase64(null); // Release memory
+                             } catch (Exception e) {
+                                 Log.e(TAG, "Error processing image for " + doc.getId(), e);
+                                 // Fallback
+                                 note.setImageBase64(b64);
+                             } catch (OutOfMemoryError oom) {
+                                 Log.e(TAG, "OOM processing image for " + doc.getId(), oom);
+                                 System.gc();
+                             }
+                         } else {
+                             note.setImageBase64(null);
+                         }
                          
                          fetchedNotes.add(note);
                     }
                     
-                    // 1. SHUFFLE EVERYTHING -> True Randomness
+                    // 3. Shuffle & Optimize
                     Collections.shuffle(fetchedNotes);
-                    
-                    // 2. Removed Manual Insertion - handled by optimizeItemOrder gaps logic
-                    // Also randomly inject some WIDE fidgets (Switch/Gravity) into the source list
-                    // because optimizeItemOrder primarily injects filller (small/tall) fidgets.
                     
                     String[] wideTypes = {"switch", "gravity"};
                     if (fetchedNotes.size() > 10) {
-                         // Insert 1 or 2 wide widgets randomly in the list
                          int pos1 = 5 + (int)(Math.random() * 10);
                          if (pos1 < fetchedNotes.size()) {
                              NearbyNote f = new NearbyNote();
@@ -379,31 +452,31 @@ public class DiscoverTabFragment extends Fragment {
                          }
                     }
                     
-                    // 3. OPTIMIZE LAYOUT TO REDUCE GAPS (Tetris)
                     optimizeItemOrder(fetchedNotes);
-
+                    
                 } catch (Exception e) {
-                    Log.e(TAG, "Error parsing notes in bg", e);
+                    Log.e(TAG, "Error in feed processing", e);
                 }
                 
-                // Back to Main Thread - Check if fragment is still attached
-                if (isAdded() && getActivity() != null) {
+                // Check if interrupted before UI update
+                if (Thread.currentThread().isInterrupted()) return;
+
+                // 4. Update UI
+                if (!isFragmentDestroyed && getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
-                        // 3. Update ViewModel & Adapter
+                         // Safety Check: If fragment is detached or destroyed, do not touch UI
+                         if (isFragmentDestroyed || !isAdded() || getContext() == null) return;
+
                          if (!isNextPage) {
                             feedViewModel.clear();
                         }
                         
-                        // Deduplicate
                         List<NearbyNote> uniqueNotes = new ArrayList<>();
                         for (NearbyNote n : fetchedNotes) {
-                            if (n.getId() == null) continue; 
-                            
-                            // Allow fidgets
-                            if (n.getId().startsWith("fidget")) {
-                                uniqueNotes.add(n);
-                            } else if (!feedViewModel.getLoadedNoteIds().contains(n.getId())) {
-                                feedViewModel.getLoadedNoteIds().add(n.getId());
+                            if (n.getId().startsWith("fidget") || !feedViewModel.getLoadedNoteIds().contains(n.getId())) {
+                                if (!n.getId().startsWith("fidget")) {
+                                    feedViewModel.getLoadedNoteIds().add(n.getId());
+                                }
                                 uniqueNotes.add(n);
                             }
                         }
@@ -411,29 +484,33 @@ public class DiscoverTabFragment extends Fragment {
                         feedViewModel.getAllPinterestNotes().addAll(uniqueNotes);
                         feedViewModel.setDataLoaded(true);
                         
-                        // STOP SHIMMER HERE
                         if (!isNextPage) {
                             pinterestFeedAdapter.setNotes(feedViewModel.getAllPinterestNotes());
+                            // Stop Shimmer ONLY after everything is loaded
                             stopShimmer();
                         } else {
                             pinterestFeedAdapter.addNotes(uniqueNotes);
                         }
                         
                         feedViewModel.setLoading(false);
-                        pinterestFeedAdapter.setLoading(false); // Hide footer
-                        swipeRefresh.setRefreshing(false);
-                        pbLoading.setVisibility(View.GONE); 
+                        pinterestFeedAdapter.setLoading(false);
+                        if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
+                        if (pbLoading != null) pbLoading.setVisibility(View.GONE); 
                     });
                 }
-            }).start();
+            });
+            imageProcessingThread.start();
         })
         .addOnFailureListener(e -> {
+            // Safety check: Don't touch UI if fragment is destroyed or detached
+            if (isFragmentDestroyed || !isAdded()) return;
+            
             Log.e(TAG, "Error loading feed", e);
             feedViewModel.setLoading(false);
-            pinterestFeedAdapter.setLoading(false); // Hide footer
-            swipeRefresh.setRefreshing(false);
-            pbLoading.setVisibility(View.GONE); 
-            if (!isNextPage) stopShimmer(); // Ensure we don't get stuck
+            if (pinterestFeedAdapter != null) pinterestFeedAdapter.setLoading(false);
+            if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
+            if (pbLoading != null) pbLoading.setVisibility(View.GONE); 
+            if (!isNextPage) stopShimmer();
         });
     }
     
@@ -587,6 +664,10 @@ public class DiscoverTabFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        
+        // Mark fragment as destroyed immediately
+        isFragmentDestroyed = true;
+        
         // Clean up to prevent memory leaks
         if (pulseAnimator != null) {
             pulseAnimator.cancel();
@@ -595,6 +676,16 @@ public class DiscoverTabFragment extends Fragment {
         if (rvPinterestFeed != null) {
             rvPinterestFeed.setAdapter(null);
         }
+        
+        // Trim image cache when leaving discover feed
+        com.visiboard.app.utils.ImageCache.getInstance().trimMemory();
+        
+        // Kill zombie thread immediately
+        if (imageProcessingThread != null && imageProcessingThread.isAlive()) {
+            imageProcessingThread.interrupt();
+            imageProcessingThread = null;
+        }
+
         pinterestFeedAdapter = null;
         swipeRefresh = null;
     }
@@ -605,6 +696,8 @@ public class DiscoverTabFragment extends Fragment {
         if (pulseAnimator != null) {
             pulseAnimator.pause();
         }
+        // Trim cache when user navigates away
+        com.visiboard.app.utils.ImageCache.getInstance().trimMemory();
     }
     
     @Override

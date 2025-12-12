@@ -17,6 +17,7 @@ import com.visiboard.app.R;
 import com.visiboard.app.data.NearbyNote;
 import java.util.ArrayList;
 import java.util.List;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -90,7 +91,11 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
              if (id.contains("fluid")) return VIEW_TYPE_FIDGET_FLUID;
              return VIEW_TYPE_FIDGET_BUBBLE; // Default
         }
-        return (note.getImageBase64() != null && !note.getImageBase64().isEmpty()) ? VIEW_TYPE_IMAGE : VIEW_TYPE_TEXT;
+        // Check for image: either has imageBase64 data OR has valid dimensions (indicating image note)
+        boolean hasImage = (note.getImageBase64() != null && !note.getImageBase64().isEmpty()) 
+                        || (note.getImageWidth() > 0 && note.getImageHeight() > 0)
+                        || (note.getLocalImagePath() != null && !note.getLocalImagePath().isEmpty());
+        return hasImage ? VIEW_TYPE_IMAGE : VIEW_TYPE_TEXT;
     }
 
     @NonNull
@@ -305,10 +310,20 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             // Always set placeholder first to handle recycling correctly
             ivNoteImage.setImageResource(R.drawable.placeholder_image);
             
+            String localPath = note.getLocalImagePath();
             String imageBase64 = note.getImageBase64(); 
-            if (imageBase64 != null && !imageBase64.isEmpty()) {
+            
+            // Simple image binding (reverted from progressive/skeleton logic)
+            // The image is expected to be on disk now due to DiscoverTabFragment logic
+            if (localPath != null && !localPath.isEmpty()) {
+                 com.visiboard.app.utils.ImageCache.getInstance()
+                    .loadImageFromPath(localPath, ivNoteImage, R.drawable.placeholder_image);
+            } else if (imageBase64 != null && !imageBase64.isEmpty()) {
+                // Fallback for memory-only images (though rare with new logic)
                 com.visiboard.app.utils.ImageCache.getInstance()
                     .loadBase64Image(note.getId(), imageBase64, ivNoteImage, R.drawable.placeholder_image);
+            } else {
+                ivNoteImage.setImageResource(R.drawable.placeholder_image);
             }
         }
     }

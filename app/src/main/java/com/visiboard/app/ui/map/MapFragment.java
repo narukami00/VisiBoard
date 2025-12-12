@@ -58,6 +58,16 @@ import java.text.SimpleDateFormat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import com.visiboard.app.ui.feed.FollowingAdapter;
+import com.visiboard.app.data.NearbyNote;
+import com.google.android.material.textfield.TextInputEditText;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Collections;
+import android.text.TextWatcher;
+import android.text.Editable;
+import android.widget.ImageButton;
 import org.maplibre.android.camera.CameraUpdateFactory;
 import org.maplibre.android.geometry.LatLng;
 import org.maplibre.android.maps.MapLibreMap;
@@ -409,6 +419,10 @@ public class MapFragment extends Fragment {
         if (imageBase64 != null && !imageBase64.isEmpty()) {
             imageContainer.setVisibility(View.VISIBLE);
             noteImage.setVisibility(View.VISIBLE);
+            // Stop and hide shimmer immediately
+            shimmer.stopShimmer();
+            shimmer.setVisibility(View.GONE);
+            
             // Decode Base64
             try {
                 byte[] decodedString = android.util.Base64.decode(imageBase64, android.util.Base64.DEFAULT);
@@ -697,6 +711,35 @@ public class MapFragment extends Fragment {
                     bottomSheet.setOnUserClickListener(this::showUserInfoDialog);
                     
                     bottomSheet.show(getParentFragmentManager(), "CommentsBottomSheet");
+                });
+
+                // Share button click
+                LinearLayout shareSection = infoWindow.findViewById(R.id.share_section);
+                shareSection.setOnClickListener(v -> {
+                    NearbyNote tempNote = new NearbyNote();
+                    
+                    // Populate tempNote with available data
+                    tempNote.setId(docId);
+                    tempNote.setText(noteText);
+                    tempNote.setLat(position.getLatitude());
+                    tempNote.setLng(position.getLongitude());
+                    tempNote.setTimestamp(timestamp);
+                    
+                    if (currentBase64Wrapper[0] != null) {
+                         tempNote.setImageBase64(currentBase64Wrapper[0]);
+                         // tempNote.setHasImage(true); // Method doesn't exist in NearbyNote
+                    }
+                    
+                    // Parse counts safely
+                    try {
+                        long likes = Long.parseLong(tvLikeCount.getText().toString());
+                        long comments = Long.parseLong(tvCommentCount.getText().toString());
+                        tempNote.setLikesCount((int) likes);
+                        tempNote.setCommentsCount((int) comments);
+                    } catch (Exception e) {}
+
+                    showFollowingDialog(tempNote);
+                    dialog.dismiss();
                 });
             }
         } else {
@@ -1791,5 +1834,244 @@ public class MapFragment extends Fragment {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) enableUserLocation();
             else Toast.makeText(requireContext(), "Permission denied.", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // --- Share Logic ---
+
+    private void showFollowingDialog(@Nullable NearbyNote noteToShare) {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_following, null);
+        
+        RecyclerView rvDialog = dialogView.findViewById(R.id.rv_following_dialog);
+        android.widget.ProgressBar pbLoading = dialogView.findViewById(R.id.pb_loading_following);
+        TextView tvNoData = dialogView.findViewById(R.id.tv_no_following_dialog);
+        ImageButton btnCloseHeader = dialogView.findViewById(R.id.btn_close_header);
+        TextInputEditText etSearch = dialogView.findViewById(R.id.et_search_following);
+        TextView tvTitle = dialogView.findViewById(R.id.dialog_title);
+        
+        // Update Title if sharing
+        if (noteToShare != null && tvTitle != null) {
+            tvTitle.setText("Share Note");
+        }
+        
+        // List to hold all users for filtering
+        final List<UserInfo> allFollowingList = new ArrayList<>();
+        
+        rvDialog.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(getContext()));
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .create();
+
+        FollowingAdapter dialogAdapter = new FollowingAdapter(
+            user -> showUserInfoDialog(user.getUserId()),
+            user -> {
+                if (noteToShare != null) {
+                     sendSharedNote(user, noteToShare);
+                     dialog.dismiss();
+                } else {
+                     showSendMessageDialog(user);
+                }
+            }
+        );
+        rvDialog.setAdapter(dialogAdapter);
+        
+        btnCloseHeader.setOnClickListener(v -> dialog.dismiss());
+        
+        // Search Filter
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String query = s.toString().toLowerCase().trim();
+                if (allFollowingList.isEmpty()) return;
+                
+                List<UserInfo> filtered = new ArrayList<>();
+                for (UserInfo user : allFollowingList) {
+                    if (user.getName() != null && user.getName().toLowerCase().contains(query)) {
+                        filtered.add(user);
+                    }
+                }
+                dialogAdapter.setUsers(filtered);
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+        
+        dialog.show();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        
+        loadFollowingUsers(dialogAdapter, pbLoading, tvNoData, rvDialog, allFollowingList);
+    }
+    
+    private void loadFollowingUsers(FollowingAdapter adapter, View pbLoading, View tvNoData, View rvContent, List<UserInfo> allFollowingList) {
+        pbLoading.setVisibility(View.VISIBLE);
+        tvNoData.setVisibility(View.GONE);
+        rvContent.setVisibility(View.GONE);
+        
+        String userId = auth.getCurrentUser().getUid();
+        
+        db.collection("users").document(userId)
+            .collection("following")
+            .get()
+            .addOnSuccessListener(querySnapshot -> {
+                int totalFollowing = querySnapshot.size();
+                
+                if (totalFollowing == 0) {
+                    pbLoading.setVisibility(View.GONE);
+                    tvNoData.setVisibility(View.VISIBLE);
+                    return;
+                }
+                
+                allFollowingList.clear();
+                pbLoading.setVisibility(View.GONE);
+                rvContent.setVisibility(View.VISIBLE);
+                
+                for (DocumentSnapshot doc : querySnapshot) {
+                    String followedId = doc.getId();
+                    db.collection("users").document(followedId).get()
+                        .addOnSuccessListener(userDoc -> {
+                            if (userDoc.exists()) {
+                                UserInfo user = new UserInfo();
+                                user.setUserId(followedId);
+                                user.setName(userDoc.getString("name"));
+                                user.setProfilePic(userDoc.getString("profilePic"));
+                                user.setLastKnownLocation(userDoc.getString("lastKnownLocation"));
+                                
+                                allFollowingList.add(user);
+                                java.util.Collections.sort(allFollowingList, (u1, u2) -> {
+                                    String n1 = u1.getName() != null ? u1.getName() : "";
+                                    String n2 = u2.getName() != null ? u2.getName() : "";
+                                    return n1.compareToIgnoreCase(n2);
+                                });
+                                adapter.setUsers(new ArrayList<>(allFollowingList));
+                            }
+                        });
+                }
+            })
+            .addOnFailureListener(e -> {
+                pbLoading.setVisibility(View.GONE);
+                tvNoData.setVisibility(View.VISIBLE);
+            });
+    }
+
+    private void sendSharedNote(UserInfo recipient, NearbyNote note) {
+        String fromUserId = auth.getCurrentUser().getUid();
+        
+        db.collection("users").document(fromUserId).get()
+            .addOnSuccessListener(doc -> {
+                String fromUserName = doc.getString("name");
+                String fromUserProfilePic = doc.getString("profilePic");
+                
+                String messageText = "Shared a note: " + (note.getText() != null ? note.getText() : "Image Note");
+                
+                Map<String, Object> message = new HashMap<>();
+                message.put("fromUserId", fromUserId);
+                message.put("fromUserName", fromUserName);
+                message.put("fromUserProfilePic", fromUserProfilePic);
+                message.put("toUserId", recipient.getUserId());
+                message.put("messageText", messageText);
+                message.put("timestamp", System.currentTimeMillis());
+                message.put("anonymous", false);
+                message.put("read", false);
+                message.put("type", "shared_note");
+                
+                // Note Data
+                message.put("noteId", note.getId());
+                message.put("noteText", note.getText());
+                message.put("noteImage", note.getImageBase64());
+                message.put("noteLat", note.getLat());
+                message.put("noteLng", note.getLng());
+                message.put("noteLikes", note.getLikesCount());
+                message.put("noteComments", note.getCommentsCount());
+                
+                db.collection("messages").add(message)
+                    .addOnSuccessListener(docRef -> {
+                        // Create notification
+                        Map<String, Object> notification = new HashMap<>();
+                        notification.put("toUserId", recipient.getUserId());
+                        notification.put("fromUserId", fromUserId);
+                        notification.put("fromUserName", fromUserName);
+                        notification.put("fromUserProfilePic", fromUserProfilePic);
+                        notification.put("type", "shared_note");
+                        notification.put("messageId", docRef.getId());
+                        notification.put("messageText", "Shared a note with you");
+                        notification.put("timestamp", System.currentTimeMillis());
+                        notification.put("read", false);
+                        
+                        notification.put("noteId", note.getId());
+                
+                        db.collection("notifications").add(notification);
+                        
+                        Toast.makeText(requireContext(), "Note shared!", Toast.LENGTH_SHORT).show();
+                    })
+                    .addOnFailureListener(e -> Toast.makeText(requireContext(), "Failed to share note", Toast.LENGTH_SHORT).show());
+            });
+    }
+    
+    private void showSendMessageDialog(UserInfo recipient) {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_send_message, null);
+        TextView tvRecipient = dialogView.findViewById(R.id.tv_recipient_name);
+        TextInputEditText etMessage = dialogView.findViewById(R.id.et_message);
+        android.widget.CheckBox cbAnonymous = dialogView.findViewById(R.id.cb_anonymous);
+        Button btnSend = dialogView.findViewById(R.id.btn_send);
+        Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
+        
+        tvRecipient.setText("To: " + recipient.getName());
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setView(dialogView).create();
+        
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        
+        btnSend.setOnClickListener(v -> {
+            String messageText = etMessage.getText().toString().trim();
+            if (!messageText.isEmpty()) {
+                sendMessage(recipient.getUserId(), messageText, cbAnonymous.isChecked());
+                dialog.dismiss();
+            } else {
+                Toast.makeText(requireContext(), "Please enter a message", Toast.LENGTH_SHORT).show();
+            }
+        });
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+    
+    private void sendMessage(String toUserId, String messageText, boolean anonymous) {
+        String fromUserId = auth.getCurrentUser().getUid();
+        db.collection("users").document(fromUserId).get().addOnSuccessListener(doc -> {
+            String fromUserName = doc.getString("name");
+            String fromUserProfilePic = doc.getString("profilePic");
+            
+            Map<String, Object> message = new HashMap<>();
+            message.put("fromUserId", fromUserId);
+            message.put("fromUserName", anonymous ? "Anonymous" : fromUserName);
+            message.put("fromUserProfilePic", anonymous ? null : fromUserProfilePic);
+            message.put("toUserId", toUserId);
+            message.put("messageText", messageText);
+            message.put("timestamp", System.currentTimeMillis());
+            message.put("anonymous", anonymous);
+            message.put("read", false);
+            
+            db.collection("messages").add(message).addOnSuccessListener(docRef -> {
+                createMessageNotification(toUserId, fromUserId, anonymous ? "Anonymous" : fromUserName, anonymous ? null : fromUserProfilePic, messageText, docRef.getId());
+                Toast.makeText(requireContext(), "Message sent!", Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+    
+    private void createMessageNotification(String toUserId, String fromUserId, String fromUserName, String fromUserProfilePic, String messageText, String messageId) {
+        Map<String, Object> notification = new HashMap<>();
+        notification.put("toUserId", toUserId);
+        notification.put("fromUserId", fromUserId);
+        notification.put("fromUserName", fromUserName);
+        notification.put("fromUserProfilePic", fromUserProfilePic);
+        notification.put("type", "message");
+        notification.put("messageId", messageId);
+        notification.put("messageText", messageText);
+        notification.put("timestamp", System.currentTimeMillis());
+        notification.put("read", false);
+        db.collection("notifications").add(notification);
     }
 }

@@ -141,13 +141,19 @@ public class NotificationTabFragment extends Fragment {
             .whereEqualTo("toUserId", uid)
             .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .addSnapshotListener((snapshots, e) -> {
+                // Critical safety check: Don't process if fragment is destroyed or detached
+                if (!isAdded() || getContext() == null || swipeRefresh == null) {
+                    Log.d(TAG, "Fragment detached, ignoring notification update");
+                    return;
+                }
+                
                 swipeRefresh.setRefreshing(false);
                 if (e != null) {
                     Log.e(TAG, "Listen failed.", e);
                     return;
                 }
                 
-                if (snapshots != null) {
+                if (snapshots != null && notificationAdapter != null) {
                     List<Notification> newNotifications = new ArrayList<>();
                     int unreadCount = 0;
                     
@@ -173,6 +179,11 @@ public class NotificationTabFragment extends Fragment {
     }
     
     private void updateEmptyState() {
+        // Safety check for null views
+        if (tvNoNotifications == null || rvNotifications == null || btnClearAll == null) {
+            return;
+        }
+        
         if (allNotifications.isEmpty()) {
             tvNoNotifications.setVisibility(View.VISIBLE);
             rvNotifications.setVisibility(View.GONE);
@@ -245,6 +256,19 @@ public class NotificationTabFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        if (notificationListener != null) notificationListener.remove();
+        
+        // Remove Firestore listener to prevent memory leaks and crashes
+        if (notificationListener != null) {
+            notificationListener.remove();
+            notificationListener = null;
+        }
+        
+        // Null out views to prevent accessing them after destruction
+        swipeRefresh = null;
+        rvNotifications = null;
+        btnClearAll = null;
+        tvNoNotifications = null;
+        pbLoading = null;
+        notificationAdapter = null;
     }
 }

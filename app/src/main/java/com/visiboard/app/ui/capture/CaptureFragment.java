@@ -740,13 +740,12 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         }
         
         if (ivUserAvatar != null && note.userProfilePic != null && !note.userProfilePic.isEmpty()) {
-            try {
-                byte[] bytes = Base64.decode(note.userProfilePic, Base64.DEFAULT);
-                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                ivUserAvatar.setImageBitmap(bitmap);
-            } catch (Exception e) {
-                Log.e(TAG, "Error loading profile pic", e);
-            }
+            com.visiboard.app.utils.ImageCache.getInstance().loadBase64Image(
+                "user_" + note.userId, 
+                note.userProfilePic, 
+                ivUserAvatar, 
+                R.drawable.ic_profile_placeholder
+            );
         }
     }
     
@@ -886,13 +885,12 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         });
         
         if (note.userProfilePic != null && !note.userProfilePic.isEmpty()) {
-            try {
-                byte[] bytes = Base64.decode(note.userProfilePic, Base64.DEFAULT);
-                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                ivUserAvatar.setImageBitmap(bitmap);
-            } catch (Exception e) {
-                Log.e(TAG, "Error loading profile pic", e);
-            }
+            com.visiboard.app.utils.ImageCache.getInstance().loadBase64Image(
+                "user_" + note.userId, 
+                note.userProfilePic, 
+                ivUserAvatar, 
+                R.drawable.ic_profile_placeholder
+            );
         }
         
         int screenWidth = arOverlay.getWidth();

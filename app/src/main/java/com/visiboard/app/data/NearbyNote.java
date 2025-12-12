@@ -81,4 +81,8 @@ public class NearbyNote {
 
     public int getImageHeight() { return imageHeight; }
     public void setImageHeight(int imageHeight) { this.imageHeight = imageHeight; }
+
+    private String localImagePath;
+    public String getLocalImagePath() { return localImagePath; }
+    public void setLocalImagePath(String localImagePath) { this.localImagePath = localImagePath; }
 }

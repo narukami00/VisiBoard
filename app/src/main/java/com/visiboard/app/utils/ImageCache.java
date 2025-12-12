@@ -75,12 +75,67 @@ public class ImageCache {
                 options.inJustDecodeBounds = true;
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
                 
-                // Calculate inSampleSize
-                options.inSampleSize = calculateInSampleSize(options, 200, 200);
+                // Calculate inSampleSize (increased from 200 to 800 for better quality)
+                options.inSampleSize = calculateInSampleSize(options, 800, 800);
                 options.inJustDecodeBounds = false;
                 options.inPreferredConfig = Bitmap.Config.RGB_565; // Use less memory
                 
                 final Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                
+                if (bitmap != null) {
+                    // Add to cache
+                    memoryCache.put(key, bitmap);
+                    
+                    // Set on UI thread
+                    ImageView view = imageViewRef.get();
+                    if (view != null) {
+                        view.post(() -> {
+                            if (imageViewRef.get() != null) {
+                                view.setImageBitmap(bitmap);
+                            }
+                        });
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+    
+    public void loadImageFromPath(String path, ImageView imageView, int placeholderResId) {
+        if (path == null || path.isEmpty()) {
+            imageView.setImageResource(placeholderResId);
+            return;
+        }
+        
+        // Use path as key
+        final String key = path;
+        
+        // Check memory cache
+        Bitmap cachedBitmap = memoryCache.get(key);
+        if (cachedBitmap != null) {
+            imageView.setImageBitmap(cachedBitmap);
+            return;
+        }
+        
+        // Set placeholder
+        imageView.setImageResource(placeholderResId);
+        
+        // Load asynchronously
+        final WeakReference<ImageView> imageViewRef = new WeakReference<>(imageView);
+        executor.execute(() -> {
+            try {
+                // Decode from file with downsampling
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(path, options);
+                
+                // Calculate inSampleSize (increased from 200 to 800 for better quality)
+                options.inSampleSize = calculateInSampleSize(options, 800, 800);
+                options.inJustDecodeBounds = false;
+                options.inPreferredConfig = Bitmap.Config.RGB_565; 
+                
+                final Bitmap bitmap = BitmapFactory.decodeFile(path, options);
                 
                 if (bitmap != null) {
                     // Add to cache
@@ -118,6 +173,15 @@ public class ImageCache {
         }
         
         return inSampleSize;
+    }
+    
+    public int getCacheSize() {
+        return memoryCache.size();
+    }
+    
+    public void shutdown() {
+        executor.shutdown();
+        clearCache();
     }
     
     public void clearCache() {

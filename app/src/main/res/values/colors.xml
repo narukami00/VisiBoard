@@ -50,4 +50,10 @@
     <!-- Divider -->
     <color name="divider">#E1E8ED</color>
     <color name="divider_dark">#4A5568</color>
+
+    
+    <!-- Shimmer -->
+    <color name="shimmer_base">#E0E0E0</color>
+    <color name="shimmer_highlight">#F5F5F5</color>
+    <color name="shimmer_container_bg">@color/white</color>
 </resources>
