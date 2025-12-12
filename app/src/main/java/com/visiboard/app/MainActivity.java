@@ -16,6 +16,8 @@ import android.util.Log;
 
 public class MainActivity extends AppCompatActivity {
 
+    private boolean doubleBackToExitPressedOnce = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -38,6 +40,37 @@ public class MainActivity extends AppCompatActivity {
                 (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
         NavController navController = navHostFragment.getNavController();
         NavigationUI.setupWithNavController(bottomNav, navController);
+
+        // Custom Back Press Logic
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                int currentId = 0;
+                if (navController.getCurrentDestination() != null) {
+                    currentId = navController.getCurrentDestination().getId();
+                }
+
+                if (currentId == R.id.mapFragment || 
+                    currentId == R.id.captureFragment || 
+                    currentId == R.id.feedFragment || 
+                    currentId == R.id.profileFragment) {
+                    
+                    if (doubleBackToExitPressedOnce) {
+                        showExitConfirmationDialog();
+                        return;
+                    }
+
+                    doubleBackToExitPressedOnce = true;
+                    android.widget.Toast.makeText(MainActivity.this, "Press back again to exit", android.widget.Toast.LENGTH_SHORT).show();
+
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> doubleBackToExitPressedOnce = false, 2000);
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                    setEnabled(true);
+                }
+            }
+        });
 
         // Asynchronously recalculate total likes to ensure consistency
         recalculateTotalLikes();
@@ -71,6 +104,39 @@ public class MainActivity extends AppCompatActivity {
                     .addOnFailureListener(e -> Log.e("MainActivity", "Error updating total likes", e));
             })
             .addOnFailureListener(e -> Log.e("MainActivity", "Error calculating total likes", e));
+    }
+
+
+
+    private void showExitConfirmationDialog() {
+        android.view.View dialogView = android.view.LayoutInflater.from(this).inflate(R.layout.dialog_confirmation, null);
+        android.widget.TextView title = dialogView.findViewById(R.id.dialog_title);
+        android.widget.TextView message = dialogView.findViewById(R.id.dialog_message);
+        android.widget.Button btnConfirm = dialogView.findViewById(R.id.btn_confirm);
+        android.widget.Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
+        
+        title.setText("Exit App");
+        message.setText("Do you really want to exit the app?");
+        btnConfirm.setText("Yes");
+        btnCancel.setText("No");
+
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setView(dialogView)
+                .setCancelable(false)
+                .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        btnConfirm.setOnClickListener(v -> {
+            dialog.dismiss();
+            finishAffinity(); // completely exit the app
+        });
+
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        
+        dialog.show();
     }
 
 }

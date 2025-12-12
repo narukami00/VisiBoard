@@ -58,6 +58,8 @@ public class SignupActivity extends AppCompatActivity {
         profilePic.setOnClickListener(v -> pickImage());
 
         signupBtn.setOnClickListener(v -> registerUser());
+        
+        findViewById(R.id.goToLogin).setOnClickListener(v -> finish());
     }
 
     private void pickImage() {

@@ -55,6 +55,7 @@ public class ProfileFragment extends Fragment {
     private TextView tvFollowersCount, tvFollowingCount;
     private ImageView ivTierIcon, logoutIcon;
     private ProgressBar progressMilestone;
+    private android.view.View loadingOverlay;
     private RecyclerView rvRecentNotes;
     private RecentNotesAdapter recentNotesAdapter;
     private SwipeRefreshLayout swipeRefreshLayout;
@@ -101,7 +102,9 @@ public class ProfileFragment extends Fragment {
         progressMilestone = view.findViewById(R.id.progress_milestone);
         logoutIcon = view.findViewById(R.id.logout_icon);
         swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
+        swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
         locationContainer = view.findViewById(R.id.location_container);
+        loadingOverlay = view.findViewById(R.id.loading_overlay);
 
         swipeRefreshLayout.setOnRefreshListener(this::refreshData);
         swipeRefreshLayout.setColorSchemeResources(R.color.primary);
@@ -122,6 +125,7 @@ public class ProfileFragment extends Fragment {
         
         // Only load data if needed
         if (viewModel.shouldRefreshData()) {
+            loadingOverlay.setVisibility(View.VISIBLE);
             loadUserData();
             loadUserStats();
             updateUserLocation();
@@ -335,8 +339,10 @@ public class ProfileFragment extends Fragment {
                             .addOnSuccessListener(doc -> {
                                 if (isAdded()) updateUserDataFromDoc(doc);
                             })
-                            .addOnFailureListener(err -> 
-                                    Log.e("ProfileFragment", "Error loading user data: " + err.getMessage()));
+                            .addOnFailureListener(err -> {
+                                    Log.e("ProfileFragment", "Error loading user data: " + err.getMessage());
+                                    loadingOverlay.setVisibility(View.GONE);
+                            });
                 });
     }
 
@@ -369,6 +375,15 @@ public class ProfileFragment extends Fragment {
 
         String pic = doc.getString("profilePic");
         if (pic != null && !pic.isEmpty()) viewModel.setProfilePicBase64(pic);
+        
+        // Hide loading progress if basic user data is loaded, 
+        // though stats might still be loading. Best to wait for stats?
+        // Let's keep it visible until stats load too, or hide here if stats are independent.
+        // The user wants "profile fragment is loading".
+        // We'll trust the stats loader to hide it finally, or do it here if stats aren't called?
+        // Actually loadUserStats is called right after loadUserData in refresh logic.
+        // But in initial load, they are called sequentially.
+        // Let's hide it in the final callback of loadUserStats.
     }
 
     private void loadUserStats() {
@@ -529,7 +544,9 @@ public class ProfileFragment extends Fragment {
                         tvMilestoneProgress.setText(progressText);
                         
                         viewModel.setDataLoaded(true);
+                        viewModel.setDataLoaded(true);
                         swipeRefreshLayout.setRefreshing(false);
+                        loadingOverlay.setVisibility(View.GONE);
 
                         // Update tier in database in background
                         db.collection("users").document(uid)
@@ -542,11 +559,13 @@ public class ProfileFragment extends Fragment {
                         Log.e("ProfileFragment", "Error loading stats: " + e.getMessage());
                         safeToast("Failed to load statistics");
                         swipeRefreshLayout.setRefreshing(false);
+                        loadingOverlay.setVisibility(View.GONE);
                     });
             })
             .addOnFailureListener(e -> {
                 Log.e("ProfileFragment", "Error loading user info: " + e.getMessage());
                 swipeRefreshLayout.setRefreshing(false);
+                loadingOverlay.setVisibility(View.GONE);
             });
     }
 
