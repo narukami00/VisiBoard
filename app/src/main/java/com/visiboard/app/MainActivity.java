@@ -17,6 +17,8 @@ import android.util.Log;
 public class MainActivity extends AppCompatActivity {
 
     private boolean doubleBackToExitPressedOnce = false;
+    private com.visiboard.app.utils.NetworkMonitor networkMonitor;
+    private com.google.android.material.snackbar.Snackbar noInternetSnackbar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,14 +34,30 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // Check initial network connectivity
+        if (!com.visiboard.app.utils.NetworkMonitor.isConnected(this)) {
+            showNoInternetDialog();
+            return;
+        }
 
         setContentView(R.layout.activity_main);
+        
+        // Setup network monitoring
+        setupNetworkMonitoring();
 
-        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
         NavHostFragment navHostFragment =
                 (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
         NavController navController = navHostFragment.getNavController();
-        NavigationUI.setupWithNavController(bottomNav, navController);
+        
+        // Setup navigation - supports both bottom nav and navigation rail for tablets
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+        com.google.android.material.navigationrail.NavigationRailView navRail = findViewById(R.id.nav_rail);
+        
+        if (bottomNav != null && bottomNav.getVisibility() == android.view.View.VISIBLE) {
+            NavigationUI.setupWithNavController(bottomNav, navController);
+        } else if (navRail != null) {
+            NavigationUI.setupWithNavController(navRail, navController);
+        }
 
         // Custom Back Press Logic
         getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
@@ -137,6 +155,98 @@ public class MainActivity extends AppCompatActivity {
         btnCancel.setOnClickListener(v -> dialog.dismiss());
         
         dialog.show();
+    }
+    
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        
+        // Handle orientation or screen size changes
+        // Trim image cache to free memory for layout changes
+        com.visiboard.app.utils.ImageCache.getInstance().trimMemory();
+    }
+    
+    @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode);
+        
+        // Reduce memory usage in multi-window mode
+        if (isInMultiWindowMode) {
+            com.visiboard.app.utils.ImageCache.getInstance().trimMemory();
+        }
+    }
+    
+    private void setupNetworkMonitoring() {
+        networkMonitor = new com.visiboard.app.utils.NetworkMonitor(this);
+        networkMonitor.observe(this, isConnected -> {
+            if (isConnected != null) {
+                if (isConnected) {
+                    hideNoInternetSnackbar();
+                } else {
+                    showNoInternetSnackbar();
+                }
+            }
+        });
+    }
+    
+    private void showNoInternetDialog() {
+        android.view.View dialogView = getLayoutInflater().inflate(R.layout.dialog_no_internet, null);
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        dialogView.findViewById(R.id.btn_retry).setOnClickListener(v -> {
+            if (com.visiboard.app.utils.NetworkMonitor.isConnected(this)) {
+                dialog.dismiss();
+                recreate(); // Restart activity
+            } else {
+                android.widget.Toast.makeText(this, "Still no internet connection", android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        dialogView.findViewById(R.id.btn_exit).setOnClickListener(v -> {
+            finishAffinity();
+        });
+        
+        dialog.show();
+    }
+    
+    private void showNoInternetSnackbar() {
+        if (noInternetSnackbar != null && noInternetSnackbar.isShown()) {
+            return;
+        }
+        
+        android.view.View rootView = findViewById(android.R.id.content);
+        if (rootView != null) {
+            noInternetSnackbar = com.google.android.material.snackbar.Snackbar
+                .make(rootView, "No internet connection", com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE)
+                .setAction("Retry", v -> {
+                    if (com.visiboard.app.utils.NetworkMonitor.isConnected(this)) {
+                        hideNoInternetSnackbar();
+                    }
+                })
+                .setActionTextColor(getResources().getColor(R.color.accent));
+            
+            noInternetSnackbar.show();
+        }
+    }
+    
+    private void hideNoInternetSnackbar() {
+        if (noInternetSnackbar != null && noInternetSnackbar.isShown()) {
+            noInternetSnackbar.dismiss();
+        }
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        hideNoInternetSnackbar();
     }
 
 }

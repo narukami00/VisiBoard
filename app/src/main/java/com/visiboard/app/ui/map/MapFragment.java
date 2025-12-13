@@ -83,6 +83,20 @@ import org.maplibre.android.style.sources.GeoJsonSource;
 import org.maplibre.geojson.Feature;
 import org.maplibre.geojson.FeatureCollection;
 import org.maplibre.geojson.Point;
+import org.maplibre.geojson.LineString;
+import org.maplibre.android.style.layers.LineLayer;
+import static org.maplibre.android.style.layers.PropertyFactory.lineColor;
+import static org.maplibre.android.style.layers.PropertyFactory.lineWidth;
+import static org.maplibre.android.style.layers.PropertyFactory.lineCap;
+import static org.maplibre.android.style.layers.PropertyFactory.lineJoin;
+import org.maplibre.android.style.layers.Property;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.Call;
+import okhttp3.Callback;
+import java.io.IOException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -156,6 +170,19 @@ public class MapFragment extends Fragment {
     
     private String currentMapStyle;
     private double currentZoom = 15.0;
+
+    // Navigation State
+    private boolean isNavigatingToNote = false;
+    private LatLng navigationDestination;
+    private GeoJsonSource navigationRouteSource;
+    private View cvNavigationOverlay;
+    private TextView tvNavDistance, tvNavTime;
+    private ImageView btnStopNav;
+    private Location lastRouteFetchLocation;
+    private static final float MIN_DISTANCE_FOR_RECALCULATION = 20.0f; // meters
+    private OkHttpClient httpClient = new OkHttpClient();
+    private static final String NAVIGATION_SOURCE_ID = "navigation-source";
+    private static final String NAVIGATION_LAYER_ID = "navigation-layer";
     
 
 
@@ -192,6 +219,14 @@ public class MapFragment extends Fragment {
         tvLegendName = view.findViewById(R.id.tv_legend_name);
         llLegendContent = view.findViewById(R.id.ll_legend_content);
         pbLegendLoading = view.findViewById(R.id.pb_legend_loading);
+
+        // Navigation UI
+        cvNavigationOverlay = view.findViewById(R.id.cv_navigation_overlay);
+        tvNavDistance = view.findViewById(R.id.tv_nav_distance);
+        tvNavTime = view.findViewById(R.id.tv_nav_time);
+        btnStopNav = view.findViewById(R.id.btn_stop_nav);
+
+        btnStopNav.setOnClickListener(v -> stopNavigation());
         
         // FAB Menu Interaction
         fabMenu.setOnClickListener(v -> toggleFabMenu());
@@ -255,6 +290,7 @@ public class MapFragment extends Fragment {
                     
                     // Initialize Heatmap Source
                     initializeHeatmapSource(style);
+                    initializeNavigationLayer(style);
                     
                     handleNavigationArguments();
                     
@@ -741,6 +777,13 @@ public class MapFragment extends Fragment {
                     showFollowingDialog(tempNote);
                     dialog.dismiss();
                 });
+
+                // Travel button click
+                LinearLayout travelSection = infoWindow.findViewById(R.id.travel_section);
+                travelSection.setOnClickListener(v -> {
+                    startNavigation(position);
+                    dialog.dismiss();
+                });
             }
         } else {
             // Offline mode - hide interaction section and show default owner info
@@ -1057,6 +1100,7 @@ public class MapFragment extends Fragment {
                     android.location.Location location = locationResult.getLastLocation();
                     LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
                     updateUserLocationMarker(latLng);
+                    updateNavigation(location);
                 }
             }
         };
@@ -2073,5 +2117,180 @@ public class MapFragment extends Fragment {
         notification.put("timestamp", System.currentTimeMillis());
         notification.put("read", false);
         db.collection("notifications").add(notification);
+    }
+
+
+    // --- Navigation Feature Methods ---
+
+    private void startNavigation(LatLng destination) {
+        isNavigatingToNote = true;
+        navigationDestination = destination;
+        cvNavigationOverlay.setVisibility(View.VISIBLE);
+        tvNavDistance.setText("Calculating...");
+        tvNavTime.setText("");
+        
+        // Hide legend widget to prevent overlap
+        if (cvLegendWidget != null) {
+            cvLegendWidget.setVisibility(View.GONE);
+        }
+        
+        // Fetch initial route
+        if (lastRouteFetchLocation != null) {
+            fetchRoute(new LatLng(lastRouteFetchLocation.getLatitude(), lastRouteFetchLocation.getLongitude()), destination);
+        } else {
+            // Try to get current location
+            if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                    if (location != null) {
+                        lastRouteFetchLocation = location;
+                        fetchRoute(new LatLng(location.getLatitude(), location.getLongitude()), destination);
+                    } else {
+                        Toast.makeText(requireContext(), "Waiting for location...", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        }
+    }
+
+    private void stopNavigation() {
+        isNavigatingToNote = false;
+        navigationDestination = null;
+        cvNavigationOverlay.setVisibility(View.GONE);
+        
+        // Restore legend widget
+        if (cvLegendWidget != null) {
+            cvLegendWidget.setVisibility(View.VISIBLE);
+        }
+        
+        // Clear route from map
+        if (navigationRouteSource != null) {
+             navigationRouteSource.setGeoJson(FeatureCollection.fromFeatures(new Feature[]{}));
+        }
+    }
+
+    private void fetchRoute(LatLng start, LatLng end) {
+        if (!isNavigatingToNote) return;
+
+        String apiKey = "4034ef4942f146d6b43fd4a9871cfdc3"; // Using existing key from style URL
+        String url = "https://api.geoapify.com/v1/routing?waypoints=" +
+                start.getLatitude() + "," + start.getLongitude() + "|" +
+                end.getLatitude() + "," + end.getLongitude() +
+                "&mode=walk&apiKey=" + apiKey;
+
+        Request request = new Request.Builder()
+                .url(url)
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> 
+                        Toast.makeText(requireContext(), "Failed to fetch route", Toast.LENGTH_SHORT).show()
+                    );
+                }
+            }
+
+            @Override
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                if (response.isSuccessful() && response.body() != null) {
+                    try {
+                        String jsonResponse = response.body().string();
+                        JSONObject json = new JSONObject(jsonResponse);
+                        JSONArray features = json.getJSONArray("features");
+                        
+                        if (features.length() > 0) {
+                            JSONObject feature = features.getJSONObject(0);
+                            JSONObject properties = feature.getJSONObject("properties");
+                            
+                            // Get distance and time
+                            int distanceMeters = properties.getInt("distance");
+                            int timeSeconds = properties.getInt("time"); // Note: Geoapify returns time in seconds usually
+                            // Actually documentation says 'time' is in seconds.
+                            
+                            // Get Geometry
+                            JSONObject geometry = feature.getJSONObject("geometry");
+                            final Feature routeFeature = Feature.fromJson(feature.toString());
+
+                            if (getActivity() != null) {
+                                getActivity().runOnUiThread(() -> {
+                                    if (!isNavigatingToNote) return;
+
+                                    // Update Overlay
+                                    if (distanceMeters < 1000) {
+                                        tvNavDistance.setText(distanceMeters + " m");
+                                    } else {
+                                        tvNavDistance.setText(String.format(java.util.Locale.US, "%.1f km", distanceMeters / 1000.0));
+                                    }
+                                    
+                                    int minutes = timeSeconds / 60;
+                                    if (minutes < 1) tvNavTime.setText("< 1 min");
+                                    else if (minutes > 60) {
+                                        int hours = minutes / 60;
+                                        int mins = minutes % 60;
+                                        tvNavTime.setText(hours + " hr " + mins + " min");
+                                    } else {
+                                        tvNavTime.setText(minutes + " min");
+                                    }
+                                    
+                                    // Update Map Layer
+                                    if (navigationRouteSource != null) {
+                                        navigationRouteSource.setGeoJson(routeFeature);
+                                    } else {
+                                        // Initialize source if somehow null (should be done in onMapReady)
+                                        Log.e(TAG, "Navigation source is null");
+                                    }
+                                });
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
+    }
+
+    private void updateNavigation(Location location) {
+        if (!isNavigatingToNote || navigationDestination == null) return;
+        
+        // Check distance threshold to strictly limit API calls
+        if (lastRouteFetchLocation == null || location.distanceTo(lastRouteFetchLocation) > MIN_DISTANCE_FOR_RECALCULATION) {
+            lastRouteFetchLocation = location;
+            // Also check if we are very close to destination to stop? 
+            // Optional: Auto-stop if < 10 meters. 
+            float distToDest = location.distanceTo(new Location("dest") {{ 
+                setLatitude(navigationDestination.getLatitude()); 
+                setLongitude(navigationDestination.getLongitude()); 
+            }});
+            
+            if (distToDest < 15) { // 15 meters arrival threshold
+                Toast.makeText(requireContext(), "You have arrived!", Toast.LENGTH_LONG).show();
+                stopNavigation();
+                return;
+            }
+            
+            fetchRoute(new LatLng(location.getLatitude(), location.getLongitude()), navigationDestination);
+        }
+    }
+
+    private void initializeNavigationLayer(@NonNull Style style) {
+        // Source
+        if (style.getSource(NAVIGATION_SOURCE_ID) == null) {
+            navigationRouteSource = new GeoJsonSource(NAVIGATION_SOURCE_ID);
+            style.addSource(navigationRouteSource);
+        }
+
+        // Layer
+        if (style.getLayer(NAVIGATION_LAYER_ID) == null) {
+            LineLayer lineLayer = new LineLayer(NAVIGATION_LAYER_ID, NAVIGATION_SOURCE_ID);
+            lineLayer.setProperties(
+                    lineColor(android.graphics.Color.parseColor("#4A90E2")), // Blue path
+                    lineWidth(5f),
+                    lineCap(Property.LINE_CAP_ROUND),
+                    lineJoin(Property.LINE_JOIN_ROUND)
+            );
+            style.addLayer(lineLayer);
+        }
     }
 }

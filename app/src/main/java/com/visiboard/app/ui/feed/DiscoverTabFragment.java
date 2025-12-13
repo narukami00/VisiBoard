@@ -198,7 +198,9 @@ public class DiscoverTabFragment extends Fragment {
             }
         });
         
-        StaggeredGridLayoutManager layoutManager = new StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL);
+        // Responsive grid columns based on screen size
+        int columnCount = getResources().getInteger(R.integer.feed_grid_columns);
+        StaggeredGridLayoutManager layoutManager = new StaggeredGridLayoutManager(columnCount, StaggeredGridLayoutManager.VERTICAL);
         layoutManager.setGapStrategy(StaggeredGridLayoutManager.GAP_HANDLING_NONE);
         rvPinterestFeed.setLayoutManager(layoutManager);
         rvPinterestFeed.setAdapter(pinterestFeedAdapter);

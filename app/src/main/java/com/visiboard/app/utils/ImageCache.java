@@ -19,8 +19,8 @@ public class ImageCache {
     private ImageCache() {
         // Get max available VM memory
         final int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
-        // Use 1/8th of available memory for cache
-        final int cacheSize = maxMemory / 8;
+        // Use 1/8th of available memory for cache, but cap at 32MB for better multi-window support
+        final int cacheSize = Math.min(maxMemory / 8, 32 * 1024);
         
         memoryCache = new LruCache<String, Bitmap>(cacheSize) {
             @Override
@@ -29,8 +29,10 @@ public class ImageCache {
             }
         };
         
-        // Thread pool for image decoding (4 threads)
-        executor = Executors.newFixedThreadPool(4);
+        // Thread pool for image decoding (adaptive based on cores)
+        int processors = Runtime.getRuntime().availableProcessors();
+        int threadCount = Math.max(2, Math.min(processors, 4));
+        executor = Executors.newFixedThreadPool(threadCount);
     }
     
     public static synchronized ImageCache getInstance() {

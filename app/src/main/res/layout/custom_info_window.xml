@@ -276,6 +276,36 @@
 
                 </LinearLayout>
 
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="24dp"
+                    android:background="@color/divider"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/travel_section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <ImageView
+                        android:id="@+id/btn_travel"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_navigation"
+                        app:tint="@color/primary"/>
+
+                </LinearLayout>
+
             </LinearLayout>
 
 
