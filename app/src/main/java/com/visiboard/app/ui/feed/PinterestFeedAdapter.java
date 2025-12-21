@@ -30,7 +30,7 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
     private static final int VIEW_TYPE_FIDGET_GRAVITY = 13;
     private static final int VIEW_TYPE_FIDGET_LAVA = 14;
     private static final int VIEW_TYPE_FIDGET_TRACE = 15;
-    private static final int VIEW_TYPE_FIDGET_STRINGS = 16;
+    // VIEW_TYPE_FIDGET_STRINGS removed
     private static final int VIEW_TYPE_FIDGET_FLUID = 17;
 
     private List<NearbyNote> notes = new ArrayList<>();
@@ -87,7 +87,7 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
              if (id.contains("gravity")) return VIEW_TYPE_FIDGET_GRAVITY;
              if (id.contains("lava")) return VIEW_TYPE_FIDGET_LAVA;
              if (id.contains("trace")) return VIEW_TYPE_FIDGET_TRACE;
-             if (id.contains("strings")) return VIEW_TYPE_FIDGET_STRINGS;
+             // Strings removed
              if (id.contains("fluid")) return VIEW_TYPE_FIDGET_FLUID;
              return VIEW_TYPE_FIDGET_BUBBLE; // Default
         }
@@ -122,9 +122,6 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
         } else if (viewType == VIEW_TYPE_FIDGET_TRACE) {
              View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_trace, parent, false);
             return new SimpleFidgetViewHolder(view);
-        } else if (viewType == VIEW_TYPE_FIDGET_STRINGS) {
-             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_strings, parent, false);
-            return new SimpleFidgetViewHolder(view);
         } else if (viewType == VIEW_TYPE_TEXT) {
             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_pinterest_text, parent, false);
             return new TextNoteViewHolder(view);
@@ -157,11 +154,18 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             boolean isFullSpan = false;
             int type = getItemViewType(position);
             
-            // Fidgets and Text Notes spanning logic
-            if (type >= 10) { // All Fidgets
-                isFullSpan = false; // Let them fit in columns mostly, except maybe gravity?
-                if (type == VIEW_TYPE_FIDGET_GRAVITY) isFullSpan = true;
-                // Lava, Trace, Knob, Bubble, Spinner are single span fillers
+            // Randomize Fidgets Theme when binding
+            if (type >= 10) {
+                 if (type == VIEW_TYPE_FIDGET_GRAVITY) {
+                     isFullSpan = true;
+                     if (holder instanceof FidgetGravityViewHolder) {
+                        ((FidgetGravityViewHolder)holder).randomize();
+                     }
+                 } else if (holder instanceof SimpleFidgetViewHolder) {
+                     ((SimpleFidgetViewHolder)holder).randomize(type);
+                 } else if (holder instanceof FidgetBubbleViewHolder) {
+                     ((FidgetBubbleViewHolder)holder).randomize();
+                 }
             } else if (type == VIEW_TYPE_IMAGE) {
                 // Wide images
                 NearbyNote n = notes.get(position);
@@ -224,6 +228,18 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
                 }
             }
         }
+        
+        void randomize() {
+            // Can randomize bubble color tints here if I want, for now maybe just reset states?
+            // Bubbles are usually standard colors in the layout.
+            // Let's leave them for now unless requested specifically.
+            // Actually user asked for "randomization", let's tint the background slightly?
+            // Using setBackgroundColor on the CardView?
+             if (itemView instanceof androidx.cardview.widget.CardView) {
+                 int[] bgs = {0xFFEEEEEE, 0xFFE3F2FD, 0xFFF3E5F5, 0xFFE0F2F1};
+                 ((androidx.cardview.widget.CardView)itemView).setCardBackgroundColor(bgs[(int)(Math.random() * bgs.length)]);
+             }
+        }
     }
     
     class FidgetSpinnerViewHolder extends RecyclerView.ViewHolder {
@@ -254,14 +270,63 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
     }
     
     // Switch VH removed
-
     
     class FidgetGravityViewHolder extends RecyclerView.ViewHolder {
-        FidgetGravityViewHolder(View itemView) { super(itemView); }
+        com.visiboard.app.ui.feed.widgets.GravityBallView gravityView;
+        FidgetGravityViewHolder(View itemView) { 
+            super(itemView); 
+            // We need to find the view. The layout likely has it with an ID or it's the root content in a wrapper
+            // Assuming the GravityBallView is inside the layout item_fidget_gravity.xml with id gravity_view or similar
+            // Let's look up by type if ID is unknown or find by known ID if I knew it.
+            // I'll check item_fidget_gravity.xml later if this fails, but for now safe assumption:
+            View v = itemView.findViewById(R.id.gravity_ball_view); 
+            if (v instanceof com.visiboard.app.ui.feed.widgets.GravityBallView) {
+                gravityView = (com.visiboard.app.ui.feed.widgets.GravityBallView) v;
+            }
+        }
+        
+        void randomize() {
+            if (gravityView != null) gravityView.randomizeTheme();
+        }
     }
     
     class SimpleFidgetViewHolder extends RecyclerView.ViewHolder {
-        SimpleFidgetViewHolder(View itemView) { super(itemView); }
+        View internalView;
+        
+        SimpleFidgetViewHolder(View itemView) { 
+            super(itemView); 
+            // Identify the internal custom view
+            if (itemView instanceof ViewGroup) {
+                ViewGroup vg = (ViewGroup) itemView;
+                if (vg.getChildCount() > 0) {
+                     // Inside the card view usually?
+                     // Let's search recursively? Or just finding by ID is safer.
+                     // The layouts have specific IDs usually.
+                     View v1 = itemView.findViewById(R.id.neon_trace_view);
+                     if (v1 != null) internalView = v1;
+                     
+                     View v2 = itemView.findViewById(R.id.lava_lamp_view);
+                     if (v2 != null) internalView = v2;
+                     
+                     // Strings removed
+                     
+                     View v4 = itemView.findViewById(R.id.fluid_view);
+                     if (v4 != null) internalView = v4;
+                }
+            }
+        }
+        
+        void randomize(int type) {
+            if (internalView == null) return;
+            
+            if (internalView instanceof com.visiboard.app.ui.feed.widgets.LavaLampView) {
+                ((com.visiboard.app.ui.feed.widgets.LavaLampView) internalView).randomizeTheme();
+            } else if (internalView instanceof com.visiboard.app.ui.feed.widgets.NeonTraceView) {
+                ((com.visiboard.app.ui.feed.widgets.NeonTraceView) internalView).randomizeTheme();
+            } else if (internalView instanceof com.visiboard.app.ui.feed.widgets.FluidCellView) {
+                ((com.visiboard.app.ui.feed.widgets.FluidCellView) internalView).randomizeTheme();
+            }
+        }
     }
 
     class ImageNoteViewHolder extends RecyclerView.ViewHolder {

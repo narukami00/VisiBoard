@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="36dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="?attr/selectableItemBackground">
+
+    <!-- Timeline Column -->
+    <LinearLayout
+        android:layout_width="32dp"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:layout_marginStart="8dp">
+
+        <!-- Top Line -->
+        <View
+            android:id="@+id/line_top"
+            android:layout_width="2dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/text_secondary"/>
+
+        <!-- Node -->
+        <ImageView
+            android:id="@+id/iv_node"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:src="@drawable/shape_timeline_node"
+            android:layout_marginTop="-1dp"
+            android:layout_marginBottom="-1dp"/>
+
+        <!-- Bottom Line -->
+        <View
+            android:id="@+id/line_bottom"
+            android:layout_width="2dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/text_secondary"/>
+    </LinearLayout>
+
+    <!-- Text Label -->
+    <TextView
+        android:id="@+id/tv_filter_option"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:text="Option"
+        android:textSize="14sp"
+        android:fontFamily="@font/poppins_medium"
+        android:textColor="@color/text_secondary"/>
+
+</LinearLayout>

@@ -28,6 +28,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
+        android:background="@color/card_background"
+        android:elevation="8dp"
+        app:labelVisibilityMode="unlabeled"
+        app:itemIconSize="32dp"
+        app:itemIconTint="@color/color_nav_item"
+        app:itemActiveIndicatorStyle="@null"
+        app:itemRippleColor="@color/primaryLight"
         app:menu="@menu/bottom_nav_menu" />
 
 </RelativeLayout>

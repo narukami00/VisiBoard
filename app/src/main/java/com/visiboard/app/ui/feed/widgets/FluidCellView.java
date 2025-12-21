@@ -66,6 +66,12 @@ public class FluidCellView extends View {
         });
     }
 
+    public void randomizeTheme() {
+        palette = PALETTES[random.nextInt(PALETTES.length)];
+        ripples.clear();
+        invalidate();
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();

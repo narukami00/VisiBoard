@@ -56,4 +56,7 @@
     <color name="shimmer_base">#E0E0E0</color>
     <color name="shimmer_highlight">#F5F5F5</color>
     <color name="shimmer_container_bg">@color/white</color>
+    
+    <!-- Custom -->
+    <color name="time_travel_btn_bg">#F2FFFFFF</color>
 </resources>

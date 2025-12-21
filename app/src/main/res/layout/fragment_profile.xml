@@ -218,6 +218,37 @@
                     android:background="@color/divider"
                     android:layout_gravity="center_vertical" />
 
+                <!-- Likes -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/tv_total_likes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Likes"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="30dp"
+                    android:background="@color/divider"
+                    android:layout_gravity="center_vertical" />
+
                 <!-- Followers -->
                 <LinearLayout
                     android:id="@+id/followers_section"
@@ -300,7 +331,7 @@
                     android:layout_height="wrap_content"
                     android:padding="20dp">
                     
-                    <!-- Background Pattern/Gradient could go here -->
+                    <!-- Background Pattern -->
                     
                     <ImageView
                         android:id="@+id/iv_tier_icon"
@@ -356,10 +387,9 @@
                             android:textSize="11sp"
                             android:textColor="@color/text_tertiary" />
                     </LinearLayout>
-                    
-                    <!-- Total Likes floating badge -->
+                   
                     <TextView
-                        android:id="@+id/tv_total_likes"
+                        android:id="@+id/tv_card_likes_badge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentTop="true"
@@ -375,6 +405,18 @@
                         android:visibility="gone"/>
 
                 </RelativeLayout>
+                
+                <!-- Shine Effect Overlay -->
+                <ImageView
+                    android:id="@+id/shine_view"
+                    android:layout_width="100dp"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/bg_shine_gradient"
+                    android:rotation="20"
+                    android:translationX="-200dp"
+                    android:alpha="0.3"
+                    android:layout_gravity="center_vertical"/>
+                    
             </androidx.cardview.widget.CardView>
 
             <!-- 6. Recent Notes Section -->
@@ -392,7 +434,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/milestone_card" />
 
-            <!-- We'll use a horizontal or vertical list here. Let's stick to Vertical for now but styled -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rv_recent_notes"
                 android:layout_width="match_parent"
@@ -418,20 +459,17 @@
                 android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/tv_recent_header" />
 
-            <TextView
-                android:id="@+id/tv_no_recent_notes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="No recent activity to show"
-                android:textSize="14sp"
-                android:textColor="@color/text_secondary"
-                android:fontFamily="@font/poppins_regular"
-                android:gravity="center"
-                android:padding="32dp"
-                android:visibility="gone"
-                app:layout_constraintTop_toBottomOf="@id/tv_recent_header" />
+            <!-- Skeleton Loading View -->
+            <include 
+                android:id="@+id/skeleton_view"
+                layout="@layout/skeleton_profile"
+                android:visibility="visible"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"/>
 
-            <!-- Loading Overlay -->
+            <!-- Loading Overlay (Keep as backup or remove if skeleton is sufficient) -->
             <FrameLayout
                 android:id="@+id/loading_overlay"
                 android:layout_width="match_parent"

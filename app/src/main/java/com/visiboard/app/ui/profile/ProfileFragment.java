@@ -1,5 +1,7 @@
 package com.visiboard.app.ui.profile;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -15,6 +17,8 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
@@ -53,9 +57,9 @@ public class ProfileFragment extends Fragment {
     private CircleImageView profileImage;
     private TextView nameText, emailText, tvTotalNotes, tvTotalLikes, tvNoRecentNotes, tvMilestone, tvMilestoneProgress, tvLocation;
     private TextView tvFollowersCount, tvFollowingCount;
-    private ImageView ivTierIcon, logoutIcon;
+    private ImageView ivTierIcon, logoutIcon, shineView;
     private ProgressBar progressMilestone;
-    private android.view.View loadingOverlay;
+    private android.view.View loadingOverlay, skeletonView;
     private RecyclerView rvRecentNotes;
     private RecentNotesAdapter recentNotesAdapter;
     private SwipeRefreshLayout swipeRefreshLayout;
@@ -102,9 +106,10 @@ public class ProfileFragment extends Fragment {
         progressMilestone = view.findViewById(R.id.progress_milestone);
         logoutIcon = view.findViewById(R.id.logout_icon);
         swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
-        swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
         locationContainer = view.findViewById(R.id.location_container);
         loadingOverlay = view.findViewById(R.id.loading_overlay);
+        skeletonView = view.findViewById(R.id.skeleton_view);
+        shineView = view.findViewById(R.id.shine_view);
 
         swipeRefreshLayout.setOnRefreshListener(this::refreshData);
         swipeRefreshLayout.setColorSchemeResources(R.color.primary);
@@ -120,15 +125,19 @@ public class ProfileFragment extends Fragment {
             navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
         });
         rvRecentNotes.setAdapter(recentNotesAdapter);
+        
+        startShineAnimation();
 
         setupViewModelObservers();
         
         // Only load data if needed
         if (viewModel.shouldRefreshData()) {
-            loadingOverlay.setVisibility(View.VISIBLE);
             loadUserData();
             loadUserStats();
             updateUserLocation();
+        } else {
+            // If data is already there, hide skeleton immediately
+            hideSkeleton();
         }
 
         profileImage.setOnClickListener(v -> pickImage());
@@ -198,6 +207,35 @@ public class ProfileFragment extends Fragment {
         return view;
     }
     
+    private void startShineAnimation() {
+        if (shineView == null) return;
+        
+        // Wait for layout to get width if needed, or just animate translate
+        shineView.post(() -> {
+            ValueAnimator animator = ValueAnimator.ofFloat(-200f, 1000f);
+            animator.setDuration(3000);
+            animator.setRepeatCount(ValueAnimator.INFINITE);
+            animator.setRepeatMode(ValueAnimator.RESTART);
+            animator.setInterpolator(new LinearInterpolator());
+            animator.addUpdateListener(animation -> {
+                if (shineView != null) {
+                    shineView.setTranslationX((float) animation.getAnimatedValue());
+                }
+            });
+            animator.start();
+        });
+    }
+
+    private void hideSkeleton() {
+        if (skeletonView != null && skeletonView.getVisibility() == View.VISIBLE) {
+            skeletonView.animate()
+                .alpha(0f)
+                .setDuration(400)
+                .withEndAction(() -> skeletonView.setVisibility(View.GONE))
+                .start();
+        }
+    }
+    
     private void setupViewModelObservers() {
         viewModel.getUserName().observe(getViewLifecycleOwner(), name -> {
             if (name != null) nameText.setText(name);
@@ -225,6 +263,7 @@ public class ProfileFragment extends Fragment {
         });
         
         viewModel.getTotalLikes().observe(getViewLifecycleOwner(), total -> {
+            Log.d("ProfileFragment", "Observer: Total Likes updated to: " + total);
             if (total != null) tvTotalLikes.setText(String.valueOf(total));
         });
         
@@ -241,11 +280,25 @@ public class ProfileFragment extends Fragment {
         });
         
         viewModel.getTierProgress().observe(getViewLifecycleOwner(), progress -> {
-            if (progress != null) progressMilestone.setProgress(progress);
+            if (progress != null) {
+                // Determine if we need to animate (e.g. initial load or change)
+                if (progressMilestone.getProgress() != progress) {
+                    ObjectAnimator animation = ObjectAnimator.ofInt(progressMilestone, "progress", progress);
+                    animation.setDuration(1200); // 1.2 second smooth fill
+                    animation.setInterpolator(new AccelerateDecelerateInterpolator());
+                    animation.start();
+                } else {
+                    progressMilestone.setProgress(progress);
+                }
+            }
         });
         
         viewModel.getTierMax().observe(getViewLifecycleOwner(), max -> {
             if (max != null) progressMilestone.setMax(max);
+        });
+        
+        viewModel.getTierProgressText().observe(getViewLifecycleOwner(), text -> {
+            if (text != null) tvMilestoneProgress.setText(text);
         });
         
         viewModel.getTierIconRes().observe(getViewLifecycleOwner(), res -> {
@@ -261,6 +314,9 @@ public class ProfileFragment extends Fragment {
                 rvRecentNotes.setVisibility(View.GONE);
                 tvNoRecentNotes.setVisibility(View.VISIBLE);
             }
+            // Once we have notes (or empty state), we assume main processing is done
+             // In refresh, we might want to hide skeleton earlier if user data loads fast
+             hideSkeleton();
         });
     }
 
@@ -475,28 +531,29 @@ public class ProfileFragment extends Fragment {
                                 
                                 recentNotes.add(note);
                             }
-                            
-                            // Calculate total likes - Optimized: Read from user profile instead of summing manually
-                            // totalLikes is now fetched from user doc
                         }
-                        
-                        // Use stored totalLikes from User Document
-                        Long storedLikes = currentUserDoc.getLong("totalLikes");
-                        if (storedLikes != null) {
-                            totalLikes = storedLikes.intValue();
-                        } else {
-                            // Only sum manually if field is missing (fallback)
-                            if (totalLikes == 0 && !querySnapshot.isEmpty()) {
-                                for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot.getDocuments()) {
-                                    Long likeCount = doc.getLong("likeCount");
-                                    if (likeCount == null) likeCount = doc.getLong("likesCount");
-                                    if (likeCount != null) {
-                                        totalLikes += likeCount.intValue();
-                                    }
+                            
+                        // Calculate total likes from notes (Source of Truth)
+                        if (!querySnapshot.isEmpty()) {
+                            for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                                Long likeCount = doc.getLong("likeCount");
+                                if (likeCount == null) likeCount = doc.getLong("likesCount");
+                                if (likeCount != null) {
+                                    totalLikes += likeCount.intValue();
                                 }
                             }
                         }
                         
+                        // Self-healing: Update the user's totalLikes to match the actual calculated value
+                        // This fixes the drift between the cached value and actual sum
+                        if (currentUserDoc.getLong("totalLikes") == null || currentUserDoc.getLong("totalLikes") != totalLikes) {
+                            Log.d("ProfileFragment", "Self-healing totalLikes. Calculated: " + totalLikes + ", Stored: " + currentUserDoc.getLong("totalLikes"));
+                            db.collection("users").document(uid)
+                                .update("totalLikes", totalLikes)
+                                .addOnFailureListener(e -> Log.e("ProfileFragment", "Failed to sync totalLikes: " + e.getMessage()));
+                        }
+
+                        Log.d("ProfileFragment", "Setting VM Total Likes to: " + totalLikes);
                         viewModel.setTotalLikes(totalLikes);
                         viewModel.setRecentNotes(recentNotes);
 
@@ -541,7 +598,7 @@ public class ProfileFragment extends Fragment {
                         viewModel.setTierIconRes(iconRes);
                         viewModel.setTierMax(maxProgress);
                         viewModel.setTierProgress(currentProgress);
-                        tvMilestoneProgress.setText(progressText);
+                        viewModel.setTierProgressText(progressText);
                         
                         viewModel.setDataLoaded(true);
                         viewModel.setDataLoaded(true);
@@ -725,48 +782,36 @@ public class ProfileFragment extends Fragment {
         TextView currentTierName = dialogView.findViewById(R.id.dialog_current_tier_name);
         TextView currentLikes = dialogView.findViewById(R.id.dialog_current_likes);
         
-        // Get current stats
-        FirebaseUser user = auth.getCurrentUser();
-        if (user != null) {
-            String uid = user.getUid();
-            db.collection("notes")
-                    .whereEqualTo("userId", uid)
-                    .get()
-                    .addOnSuccessListener(querySnapshot -> {
-                        int totalLikes = 0;
-                        for (var doc : querySnapshot.getDocuments()) {
-                            Long likeCount = doc.getLong("likeCount");
-                            if (likeCount != null) totalLikes += likeCount.intValue();
-                        }
-                        
-                        // Determine current tier
-                        int tierIndex = -1;
-                        for (int i = 0; i < milestones.length; i++) {
-                            if (totalLikes >= milestones[i]) tierIndex = i;
-                        }
-                        
-                        if (tierIndex >= 0) {
-                            currentTierName.setText(milestoneTiers[tierIndex]);
-                            currentTierIcon.setImageResource(milestoneIcons[tierIndex]);
-                        } else {
-                            currentTierName.setText("None");
-                            currentTierIcon.setImageResource(R.drawable.ic_default_tier);
-                        }
-                        currentLikes.setText(totalLikes + " Likes");
-                        
-                        // Setup rank items
-                        setupRankItem(dialogView, R.id.rank_bronze, "Bronze", milestones[0], 
-                                R.drawable.ic_bronze, totalLikes >= milestones[0]);
-                        setupRankItem(dialogView, R.id.rank_silver, "Silver", milestones[1],
-                                R.drawable.ic_silver, totalLikes >= milestones[1]);
-                        setupRankItem(dialogView, R.id.rank_gold, "Gold", milestones[2],
-                                R.drawable.ic_gold, totalLikes >= milestones[2]);
-                        setupRankItem(dialogView, R.id.rank_diamond, "Diamond", milestones[3],
-                                R.drawable.ic_diamond, totalLikes >= milestones[3]);
-                        setupRankItem(dialogView, R.id.rank_platinum, "Platinum", milestones[4],
-                                R.drawable.ic_platinum, totalLikes >= milestones[4]);
-                    });
+        // Get current stats from ViewModel (Source of Truth)
+        Integer cachedLikes = viewModel.getTotalLikes().getValue();
+        int totalLikes = cachedLikes != null ? cachedLikes : 0;
+        
+        // Determine current tier
+        int tierIndex = -1;
+        for (int i = 0; i < milestones.length; i++) {
+            if (totalLikes >= milestones[i]) tierIndex = i;
         }
+        
+        if (tierIndex >= 0) {
+            currentTierName.setText(milestoneTiers[tierIndex]);
+            currentTierIcon.setImageResource(milestoneIcons[tierIndex]);
+        } else {
+            currentTierName.setText("None");
+            currentTierIcon.setImageResource(R.drawable.ic_default_tier);
+        }
+        currentLikes.setText(totalLikes + " Likes");
+        
+        // Setup rank items synchronously
+        setupRankItem(dialogView, R.id.rank_bronze, "Bronze", milestones[0], 
+                R.drawable.ic_bronze, totalLikes >= milestones[0]);
+        setupRankItem(dialogView, R.id.rank_silver, "Silver", milestones[1],
+                R.drawable.ic_silver, totalLikes >= milestones[1]);
+        setupRankItem(dialogView, R.id.rank_gold, "Gold", milestones[2],
+                R.drawable.ic_gold, totalLikes >= milestones[2]);
+        setupRankItem(dialogView, R.id.rank_diamond, "Diamond", milestones[3],
+                R.drawable.ic_diamond, totalLikes >= milestones[3]);
+        setupRankItem(dialogView, R.id.rank_platinum, "Platinum", milestones[4],
+                R.drawable.ic_platinum, totalLikes >= milestones[4]);
         
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
                 .setView(dialogView)

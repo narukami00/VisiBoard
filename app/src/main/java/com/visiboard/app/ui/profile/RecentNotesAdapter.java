@@ -6,13 +6,16 @@ import android.util.Base64;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.visiboard.app.R;
 import com.visiboard.app.data.NearbyNote;
-import de.hdodenhof.circleimageview.CircleImageView;
+import com.visiboard.app.utils.ImageCache;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,6 +23,7 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
 
     private List<NearbyNote> notes = new ArrayList<>();
     private OnNoteClickListener listener;
+    private int lastPosition = -1;
 
     public interface OnNoteClickListener {
         void onNoteClick(NearbyNote note);
@@ -41,6 +45,7 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
     public void onBindViewHolder(@NonNull NoteViewHolder holder, int position) {
         NearbyNote note = notes.get(position);
         holder.bind(note);
+        setAnimation(holder.itemView, position);
     }
 
     @Override
@@ -48,9 +53,49 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
         return notes.size();
     }
 
-    public void setNotes(List<NearbyNote> notes) {
-        this.notes = notes;
-        notifyDataSetChanged();
+    public void setNotes(List<NearbyNote> newNotes) {
+        DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new NoteDiffCallback(this.notes, newNotes));
+        this.notes.clear();
+        this.notes.addAll(newNotes);
+        diffResult.dispatchUpdatesTo(this);
+    }
+    
+    private void setAnimation(View viewToAnimate, int position) {
+        if (position > lastPosition) {
+            Animation animation = AnimationUtils.loadAnimation(viewToAnimate.getContext(), android.R.anim.fade_in);
+            viewToAnimate.startAnimation(animation);
+            lastPosition = position;
+        }
+    }
+
+    static class NoteDiffCallback extends DiffUtil.Callback {
+        private final List<NearbyNote> oldList;
+        private final List<NearbyNote> newList;
+
+        public NoteDiffCallback(List<NearbyNote> oldList, List<NearbyNote> newList) {
+            this.oldList = oldList;
+            this.newList = newList;
+        }
+
+        @Override
+        public int getOldListSize() { return oldList.size(); }
+
+        @Override
+        public int getNewListSize() { return newList.size(); }
+
+        @Override
+        public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+            return oldList.get(oldItemPosition).getId().equals(newList.get(newItemPosition).getId());
+        }
+
+        @Override
+        public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+            NearbyNote oldNote = oldList.get(oldItemPosition);
+            NearbyNote newNote = newList.get(newItemPosition);
+            return oldNote.getLikesCount() == newNote.getLikesCount() &&
+                   oldNote.getCommentsCount() == newNote.getCommentsCount() &&
+                   oldNote.getText().equals(newNote.getText());
+        }
     }
 
     class NoteViewHolder extends RecyclerView.ViewHolder {
@@ -83,17 +128,11 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
             tvLikesCount.setText(String.valueOf(note.getLikesCount()));
             tvCommentsCount.setText(String.valueOf(note.getCommentsCount()));
             
-            // Handle Image
+            // Handle Image using ImageCache for background loading
             if (note.getImageBase64() != null && !note.getImageBase64().isEmpty()) {
                 ivNoteImage.setVisibility(View.VISIBLE);
-                try {
-                    byte[] decodedString = Base64.decode(note.getImageBase64(), Base64.DEFAULT);
-                    Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
-                    ivNoteImage.setImageBitmap(decodedByte);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    ivNoteImage.setVisibility(View.GONE);
-                }
+                // Use note ID as cache key for uniqueness
+                ImageCache.getInstance().loadBase64Image(note.getId(), note.getImageBase64(), ivNoteImage, R.drawable.ic_image);
             } else {
                 ivNoteImage.setVisibility(View.GONE);
             }

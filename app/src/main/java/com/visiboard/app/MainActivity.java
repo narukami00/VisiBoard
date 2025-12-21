@@ -59,6 +59,12 @@ public class MainActivity extends AppCompatActivity {
             NavigationUI.setupWithNavController(navRail, navController);
         }
 
+        // Listener for Profile Icon State
+        navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
+            // Delay slightly to allow bottom nav to update its selected state
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> updateProfileIconState(), 100);
+        });
+
         // Custom Back Press Logic
         getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
             @Override
@@ -92,6 +98,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Asynchronously recalculate total likes to ensure consistency
         recalculateTotalLikes();
+        updateBottomNavProfileIcon();
     }
 
     private void recalculateTotalLikes() {
@@ -247,6 +254,123 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         hideNoInternetSnackbar();
+    }
+
+    private void updateBottomNavProfileIcon() {
+        // 1. Try to load from local cache first for immediate display
+        java.io.File cacheFile = new java.io.File(getFilesDir(), "profile_icon.png");
+        if (cacheFile.exists()) {
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeFile(cacheFile.getAbsolutePath());
+            setProfileIcon(bitmap);
+        }
+
+        // 2. Fetch latest from Firebase
+        FirebaseAuth auth = FirebaseAuth.getInstance();
+        if (auth.getCurrentUser() == null) return;
+
+        FirebaseFirestore.getInstance().collection("users")
+                .document(auth.getCurrentUser().getUid())
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        String base64Image = documentSnapshot.getString("profilePic");
+                        if (base64Image != null && !base64Image.isEmpty()) {
+                            try {
+                                byte[] decodedString = android.util.Base64.decode(base64Image, android.util.Base64.DEFAULT);
+                                android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                                
+                                // Save to cache
+                                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(cacheFile)) {
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, fos);
+                                } catch (java.io.IOException e) {
+                                    e.printStackTrace();
+                                }
+
+                                // Update UI
+                                setProfileIcon(bitmap);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                });
+    }
+
+    private android.graphics.drawable.Drawable profileIconNormal;
+    private android.graphics.drawable.Drawable profileIconSelected;
+
+    private void setProfileIcon(android.graphics.Bitmap bitmap) {
+        if (bitmap == null) return;
+        try {
+            // Crop to square first
+            int width = bitmap.getWidth();
+            int height = bitmap.getHeight();
+            int newDimension = Math.min(width, height);
+            int x = (width - newDimension) / 2;
+            int y = (height - newDimension) / 2;
+            
+            android.graphics.Bitmap squareBitmap = android.graphics.Bitmap.createBitmap(bitmap, x, y, newDimension, newDimension);
+
+            // Create Normal Drawable (No Border)
+            androidx.core.graphics.drawable.RoundedBitmapDrawable normalDrawable = 
+                androidx.core.graphics.drawable.RoundedBitmapDrawableFactory.create(getResources(), squareBitmap);
+            normalDrawable.setCircular(true);
+            normalDrawable.setCornerRadius(Math.max(squareBitmap.getWidth(), squareBitmap.getHeight()) / 2.0f);
+            this.profileIconNormal = normalDrawable;
+
+            // Create Selected Drawable (Purple Border)
+            android.graphics.Bitmap borderedBitmap = createCircularBitmapWithBorder(squareBitmap);
+            androidx.core.graphics.drawable.RoundedBitmapDrawable selectedDrawable = 
+                androidx.core.graphics.drawable.RoundedBitmapDrawableFactory.create(getResources(), borderedBitmap);
+            selectedDrawable.setCircular(true);
+            selectedDrawable.setCornerRadius(Math.max(borderedBitmap.getWidth(), borderedBitmap.getHeight()) / 2.0f);
+            this.profileIconSelected = selectedDrawable;
+            
+            // Initial Set
+            updateProfileIconState();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private android.graphics.Bitmap createCircularBitmapWithBorder(android.graphics.Bitmap srcBitmap) {
+        int width = srcBitmap.getWidth();
+        int height = srcBitmap.getHeight();
+        
+        // Create a new mutable bitmap
+        android.graphics.Bitmap output = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(output);
+        
+        // Draw the source bitmap
+        canvas.drawBitmap(srcBitmap, 0, 0, null);
+        
+        // Draw Border
+        android.graphics.Paint paint = new android.graphics.Paint();
+        paint.setAntiAlias(true);
+        paint.setStyle(android.graphics.Paint.Style.STROKE);
+        paint.setColor(getResources().getColor(R.color.primary, null)); // Purple
+        paint.setStrokeWidth(width * 0.08f); // 8% of width as border size
+        
+        float radius = Math.min(width, height) / 2f;
+        canvas.drawCircle(width / 2f, height / 2f, radius - paint.getStrokeWidth()/2, paint);
+        
+        return output;
+    }
+
+    private void updateProfileIconState() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+        if (bottomNav == null || profileIconNormal == null || profileIconSelected == null) return;
+        
+        android.view.MenuItem profileItem = bottomNav.getMenu().findItem(R.id.profileFragment);
+        if (profileItem != null) {
+            int currentId = bottomNav.getSelectedItemId();
+            if (currentId == R.id.profileFragment) {
+                profileItem.setIcon(profileIconSelected);
+            } else {
+                profileItem.setIcon(profileIconNormal);
+            }
+        }
     }
 
 }

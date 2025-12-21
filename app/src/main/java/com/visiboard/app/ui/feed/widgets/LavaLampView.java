@@ -78,6 +78,17 @@ public class LavaLampView extends View {
             performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
         });
     }
+    
+    public void randomizeTheme() {
+        // Pick random base color index
+        currentColorIndex = random.nextInt(colors.length);
+        paint.setColor(colors[currentColorIndex]);
+        // Randomize blob positions slightly too for uniqueness
+        for (Blob blob : blobs) {
+             blob.x = random.nextFloat() * getWidth();
+        }
+        invalidate();
+    }
 
     @Override
     protected void onAttachedToWindow() {

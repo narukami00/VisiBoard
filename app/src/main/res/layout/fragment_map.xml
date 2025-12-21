@@ -9,7 +9,10 @@
     <org.maplibre.android.maps.MapView
         android:id="@+id/mapView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent" >
+
+
+    </org.maplibre.android.maps.MapView>
 
     <!-- Navigation Overlay (Top Center) -->
     <androidx.cardview.widget.CardView
@@ -76,93 +79,138 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- Legend Widget (Top Left) -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cv_legend_widget"
+    <!-- Top Left Container for Legend and Filter -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:orientation="vertical"
         android:layout_gravity="top|start"
         android:layout_margin="16dp"
-        app:cardCornerRadius="25dp"
-        app:cardElevation="8dp"
-        app:cardBackgroundColor="@color/card_background"
-        android:visibility="visible">
+        android:elevation="10dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
-        <RelativeLayout
+        <!-- Legend Widget -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cv_legend_widget"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:padding="8dp"
-            android:minWidth="140dp">
+            app:cardCornerRadius="25dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@color/card_background"
+            android:visibility="visible">
 
-            <ProgressBar
-                android:id="@+id/pb_legend_loading"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_centerInParent="true"
-                android:indeterminateTint="@color/accent"/>
-
-            <LinearLayout
-                android:id="@+id/ll_legend_content"
+            <RelativeLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:visibility="invisible"> <!-- Hidden until loaded -->
+                android:padding="8dp"
+                android:minWidth="140dp">
 
-                <RelativeLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content">
-                    
-                    <de.hdodenhof.circleimageview.CircleImageView
-                        android:id="@+id/iv_legend_avatar"
-                        android:layout_width="50dp"
-                        android:layout_height="50dp"
-                        android:src="@drawable/ic_profile"
-                        app:civ_border_width="2dp"
-                        app:civ_border_color="#FFD700"/>
-
-                    <ImageView
-                        android:id="@+id/iv_crown"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:layout_alignTop="@id/iv_legend_avatar"
-                        android:layout_alignEnd="@id/iv_legend_avatar"
-                        android:layout_marginTop="-6dp"
-                        android:layout_marginEnd="0dp"
-                        android:elevation="4dp"
-                        android:src="@drawable/ic_crown" />
-                </RelativeLayout>
+                <ProgressBar
+                    android:id="@+id/pb_legend_loading"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_centerInParent="true"
+                    android:indeterminateTint="@color/accent"/>
 
                 <LinearLayout
+                    android:id="@+id/ll_legend_content"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginStart="12dp">
-                    
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="TOP LEGEND"
-                        android:textColor="@color/accent"
-                        android:textSize="10sp"
-                        android:fontFamily="@font/poppins_bold"
-                        android:letterSpacing="0.05"/>
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:visibility="invisible"> <!-- Hidden until loaded -->
 
-                    <TextView
-                        android:id="@+id/tv_legend_name"
+                    <RelativeLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content">
+                        
+                        <de.hdodenhof.circleimageview.CircleImageView
+                            android:id="@+id/iv_legend_avatar"
+                            android:layout_width="50dp"
+                            android:layout_height="50dp"
+                            android:src="@drawable/ic_profile"
+                            app:civ_border_width="2dp"
+                            app:civ_border_color="#FFD700"/>
+
+                        <ImageView
+                            android:id="@+id/iv_crown"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_alignTop="@id/iv_legend_avatar"
+                            android:layout_alignEnd="@id/iv_legend_avatar"
+                            android:layout_marginTop="-6dp"
+                            android:layout_marginEnd="0dp"
+                            android:elevation="4dp"
+                            android:src="@drawable/ic_crown" />
+                    </RelativeLayout>
+
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Loading..."
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp"
-                        android:fontFamily="@font/poppins_bold"
-                        android:maxLines="1"
-                        android:ellipsize="end"
-                        android:maxWidth="100dp"/>
+                        android:orientation="vertical"
+                        android:layout_marginStart="12dp">
+                        
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="TOP LEGEND"
+                            android:textColor="@color/accent"
+                            android:textSize="10sp"
+                            android:fontFamily="@font/poppins_bold"
+                            android:letterSpacing="0.05"/>
+
+                        <TextView
+                            android:id="@+id/tv_legend_name"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Loading..."
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:fontFamily="@font/poppins_bold"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:maxWidth="100dp"/>
+                    </LinearLayout>
                 </LinearLayout>
-            </LinearLayout>
-        </RelativeLayout>
-    </androidx.cardview.widget.CardView>
+            </RelativeLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Time Travel Button (Below Legend) -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginStart="4dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@android:color/transparent">
+            
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_time_travel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="All Time"
+                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:fontFamily="@font/poppins_medium"
+                android:textAllCaps="false"
+                app:icon="@drawable/ic_history"
+                app:iconTint="@color/accent"
+                app:iconSize="18dp"
+                android:background="@drawable/bg_btn_time_travel"
+                app:backgroundTint="@null"
+                app:elevation="4dp"
+                android:visibility="visible"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"/>
+        </androidx.cardview.widget.CardView>
+
+    </LinearLayout>
+
+    <!-- Time Travel Button (Top End) -->
 
     <!-- FAB Menu Group -->
     <LinearLayout
@@ -189,6 +237,26 @@
             android:fontFamily="@font/poppins_medium"
             android:textAllCaps="false"
             app:icon="@drawable/ic_refresh"
+            app:iconTint="@color/text_primary"
+            app:iconSize="18dp"
+            app:backgroundTint="@color/card_background"
+            app:cornerRadius="20dp"
+            app:elevation="6dp"
+            android:stateListAnimator="@null"
+            android:visibility="invisible"
+            tools:visibility="visible"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/fab_satellite"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginBottom="12dp"
+            android:text="Satellite"
+            android:textSize="12sp"
+            android:textColor="@color/text_primary"
+            android:fontFamily="@font/poppins_medium"
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_satellite"
             app:iconTint="@color/text_primary"
             app:iconSize="18dp"
             app:backgroundTint="@color/card_background"

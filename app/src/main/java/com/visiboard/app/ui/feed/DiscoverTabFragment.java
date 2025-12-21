@@ -41,7 +41,7 @@ import java.util.List;
 public class DiscoverTabFragment extends Fragment {
 
     private static final String TAG = "DiscoverTabFragment";
-    private static final int FETCH_SIZE = 50; 
+    private static final int FETCH_SIZE = 10; 
     private static final int PAGE_SIZE = 5;
 
     private SwipeRefreshLayout swipeRefresh;
@@ -283,7 +283,7 @@ public class DiscoverTabFragment extends Fragment {
         Query query = db.collection("notes")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .orderBy("__name__", Query.Direction.DESCENDING) // Keep stability
-            .limit(50);
+            .limit(FETCH_SIZE);
             
         if (isNextPage && feedViewModel.getLastVisible() != null) {
             query = query.startAfter(feedViewModel.getLastVisible());
@@ -308,12 +308,7 @@ public class DiscoverTabFragment extends Fragment {
                 return;
             }
             
-            feedViewModel.setLastVisible(queryDocumentSnapshots.getDocuments().get(queryDocumentSnapshots.size() - 1));
-            // Ensure we strictly check fetched size
-            if (queryDocumentSnapshots.size() < 50) {
-                feedViewModel.setLastPage(true);
-                pinterestFeedAdapter.setShowEndMessage(true);
-            }
+
             
             // Safety Check: If Fragment is destroyed/detached, don't start background processing
             if (isFragmentDestroyed || !isAdded() || getContext() == null) {
@@ -445,8 +440,8 @@ public class DiscoverTabFragment extends Fragment {
                     Collections.shuffle(fetchedNotes);
                     
                     String[] wideTypes = {"switch", "gravity"};
-                    if (fetchedNotes.size() > 10) {
-                         int pos1 = 5 + (int)(Math.random() * 10);
+                    if (fetchedNotes.size() > 5) {
+                         int pos1 = 2 + (int)(Math.random() * 5);
                          if (pos1 < fetchedNotes.size()) {
                              NearbyNote f = new NearbyNote();
                              f.setId("fidget_" + wideTypes[(int)(Math.random() * wideTypes.length)] + "_" + System.nanoTime());
@@ -473,6 +468,14 @@ public class DiscoverTabFragment extends Fragment {
                             feedViewModel.clear();
                         }
                         
+                        // Update Pagination State (Must be done AFTER clear())
+                        feedViewModel.setLastVisible(queryDocumentSnapshots.getDocuments().get(queryDocumentSnapshots.size() - 1));
+                        
+                        if (queryDocumentSnapshots.size() < FETCH_SIZE) {
+                            feedViewModel.setLastPage(true);
+                            pinterestFeedAdapter.setShowEndMessage(true);
+                        }
+
                         List<NearbyNote> uniqueNotes = new ArrayList<>();
                         for (NearbyNote n : fetchedNotes) {
                             if (n.getId().startsWith("fidget") || !feedViewModel.getLoadedNoteIds().contains(n.getId())) {
@@ -492,6 +495,13 @@ public class DiscoverTabFragment extends Fragment {
                             stopShimmer();
                         } else {
                             pinterestFeedAdapter.addNotes(uniqueNotes);
+                            
+                            // CRITICAL FIX: If we fetched notes but they were all duplicates (uniqueNotes is empty),
+                            // the user sees nothing and cannot scroll to trigger the next load. We must auto-load the next page.
+                            if (uniqueNotes.isEmpty() && !feedViewModel.isLastPage()) {
+                                Log.d(TAG, "All fetched notes were duplicates. Auto-loading next page...");
+                                loadPinterestFeed(true);
+                            }
                         }
                         
                         feedViewModel.setLoading(false);
@@ -526,7 +536,7 @@ public class DiscoverTabFragment extends Fragment {
         
         // Fidget Types config (Strings replaces Knob)
         String[] tallFidgets = {"lava"}; // 3:4
-        String[] squareFidgets = {"trace", "strings", "bubble"}; // 1:1
+        String[] squareFidgets = {"trace", "bubble"}; // 1:1
         String[] wideFidgets = {"switch", "gravity"}; // Full Span
         String[] smallFidgets = {"spinner"}; // Small/Squat
         

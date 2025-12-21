@@ -55,7 +55,7 @@ public class GravityBallView extends View implements SensorEventListener {
         }
     }
     
-    public void randomizeColor() {
+    public void randomizeTheme() {
         float[] hsv = new float[3];
         hsv[0] = (float) (Math.random() * 360);
         hsv[1] = 0.8f + (float)(Math.random() * 0.2f); // High Saturation
@@ -67,7 +67,7 @@ public class GravityBallView extends View implements SensorEventListener {
     @Override
     public boolean onTouchEvent(android.view.MotionEvent event) {
         if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
-            randomizeColor();
+            randomizeTheme();
             performClick();
             return true;
         }

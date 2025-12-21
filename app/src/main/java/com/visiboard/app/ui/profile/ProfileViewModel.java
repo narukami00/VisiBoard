@@ -24,6 +24,7 @@ public class ProfileViewModel extends ViewModel {
     private MutableLiveData<Integer> tierProgress = new MutableLiveData<>();
     private MutableLiveData<Integer> tierMax = new MutableLiveData<>();
     private MutableLiveData<Integer> tierIconRes = new MutableLiveData<>();
+    private MutableLiveData<String> tierProgressText = new MutableLiveData<>();
     
     private MutableLiveData<List<NearbyNote>> recentNotes = new MutableLiveData<>();
     
@@ -44,6 +45,7 @@ public class ProfileViewModel extends ViewModel {
     public LiveData<Integer> getTierProgress() { return tierProgress; }
     public LiveData<Integer> getTierMax() { return tierMax; }
     public LiveData<Integer> getTierIconRes() { return tierIconRes; }
+    public LiveData<String> getTierProgressText() { return tierProgressText; }
     public LiveData<List<NearbyNote>> getRecentNotes() { return recentNotes; }
     
     // Setters
@@ -59,6 +61,7 @@ public class ProfileViewModel extends ViewModel {
     public void setTierProgress(Integer progress) { this.tierProgress.setValue(progress); }
     public void setTierMax(Integer max) { this.tierMax.setValue(max); }
     public void setTierIconRes(Integer res) { this.tierIconRes.setValue(res); }
+    public void setTierProgressText(String text) { this.tierProgressText.setValue(text); }
     public void setRecentNotes(List<NearbyNote> notes) { this.recentNotes.setValue(notes); }
     
     // State management

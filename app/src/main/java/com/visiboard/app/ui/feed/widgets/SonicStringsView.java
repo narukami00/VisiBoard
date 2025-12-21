@@ -61,6 +61,16 @@ public class SonicStringsView extends View {
         });
     }
     
+    public void randomizeTheme() {
+        // Shuffle colors or shift
+        int shift = (int)(Math.random() * 10);
+        int[] colors = {0xFFFF4081, 0xFF00E5FF, 0xFFFFD740, 0xFF76FF03}; 
+         for (int i = 0; i < strings.size(); i++) {
+            strings.get(i).color = colors[(i + shift) % colors.length];
+        }
+        invalidate();
+    }
+    
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
