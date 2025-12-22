@@ -95,6 +95,23 @@
 
     </LinearLayout>
 
+    <!-- Extract Text Button (OCR Mode Only) -->
+    <Button
+        android:id="@+id/btn_extract_text"
+        android:layout_width="wrap_content"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="120dp"
+        android:paddingHorizontal="32dp"
+        android:text="📝 Extract Text"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:fontFamily="@font/poppins_semibold"
+        android:backgroundTint="#00BCD4"
+        android:elevation="8dp"
+        android:visibility="gone" />
+
     <!-- Loading Indicator -->
     <ProgressBar
         android:id="@+id/progress_saving"

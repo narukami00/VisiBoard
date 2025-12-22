@@ -61,6 +61,16 @@ public class MainActivity extends AppCompatActivity {
 
         // Listener for Profile Icon State
         navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
+            // Haptic Feedback on page change
+            android.view.View rootView = findViewById(android.R.id.content);
+            if (rootView != null) {
+                try {
+                    rootView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+                } catch (Exception e) {
+                    // Ignore haptic errors
+                }
+            }
+            
             // Delay slightly to allow bottom nav to update its selected state
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> updateProfileIconState(), 100);
         });

@@ -99,6 +99,17 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             }
             tab.setCustomView(tabView);
         }).attach();
+        
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                try {
+                    tabLayout.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+                } catch (Exception e) {}
+            }
+            @Override public void onTabUnselected(TabLayout.Tab tab) {}
+            @Override public void onTabReselected(TabLayout.Tab tab) {}
+        });
     }
     
     private void setupSearchRecyclerView() {
@@ -110,6 +121,11 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             showSendMessageDialog(user);
         });
         rvSearchResults.setAdapter(userSearchAdapter);
+        
+        // Add layout animation
+        android.view.animation.LayoutAnimationController controller =
+            android.view.animation.AnimationUtils.loadLayoutAnimation(getContext(), R.anim.layout_animation_fall_down);
+        rvSearchResults.setLayoutAnimation(controller);
     }
 
     private void setupSearchBar() {
@@ -161,7 +177,13 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
     }
 
     private void setupMessagesButton() {
-        btnMessages.setOnClickListener(v -> showFollowingDialog(null));
+        btnMessages.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(100)
+                .withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(100).start())
+                .start();
+            showFollowingDialog(null);
+        });
     }
 
     // Callbacks

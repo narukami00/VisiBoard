@@ -87,8 +87,10 @@ dependencies {
     // Maps
     implementation("com.google.android.gms:play-services-maps:18.1.0")
 
-    // ML Kit Text Recognition
-    implementation("com.google.android.gms:play-services-mlkit-text-recognition:18.0.2")
+    // ML Kit Text Recognition & Barcode Scanning
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-devanagari:16.0.0") // Bengali support
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
 
     // Glide
     implementation("com.github.bumptech.glide:glide:4.15.1")

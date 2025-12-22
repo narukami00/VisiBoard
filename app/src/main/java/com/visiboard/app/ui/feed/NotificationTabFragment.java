@@ -219,6 +219,9 @@ public class NotificationTabFragment extends Fragment {
 
             @Override
             public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+                // Haptic feedback for deletion
+                viewHolder.itemView.performHapticFeedback(android.view.HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                
                 int position = viewHolder.getAdapterPosition();
                 Notification item = notificationAdapter.getItem(position);
                 notificationAdapter.removeItem(position); // Optimistic removal
@@ -233,6 +236,12 @@ public class NotificationTabFragment extends Fragment {
                                 }
                             }
                         }).show();
+            }
+            
+            @Override
+            public float getSwipeThreshold(@NonNull RecyclerView.ViewHolder viewHolder) {
+                // Return a lower threshold (default is usually 0.5) to make swipe easier/snappier
+                return 0.35f;
             }
             
             @Override

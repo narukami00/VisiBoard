@@ -63,6 +63,7 @@ public class RecentNotesAdapter extends RecyclerView.Adapter<RecentNotesAdapter.
     private void setAnimation(View viewToAnimate, int position) {
         if (position > lastPosition) {
             Animation animation = AnimationUtils.loadAnimation(viewToAnimate.getContext(), android.R.anim.fade_in);
+            animation.setStartOffset(position * 100L); // Staggered effect
             viewToAnimate.startAnimation(animation);
             lastPosition = position;
         }

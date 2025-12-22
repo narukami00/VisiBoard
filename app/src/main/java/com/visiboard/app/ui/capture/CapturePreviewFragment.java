@@ -1,7 +1,11 @@
 package com.visiboard.app.ui.capture;
 import android.content.Intent;
 
+import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ContentValues;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
@@ -13,21 +17,30 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions;
 import com.visiboard.app.R;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CapturePreviewFragment extends Fragment {
 
@@ -37,9 +50,13 @@ public class CapturePreviewFragment extends Fragment {
     private Button btnSave;
     private Button btnRetake;
     private Button btnPostNote;
+    private Button btnExtractText;
     private ProgressBar progressSaving;
     
     private String imageUri;
+    private boolean isOcrMode = false;
+    private TextRecognizer latinRecognizer;
+    private TextRecognizer devanagariRecognizer; // For Bengali
 
     @Nullable
     @Override
@@ -51,11 +68,27 @@ public class CapturePreviewFragment extends Fragment {
         btnSave = view.findViewById(R.id.btn_save);
         btnRetake = view.findViewById(R.id.btn_retake);
         btnPostNote = view.findViewById(R.id.btn_post_note);
+        btnExtractText = view.findViewById(R.id.btn_extract_text);
         progressSaving = view.findViewById(R.id.progress_saving);
+        
+        // Initialize both recognizers
+        latinRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+        devanagariRecognizer = TextRecognition.getClient(new DevanagariTextRecognizerOptions.Builder().build());
         
         if (getArguments() != null) {
             imageUri = getArguments().getString("image_uri");
+            isOcrMode = getArguments().getBoolean("ocr_mode", false);
             displayImage();
+        }
+        
+        // Show Extract Text button only in OCR mode
+        if (btnExtractText != null) {
+            btnExtractText.setVisibility(isOcrMode ? View.VISIBLE : View.GONE);
+        }
+        
+        // Auto-run OCR if in OCR mode
+        if (isOcrMode && imageUri != null) {
+            runOcrOnImage();
         }
         
         setupListeners();
@@ -90,6 +123,112 @@ public class CapturePreviewFragment extends Fragment {
                 startActivity(intent);
             }
         });
+        
+        if (btnExtractText != null) {
+            btnExtractText.setOnClickListener(v -> runOcrOnImage());
+        }
+    }
+    
+    private void runOcrOnImage() {
+        if (imageUri == null) return;
+        
+        progressSaving.setVisibility(View.VISIBLE);
+        
+        try {
+            Uri uri = Uri.parse(imageUri);
+            File file = new File(uri.getPath());
+            Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
+            
+            if (bitmap == null) {
+                Toast.makeText(requireContext(), "Failed to load image for OCR", Toast.LENGTH_SHORT).show();
+                progressSaving.setVisibility(View.GONE);
+                return;
+            }
+            
+            InputImage inputImage = InputImage.fromBitmap(bitmap, 0);
+            
+            // Run both recognizers and combine results
+            StringBuilder combinedText = new StringBuilder();
+            AtomicInteger completedCount = new AtomicInteger(0);
+            
+            // Latin (English, etc.)
+            latinRecognizer.process(inputImage)
+                .addOnSuccessListener(latinText -> {
+                    for (Text.TextBlock block : latinText.getTextBlocks()) {
+                        combinedText.append(block.getText()).append("\n");
+                    }
+                    if (completedCount.incrementAndGet() == 2) {
+                        progressSaving.setVisibility(View.GONE);
+                        showOcrResultDialogFromString(combinedText.toString());
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Latin OCR failed", e);
+                    if (completedCount.incrementAndGet() == 2) {
+                        progressSaving.setVisibility(View.GONE);
+                        showOcrResultDialogFromString(combinedText.toString());
+                    }
+                });
+            
+            // Devanagari (Bengali, Hindi, etc.)
+            devanagariRecognizer.process(inputImage)
+                .addOnSuccessListener(devanagariText -> {
+                    for (Text.TextBlock block : devanagariText.getTextBlocks()) {
+                        String blockText = block.getText();
+                        // Only add if not already captured by Latin recognizer
+                        if (!combinedText.toString().contains(blockText)) {
+                            combinedText.append(blockText).append("\n");
+                        }
+                    }
+                    if (completedCount.incrementAndGet() == 2) {
+                        progressSaving.setVisibility(View.GONE);
+                        showOcrResultDialogFromString(combinedText.toString());
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Devanagari OCR failed", e);
+                    if (completedCount.incrementAndGet() == 2) {
+                        progressSaving.setVisibility(View.GONE);
+                        showOcrResultDialogFromString(combinedText.toString());
+                    }
+                });
+                
+        } catch (Exception e) {
+            progressSaving.setVisibility(View.GONE);
+            Log.e(TAG, "Error running OCR", e);
+            Toast.makeText(requireContext(), "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    private void showOcrResultDialogFromString(String text) {
+        String finalText = text.trim();
+        if (finalText.isEmpty()) {
+            finalText = "No text detected in this image.";
+        }
+        
+        Dialog dialog = new Dialog(requireContext());
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_ocr_result);
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        
+        TextView tvExtractedText = dialog.findViewById(R.id.tv_extracted_text);
+        Button btnCopy = dialog.findViewById(R.id.btn_copy);
+        Button btnClose = dialog.findViewById(R.id.btn_close);
+        
+        tvExtractedText.setText(finalText);
+        
+        String textToCopy = finalText;
+        btnCopy.setOnClickListener(v -> {
+            ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("Extracted Text", textToCopy);
+            clipboard.setPrimaryClip(clip);
+            Toast.makeText(requireContext(), "Text copied to clipboard!", Toast.LENGTH_SHORT).show();
+        });
+        
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        
+        dialog.show();
     }
     
     private void saveImage() {
@@ -206,4 +345,16 @@ public class CapturePreviewFragment extends Fragment {
             Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
         });
     }
+    
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (latinRecognizer != null) {
+            latinRecognizer.close();
+        }
+        if (devanagariRecognizer != null) {
+            devanagariRecognizer.close();
+        }
+    }
 }
+

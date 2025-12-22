@@ -92,6 +92,7 @@ public class UserSearchAdapter extends RecyclerView.Adapter<UserSearchAdapter.Us
             currentUserId = auth.getCurrentUser().getUid();
 
             itemView.setOnClickListener(v -> {
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
                 int position = getAdapterPosition();
                 if (position != RecyclerView.NO_POSITION && listener != null) {
                     listener.onUserClick(users.get(position));
@@ -99,6 +100,7 @@ public class UserSearchAdapter extends RecyclerView.Adapter<UserSearchAdapter.Us
             });
             
             ivMessage.setOnClickListener(v -> {
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
                 int position = getAdapterPosition();
                 if (position != RecyclerView.NO_POSITION && messageListener != null) {
                     messageListener.onMessageClick(users.get(position));
@@ -138,6 +140,7 @@ public class UserSearchAdapter extends RecyclerView.Adapter<UserSearchAdapter.Us
             
             // Handle follow button click
             btnFollow.setOnClickListener(v -> {
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
                 if (btnFollow.getText().equals("Follow")) {
                     followUser(user, btnFollow);
                 } else {

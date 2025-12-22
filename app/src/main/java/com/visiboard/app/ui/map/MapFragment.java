@@ -19,6 +19,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
+import android.view.animation.OvershootInterpolator;
+import android.view.HapticFeedbackConstants;
+import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -248,12 +251,32 @@ public class MapFragment extends Fragment {
 
         // FAB Menu Interaction
         fabMenu.setOnClickListener(v -> toggleFabMenu());
+        
+        // Apply Press Effects to all interactive buttons
+        addPressEffect(fabMenu);
+        addPressEffect(fabRecenter);
+        addPressEffect(fabFriends);
+        addPressEffect(fabHeatmap);
+        addPressEffect(fabSatellite);
+        addPressEffect(fabRefresh);
+        addPressEffect(btnTimeTravel);
+        addPressEffect(btnStopNav);
 
-        fabFriends.setOnClickListener(v -> toggleFriendsRadar(!isFriendsRadarEnabled));
-        fabHeatmap.setOnClickListener(v -> toggleHeatmap(!isHeatmapEnabled));
-        fabSatellite.setOnClickListener(v -> toggleSatelliteMode(!isSatelliteEnabled));
+        fabFriends.setOnClickListener(v -> {
+            performHapticClick(v);
+            toggleFriendsRadar(!isFriendsRadarEnabled);
+        });
+        fabHeatmap.setOnClickListener(v -> {
+            performHapticClick(v);
+            toggleHeatmap(!isHeatmapEnabled);
+        });
+        fabSatellite.setOnClickListener(v -> {
+            performHapticClick(v);
+            toggleSatelliteMode(!isSatelliteEnabled);
+        });
 
         fabRefresh.setOnClickListener(v -> {
+            performHapticClick(v);
             Toast.makeText(requireContext(), "Refreshing notes...", Toast.LENGTH_SHORT).show();
             if (symbolManager != null) symbolManager.deleteAll();
             loadSavedNotes();
@@ -261,6 +284,7 @@ public class MapFragment extends Fragment {
         });
 
         fabRecenter.setOnClickListener(v -> {
+            performHapticClick(v);
             if (mapLibreMap != null && fusedLocationClient != null) {
                 if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
@@ -306,7 +330,10 @@ public class MapFragment extends Fragment {
         });
 
         // Floating button to add note
-        view.findViewById(R.id.btnAddNote).setOnClickListener(v -> {
+        View btnAddNote = view.findViewById(R.id.btnAddNote);
+        addPressEffect(btnAddNote);
+        btnAddNote.setOnClickListener(v -> {
+            performHapticClick(v);
             if (ActivityCompat.checkSelfPermission(requireContext(),
                     Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(requireContext(), "Location permission not granted", Toast.LENGTH_SHORT).show();
@@ -627,12 +654,14 @@ public class MapFragment extends Fragment {
                         });
 
                 btnFollowOwner.setOnClickListener(v -> {
+                    performHapticClick(v);
                     if (btnFollowOwner.getText().equals("Follow")) {
                         followUser(noteOwnerId, btnFollowOwner);
                     } else {
                         showUnfollowConfirmation(noteOwnerId, btnFollowOwner);
                     }
                 });
+                addPressEffect(btnFollowOwner);
             }
 
             // Show interaction section and load likes/comments
@@ -660,13 +689,15 @@ public class MapFragment extends Fragment {
                 });
 
 
-
+                addPressEffect(likeSection);
                 // Like button click with double-click prevention using Firestore transaction
                 likeSection.setOnClickListener(v -> {
                     if (isProcessingLike[0]) return; // Prevent double-click
                     isProcessingLike[0] = true;
 
                     // Optimistic UI update
+                    performHapticClick(v);
+                    
                     noteRef.get().addOnSuccessListener(doc -> {
                         java.util.List<String> likedBy = (java.util.List<String>) doc.get("likedBy");
                         boolean isLiked = likedBy != null && likedBy.contains(currentUserId);
@@ -727,6 +758,7 @@ public class MapFragment extends Fragment {
                         });
                     }).addOnFailureListener(e -> isProcessingLike[0] = false);
                 });
+                addPressEffect(likeSection);
 
                 // Comment button click
                 commentSection.setOnClickListener(v -> {
@@ -740,6 +772,7 @@ public class MapFragment extends Fragment {
 
                     bottomSheet.show(getParentFragmentManager(), "CommentsBottomSheet");
                 });
+                addPressEffect(commentSection);
 
                 // Share button click
                 LinearLayout shareSection = infoWindow.findViewById(R.id.share_section);
@@ -769,6 +802,7 @@ public class MapFragment extends Fragment {
                     showFollowingDialog(tempNote);
                     dialog.dismiss();
                 });
+                addPressEffect(shareSection);
 
                 // Travel button click
                 LinearLayout travelSection = infoWindow.findViewById(R.id.travel_section);
@@ -776,6 +810,7 @@ public class MapFragment extends Fragment {
                     startNavigation(position);
                     dialog.dismiss();
                 });
+                addPressEffect(travelSection);
             }
         } else {
             // Offline mode - hide interaction section and show default owner info
@@ -796,6 +831,36 @@ public class MapFragment extends Fragment {
         scaleAnimation.setRepeatCount(1);
         scaleAnimation.setRepeatMode(Animation.REVERSE);
         likeBtn.startAnimation(scaleAnimation);
+    }
+    
+    // Helper to add subtle press effect (scale down on touch)
+    private void addPressEffect(View view) {
+        view.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(100).setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator()).start();
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(100).setInterpolator(new android.view.animation.OvershootInterpolator()).start();
+                    break;
+            }
+            return false; // let click listener handle the actual click
+        });
+    }
+
+    // Helper for subtle haptic feedback
+    private void performHapticClick(View view) {
+        // Try CLOCK_TICK for a crisp, subtle tick, fall back to KEYBOARD_TAP
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            } else {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            }
+        } catch (Exception e) {
+            // Ignore if fails
+        }
     }
 
 
@@ -1921,45 +1986,48 @@ public class MapFragment extends Fragment {
     }
 
     private void toggleFabMenu() {
+        performHapticClick(fabMenu);
         isFabMenuOpen = !isFabMenuOpen;
 
         if (isFabMenuOpen) {
-            // Show and animate up
+            // Show and animate up with bounce
             fabRecenter.setVisibility(View.VISIBLE);
             fabFriends.setVisibility(View.VISIBLE);
             fabHeatmap.setVisibility(View.VISIBLE);
-            fabSatellite.setVisibility(View.VISIBLE); // Add Satellite
+            fabSatellite.setVisibility(View.VISIBLE);
             fabRefresh.setVisibility(View.VISIBLE);
 
             // Set initial state for animation
             fabRecenter.setAlpha(0f); fabRecenter.setTranslationY(50);
             fabFriends.setAlpha(0f); fabFriends.setTranslationY(100);
             fabHeatmap.setAlpha(0f); fabHeatmap.setTranslationY(150);
-            fabSatellite.setAlpha(0f); fabSatellite.setTranslationY(200); // Add Satellite
-            fabRefresh.setAlpha(0f); fabRefresh.setTranslationY(250); // Shift Refresh
+            fabSatellite.setAlpha(0f); fabSatellite.setTranslationY(200);
+            fabRefresh.setAlpha(0f); fabRefresh.setTranslationY(250);
 
-            fabRecenter.animate().alpha(1f).translationY(0).setDuration(200).start();
-            fabFriends.animate().alpha(1f).translationY(0).setDuration(250).start();
-            fabHeatmap.animate().alpha(1f).translationY(0).setDuration(300).start();
-            fabSatellite.animate().alpha(1f).translationY(0).setDuration(350).start(); // Add Satellite
-            fabRefresh.animate().alpha(1f).translationY(0).setDuration(400).start(); // Adjust Refresh
+            OvershootInterpolator interpolator = new OvershootInterpolator(1.2f);
 
-            fabMenu.animate().rotation(45f).setDuration(200).start();
+            fabRecenter.animate().alpha(1f).translationY(0).setInterpolator(interpolator).setDuration(300).start();
+            fabFriends.animate().alpha(1f).translationY(0).setInterpolator(interpolator).setDuration(350).start();
+            fabHeatmap.animate().alpha(1f).translationY(0).setInterpolator(interpolator).setDuration(400).start();
+            fabSatellite.animate().alpha(1f).translationY(0).setInterpolator(interpolator).setDuration(450).start();
+            fabRefresh.animate().alpha(1f).translationY(0).setInterpolator(interpolator).setDuration(500).start();
+
+            fabMenu.animate().rotation(45f).setInterpolator(interpolator).setDuration(300).start();
         } else {
             // Animate down and hide
-            fabRecenter.animate().alpha(0f).translationY(50).setDuration(200).start();
-            fabFriends.animate().alpha(0f).translationY(100).setDuration(200).start();
-            fabHeatmap.animate().alpha(0f).translationY(150).setDuration(200).start();
-            fabSatellite.animate().alpha(0f).translationY(200).setDuration(200).start(); // Add Satellite
-            fabRefresh.animate().alpha(0f).translationY(250).setDuration(200).withEndAction(() -> {
+            fabRecenter.animate().alpha(0f).translationY(50).setInterpolator(null).setDuration(200).start();
+            fabFriends.animate().alpha(0f).translationY(100).setInterpolator(null).setDuration(200).start();
+            fabHeatmap.animate().alpha(0f).translationY(150).setInterpolator(null).setDuration(200).start();
+            fabSatellite.animate().alpha(0f).translationY(200).setInterpolator(null).setDuration(200).start();
+            fabRefresh.animate().alpha(0f).translationY(250).setInterpolator(null).setDuration(200).withEndAction(() -> {
                 fabRecenter.setVisibility(View.GONE);
                 fabFriends.setVisibility(View.GONE);
                 fabHeatmap.setVisibility(View.GONE);
-                fabSatellite.setVisibility(View.GONE); // Add Satellite
+                fabSatellite.setVisibility(View.GONE);
                 fabRefresh.setVisibility(View.GONE);
             }).start();
 
-            fabMenu.animate().rotation(0f).setDuration(200).start();
+            fabMenu.animate().rotation(0f).setInterpolator(null).setDuration(200).start();
         }
     }
 
@@ -2030,7 +2098,7 @@ public class MapFragment extends Fragment {
     private java.util.List<String> followingIds = new java.util.ArrayList<>();
 
     private void loadLegends() {
-        // Show widget with loading state immediately
+        // Show widget with loading state immediately but don't block interaction
         if (cvLegendWidget != null) cvLegendWidget.setVisibility(View.VISIBLE);
         if (pbLegendLoading != null) pbLegendLoading.setVisibility(View.VISIBLE);
         if (llLegendContent != null) llLegendContent.setVisibility(View.INVISIBLE);
@@ -2055,14 +2123,15 @@ public class MapFragment extends Fragment {
                                     ivLegendAvatar.setImageBitmap(bitmap);
                                 } catch (Exception e) { e.printStackTrace(); }
                             }
-                            if (pbLegendLoading != null) pbLegendLoading.setVisibility(View.GONE);
-                            if (llLegendContent != null) llLegendContent.setVisibility(View.VISIBLE);
                         }
                     }
+                    // Always show content and hide loading, even if empty/error, to unblock UI perception
+                    if (pbLegendLoading != null) pbLegendLoading.setVisibility(View.GONE);
+                    if (llLegendContent != null) llLegendContent.setVisibility(View.VISIBLE);
                 })
                 .addOnFailureListener(e -> {
                     if (pbLegendLoading != null) pbLegendLoading.setVisibility(View.GONE);
-                    if (llLegendContent != null) llLegendContent.setVisibility(View.GONE);
+                    // Hide widget on failure entirely
                     if (cvLegendWidget != null) cvLegendWidget.setVisibility(View.GONE);
                     e.printStackTrace();
                 });

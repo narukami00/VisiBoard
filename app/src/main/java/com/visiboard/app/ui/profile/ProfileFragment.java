@@ -120,7 +120,7 @@ public class ProfileFragment extends Fragment {
         
         // Setup RecyclerView
         rvRecentNotes.setLayoutManager(new LinearLayoutManager(getContext()));
-        rvRecentNotes.setHasFixedSize(true);
+        // rvRecentNotes.setHasFixedSize(true); // Removed to allow dynamic height inside NestedScrollView
         recentNotesAdapter = new RecentNotesAdapter(note -> {
             navigateToNoteOnMap(note.getLat(), note.getLng(), note.getId());
         });
@@ -146,12 +146,22 @@ public class ProfileFragment extends Fragment {
         nameText.setOnClickListener(v -> showEditNameDialog());
         view.findViewById(R.id.btn_about).setOnClickListener(v -> showAboutDialog());
         
+        // Create Note Button
+        Button btnCreateNote = view.findViewById(R.id.btn_create_first_note);
+        if (btnCreateNote != null) {
+            btnCreateNote.setOnClickListener(v -> {
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+                Navigation.findNavController(v).navigate(R.id.mapFragment);
+            });
+        }
+        
         // Theme toggle
         ImageView themeToggle = view.findViewById(R.id.theme_toggle_icon);
         ThemeManager themeManager = ThemeManager.getInstance(requireContext());
         updateThemeIcon(themeToggle, themeManager.isDarkMode());
         
         themeToggle.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
             long currentTime = System.currentTimeMillis();
             if (currentTime - lastThemeToggleTime < THEME_TOGGLE_COOLDOWN) {
                 Toast.makeText(getContext(), "Please wait...", Toast.LENGTH_SHORT).show();
@@ -202,7 +212,10 @@ public class ProfileFragment extends Fragment {
         view.findViewById(R.id.following_section).setOnClickListener(v -> showFollowersDialog(true));
         
         // Make milestone card clickable
-        view.findViewById(R.id.milestone_card).setOnClickListener(v -> showRankRoadmapDialog());
+        view.findViewById(R.id.milestone_card).setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            showRankRoadmapDialog();
+        });
 
         return view;
     }
@@ -259,20 +272,20 @@ public class ProfileFragment extends Fragment {
         });
         
         viewModel.getTotalNotes().observe(getViewLifecycleOwner(), total -> {
-            if (total != null) tvTotalNotes.setText(String.valueOf(total));
+            if (total != null) animateTextViewCount(tvTotalNotes, total);
         });
         
         viewModel.getTotalLikes().observe(getViewLifecycleOwner(), total -> {
             Log.d("ProfileFragment", "Observer: Total Likes updated to: " + total);
-            if (total != null) tvTotalLikes.setText(String.valueOf(total));
+            if (total != null) animateTextViewCount(tvTotalLikes, total);
         });
         
         viewModel.getFollowersCount().observe(getViewLifecycleOwner(), count -> {
-            if (count != null) tvFollowersCount.setText(String.valueOf(count));
+            if (count != null) animateTextViewCount(tvFollowersCount, count);
         });
         
         viewModel.getFollowingCount().observe(getViewLifecycleOwner(), count -> {
-            if (count != null) tvFollowingCount.setText(String.valueOf(count));
+            if (count != null) animateTextViewCount(tvFollowingCount, count);
         });
         
         viewModel.getCurrentTier().observe(getViewLifecycleOwner(), tier -> {
@@ -313,6 +326,8 @@ public class ProfileFragment extends Fragment {
             } else {
                 rvRecentNotes.setVisibility(View.GONE);
                 tvNoRecentNotes.setVisibility(View.VISIBLE);
+                Button btnCreateNote = getView().findViewById(R.id.btn_create_first_note);
+                if (btnCreateNote != null) btnCreateNote.setVisibility(View.VISIBLE);
             }
             // Once we have notes (or empty state), we assume main processing is done
              // In refresh, we might want to hide skeleton earlier if user data loads fast
@@ -557,73 +572,86 @@ public class ProfileFragment extends Fragment {
                         viewModel.setTotalLikes(totalLikes);
                         viewModel.setRecentNotes(recentNotes);
 
-                        // Determine tier and progress
-                        int tierIndex = -1;
-                        for (int i = 0; i < milestones.length; i++) {
-                            if (totalLikes >= milestones[i]) tierIndex = i;
-                        }
+                            // Determine tier and progress
+                         int tierIndex = -1;
+                         for (int i = 0; i < milestones.length; i++) {
+                             if (totalLikes >= milestones[i]) tierIndex = i;
+                         }
 
-                        String currentTier;
-                        String tierText;
-                        int iconRes;
-                        int maxProgress;
-                        int currentProgress;
-                        String progressText;
+                         String currentTier;
+                         String tierText;
+                         int iconRes;
+                         int maxProgress;
+                         int currentProgress;
+                         String progressText;
 
-                        if (tierIndex == -1) {
-                            currentTier = "None";
-                            tierText = "No Tier Yet";
-                            iconRes = R.drawable.ic_default_tier;
-                            maxProgress = milestones[0];
-                            currentProgress = totalLikes;
-                            progressText = totalLikes + " / " + milestones[0] + " likes to Bronze";
-                        } else if (tierIndex < milestones.length - 1) {
-                            currentTier = milestoneTiers[tierIndex];
-                            tierText = "Current Tier: " + currentTier;
-                            iconRes = milestoneIcons[tierIndex];
-                            int nextGoal = milestones[tierIndex + 1];
-                            maxProgress = nextGoal;
-                            currentProgress = totalLikes;
-                            progressText = totalLikes + " / " + nextGoal + " likes to " + milestoneTiers[tierIndex + 1];
-                        } else {
-                            currentTier = "Platinum";
-                            tierText = "Max Tier: Platinum";
-                            iconRes = milestoneIcons[milestoneIcons.length - 1];
-                            maxProgress = milestones[milestones.length - 1];
-                            currentProgress = milestones[milestones.length - 1];
-                            progressText = "Maxed Out";
-                        }
-                        
-                        viewModel.setCurrentTier(tierText);
-                        viewModel.setTierIconRes(iconRes);
-                        viewModel.setTierMax(maxProgress);
-                        viewModel.setTierProgress(currentProgress);
-                        viewModel.setTierProgressText(progressText);
-                        
-                        viewModel.setDataLoaded(true);
-                        viewModel.setDataLoaded(true);
-                        swipeRefreshLayout.setRefreshing(false);
-                        loadingOverlay.setVisibility(View.GONE);
+                         if (tierIndex == -1) {
+                             currentTier = "None";
+                             tierText = "No Tier Yet";
+                             iconRes = R.drawable.ic_default_tier;
+                             maxProgress = milestones[0];
+                             currentProgress = totalLikes;
+                             progressText = totalLikes + " / " + milestones[0] + " likes to Bronze";
+                         } else if (tierIndex < milestones.length - 1) {
+                             currentTier = milestoneTiers[tierIndex];
+                             tierText = "Current Tier: " + currentTier;
+                             iconRes = milestoneIcons[tierIndex];
+                             int nextGoal = milestones[tierIndex + 1];
+                             maxProgress = nextGoal;
+                             currentProgress = totalLikes;
+                             progressText = totalLikes + " / " + nextGoal + " likes to " + milestoneTiers[tierIndex + 1];
+                         } else {
+                             currentTier = "Platinum";
+                             tierText = "Max Tier: Platinum";
+                             iconRes = milestoneIcons[milestoneIcons.length - 1];
+                             maxProgress = milestones[milestones.length - 1];
+                             currentProgress = milestones[milestones.length - 1];
+                             progressText = "Maxed Out";
+                         }
+                         
+                         viewModel.setCurrentTier(tierText);
+                         viewModel.setTierIconRes(iconRes);
+                         viewModel.setTierMax(maxProgress);
+                         viewModel.setTierProgress(currentProgress);
+                         viewModel.setTierProgressText(progressText);
+                         
+                         viewModel.setDataLoaded(true);
+                         viewModel.setDataLoaded(true);
+                         swipeRefreshLayout.setRefreshing(false);
+                         loadingOverlay.setVisibility(View.GONE);
+                         
+                         // Haptic feedback on refresh complete
+                         if (swipeRefreshLayout.isRefreshing()) {
+                            swipeRefreshLayout.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+                         }
 
-                        // Update tier in database in background
-                        db.collection("users").document(uid)
-                                .update("currentTier", currentTier)
-                                .addOnFailureListener(e ->
-                                        Log.e("ProfileFragment", "Tier update failed: " + e.getMessage())
-                                );
-                    })
-                    .addOnFailureListener(e -> {
-                        Log.e("ProfileFragment", "Error loading stats: " + e.getMessage());
-                        safeToast("Failed to load statistics");
-                        swipeRefreshLayout.setRefreshing(false);
-                        loadingOverlay.setVisibility(View.GONE);
-                    });
-            })
-            .addOnFailureListener(e -> {
-                Log.e("ProfileFragment", "Error loading user info: " + e.getMessage());
-                swipeRefreshLayout.setRefreshing(false);
-                loadingOverlay.setVisibility(View.GONE);
-            });
+                         // Update tier in database in background
+                         db.collection("users").document(uid)
+                                 .update("currentTier", currentTier)
+                                 .addOnFailureListener(e ->
+                                         Log.e("ProfileFragment", "Tier update failed: " + e.getMessage())
+                                 );
+                     })
+                     .addOnFailureListener(e -> {
+                         Log.e("ProfileFragment", "Error loading stats: " + e.getMessage());
+                         safeToast("Failed to load statistics");
+                         swipeRefreshLayout.setRefreshing(false);
+                         loadingOverlay.setVisibility(View.GONE);
+                     });
+             })
+             .addOnFailureListener(e -> {
+                 Log.e("ProfileFragment", "Error loading user info: " + e.getMessage());
+                 swipeRefreshLayout.setRefreshing(false);
+                 loadingOverlay.setVisibility(View.GONE);
+             });
+     }
+     
+     private void animateTextViewCount(TextView textView, long endValue) {
+        ValueAnimator animator = ValueAnimator.ofInt(0, (int) endValue);
+        animator.setDuration(1200);
+        animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        animator.addUpdateListener(animation -> textView.setText(String.valueOf(animation.getAnimatedValue())));
+        animator.start();
     }
 
 

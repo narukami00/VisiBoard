@@ -118,6 +118,20 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintBottom_toBottomOf="@id/header_background" />
 
+             <!-- Camera Badge for Profile Pic -->
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_camera_alt"
+                android:padding="6dp"
+                android:background="@drawable/bg_circle_primary"
+                app:tint="@color/white"
+                android:elevation="9dp"
+                app:layout_constraintBottom_toBottomOf="@id/profileImage"
+                app:layout_constraintEnd_toEndOf="@id/profileImage"
+                android:layout_marginBottom="4dp"
+                android:layout_marginEnd="4dp" />
+
             <!-- 3. User Info -->
             <TextView
                 android:id="@+id/profileName"
@@ -444,7 +458,8 @@
                 android:paddingEnd="24dp"
                 android:paddingBottom="24dp"
                 android:nestedScrollingEnabled="false"
-                app:layout_constraintTop_toBottomOf="@id/tv_recent_header" />
+                app:layout_constraintTop_toBottomOf="@id/tv_recent_header"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
             <TextView
                 android:id="@+id/tv_no_recent_notes"
@@ -457,7 +472,23 @@
                 android:gravity="center"
                 android:padding="32dp"
                 android:visibility="gone"
-                app:layout_constraintTop_toBottomOf="@id/tv_recent_header" />
+                app:layout_constraintTop_toBottomOf="@id/tv_recent_header"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_create_first_note"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Create your first note"
+                android:textColor="@color/white"
+                app:backgroundTint="@color/primary"
+                app:cornerRadius="20dp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/tv_no_recent_notes"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
             <!-- Skeleton Loading View -->
             <include 
