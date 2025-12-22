@@ -205,38 +205,19 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
     }
     
     class FidgetBubbleViewHolder extends RecyclerView.ViewHolder {
-        GridLayout gridBubbles;
+        com.visiboard.app.ui.feed.widgets.FloatingBubblesView bubblesView;
+        
         FidgetBubbleViewHolder(View itemView) {
             super(itemView);
-            gridBubbles = itemView.findViewById(R.id.gl_bubbles);
-            for (int i = 0; i < gridBubbles.getChildCount(); i++) {
-                final View child = gridBubbles.getChildAt(i);
-                if (child instanceof ImageButton) {
-                    child.setOnClickListener(v -> {
-                         ImageButton btn = (ImageButton) v;
-                         btn.setImageResource(R.drawable.shape_bubble_popped);
-                         v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
-                         v.postDelayed(() -> {
-                             v.animate().scaleX(0.0f).scaleY(0.0f).setDuration(150)
-                                 .withEndAction(() -> {
-                                     btn.setImageResource(R.drawable.shape_bubble_unpopped);
-                                     v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(300)
-                                         .setInterpolator(new android.view.animation.OvershootInterpolator(2.0f)).start();
-                                 }).start();
-                         }, 800);
-                    });
-                }
+            View v = itemView.findViewById(R.id.floating_bubbles_view);
+            if (v instanceof com.visiboard.app.ui.feed.widgets.FloatingBubblesView) {
+                bubblesView = (com.visiboard.app.ui.feed.widgets.FloatingBubblesView) v;
             }
         }
         
         void randomize() {
-            // Can randomize bubble color tints here if I want, for now maybe just reset states?
-            // Bubbles are usually standard colors in the layout.
-            // Let's leave them for now unless requested specifically.
-            // Actually user asked for "randomization", let's tint the background slightly?
-            // Using setBackgroundColor on the CardView?
+            int[] bgs = {0xFFEEEEEE, 0xFFE3F2FD, 0xFFF3E5F5, 0xFFE0F2F1};
              if (itemView instanceof androidx.cardview.widget.CardView) {
-                 int[] bgs = {0xFFEEEEEE, 0xFFE3F2FD, 0xFFF3E5F5, 0xFFE0F2F1};
                  ((androidx.cardview.widget.CardView)itemView).setCardBackgroundColor(bgs[(int)(Math.random() * bgs.length)]);
              }
         }

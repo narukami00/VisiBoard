@@ -215,7 +215,7 @@ public class DiscoverTabFragment extends Fragment {
                 int lastVisibleItem = getLastVisibleItem(lastVisibleItemPositions);
                 int totalItemCount = layoutManager.getItemCount();
                 
-                if (!feedViewModel.isLoading() && !feedViewModel.isLastPage() && totalItemCount <= (lastVisibleItem + 2)) {
+                if (!feedViewModel.isLoading() && !feedViewModel.isLastPage() && totalItemCount <= (lastVisibleItem + 6)) {
                     loadPinterestFeed(true);
                 }
             }
@@ -557,11 +557,26 @@ public class DiscoverTabFragment extends Fragment {
             double diff = Math.abs(col1Height - col2Height);
             boolean isGap = diff > 0.6; 
             
-            // LOGIC FIX 1: Spacing Check (At least 8 items apart)
-            boolean isSpaced = (optimized.size() - lastFidgetInsertionSize) > 8;
+            // LOGIC FIX 1: Spacing Check (At least 5 items apart)
+            boolean isSpaced = (optimized.size() - lastFidgetInsertionSize) > 5;
             
             // LOGIC FIX 2: End of List Protection (Don't fill gaps in last 5 items)
             boolean isNearEnd = (index >= notes.size() - 5);
+            
+            // LOGIC FIX 3: Force Wide Widget Injection (Every ~12 items)
+            if (index > 0 && index % 12 == 0 && Math.random() > 0.3) {
+                 NearbyNote wideFidget = new NearbyNote();
+                 String wType = wideFidgets[(int)(Math.random() * wideFidgets.length)];
+                 wideFidget.setId("fidget_" + wType + "_" + System.nanoTime());
+                 
+                 // Reset heights to visually "break" the flow
+                 double maxHeight = Math.max(col1Height, col2Height);
+                 col1Height = maxHeight + 0.6;
+                 col2Height = maxHeight + 0.6;
+                 
+                 optimized.add(wideFidget);
+                 lastFidgetInsertionSize = optimized.size(); // Count as insertion
+            }
             
             if (isGap && fidgetsInserted < maxFidgets && isSpaced && !isNearEnd) {
                 // Gap detected & Conditions met! Fill it.
@@ -576,8 +591,12 @@ public class DiscoverTabFragment extends Fragment {
                 } else if (diff > 0.8) { // Square-ish gap
                      type = squareFidgets[(int)(Math.random() * squareFidgets.length)];
                      fillerHeight = 1.0;
-                } else { // Small gap
+                } else if (diff > 0.3) { // Small gap (Lowered threshold from pure 'else' logic to be explicit)
                      type = smallFidgets[(int)(Math.random() * smallFidgets.length)];
+                     fillerHeight = 0.5;
+                } else {
+                     // Very small gap, try spinner anyway as it can float?
+                     type = smallFidgets[0];
                      fillerHeight = 0.5;
                 }
                 

@@ -91,16 +91,44 @@ public class GravityBallView extends View implements SensorEventListener {
         }
     }
 
+    // Stars
+    private static class Star { float x, y, size; int alpha; }
+    private List<Star> stars = new ArrayList<>();
+    private final int STAR_COUNT = 80;
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         xPos = w / 2f;
         yPos = h / 2f;
+        
+        // Init Stars
+        stars.clear();
+        for(int i=0; i<STAR_COUNT; i++) {
+            Star s = new Star();
+            s.x = (float)(Math.random() * w);
+            s.y = (float)(Math.random() * h);
+            s.size = 2f + (float)(Math.random() * 4f);
+            s.alpha = (int)(Math.random() * 255);
+            stars.add(s);
+        }
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        
+        // Draw Space Background
+        canvas.drawColor(0xFF0B0B15); // Deep Dark Blue/Black
+        
+        // Draw Stars
+        for (Star s : stars) {
+            paint.setColor(Color.WHITE);
+            // Twinkle
+            if (Math.random() > 0.95) s.alpha = (int)(Math.random() * 255);
+            paint.setAlpha(s.alpha);
+            canvas.drawCircle(s.x, s.y, s.size, paint);
+        }
         
         // Physics
         xVel -= xAccel * 0.8f; 
