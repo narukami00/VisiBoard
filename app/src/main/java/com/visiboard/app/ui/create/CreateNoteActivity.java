@@ -50,6 +50,7 @@ public class CreateNoteActivity extends AppCompatActivity {
     private com.google.android.material.button.MaterialButton btnAddImage;
     private ProgressBar progressBar;
     private ImageButton btnBack;
+    private android.widget.Spinner spinnerVisibility;
 
     private Uri selectedImageUri;
     private FusedLocationProviderClient fusedLocationClient;
@@ -91,6 +92,12 @@ public class CreateNoteActivity extends AppCompatActivity {
         btnAddImage = findViewById(R.id.btn_add_image);
         progressBar = findViewById(R.id.progress_bar);
         btnBack = findViewById(R.id.btn_back);
+        spinnerVisibility = findViewById(R.id.spinner_visibility);
+
+        // Setup Spinner
+        String[] items = new String[]{"Public", "Followers", "Private"};
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items);
+        spinnerVisibility.setAdapter(adapter);
 
         // Check for passed image URI (from Camera)
         if (getIntent().hasExtra("image_uri")) {
@@ -318,7 +325,10 @@ public class CreateNoteActivity extends AppCompatActivity {
             Map<String, Object> updates = new HashMap<>();
             updates.put("note", content);
             updates.put("summary", content.length() > 100 ? content.substring(0, 100) + "..." : content);
+            updates.put("note", content);
+            updates.put("summary", content.length() > 100 ? content.substring(0, 100) + "..." : content);
             updates.put("text", content); // Ensure both fields updated just in case
+            updates.put("visibility", spinnerVisibility.getSelectedItem().toString().toLowerCase());
             
             if (imageBase64 != null) {
                 updates.put("imageBase64", imageBase64);
@@ -369,7 +379,11 @@ public class CreateNoteActivity extends AppCompatActivity {
                 noteMap.put("timestamp", System.currentTimeMillis());
                 noteMap.put("likeCount", 0);
                 noteMap.put("likedBy", new ArrayList<String>());
+                noteMap.put("likeCount", 0);
+                noteMap.put("likedBy", new ArrayList<String>());
                 noteMap.put("commentsCount", 0);
+                noteMap.put("visibility", spinnerVisibility.getSelectedItem().toString().toLowerCase());
+                noteMap.put("allowComments", true); // Default: comments enabled
                 
                 if (imageBase64 != null) {
                     noteMap.put("imageBase64", imageBase64);

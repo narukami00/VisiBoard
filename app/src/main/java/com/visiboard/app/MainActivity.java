@@ -87,6 +87,7 @@ public class MainActivity extends AppCompatActivity {
                 if (currentId == R.id.mapFragment || 
                     currentId == R.id.captureFragment || 
                     currentId == R.id.feedFragment || 
+                    currentId == R.id.connectFragment ||
                     currentId == R.id.profileFragment) {
                     
                     if (doubleBackToExitPressedOnce) {

@@ -50,7 +50,7 @@
         android:hint="What's happening here?"
         android:textColor="?attr/colorOnSurface"
         android:textColorHint="?android:textColorSecondary"
-        app:layout_constraintBottom_toTopOf="@+id/card_image_preview"
+        app:layout_constraintBottom_toTopOf="@id/spinner_visibility"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btn_back" />
@@ -62,7 +62,7 @@
         android:layout_marginBottom="16dp"
         app:cardCornerRadius="12dp"
         app:cardElevation="0dp"
-        app:layout_constraintBottom_toTopOf="@id/btn_add_image"
+        app:layout_constraintBottom_toTopOf="@id/spinner_visibility"
         app:layout_constraintTop_toBottomOf="@id/et_note_content">
 
         <androidx.constraintlayout.widget.ConstraintLayout
@@ -110,6 +110,17 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
 
     </androidx.cardview.widget.CardView>
+
+    <Spinner
+        android:id="@+id/spinner_visibility"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:minHeight="48dp"
+        android:spinnerMode="dropdown"
+        app:layout_constraintBottom_toTopOf="@id/btn_add_image"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_add_image"

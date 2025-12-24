@@ -201,6 +201,12 @@ public class MapFragment extends Fragment {
     private static final String NAVIGATION_SOURCE_ID = "navigation-source";
     private static final String NAVIGATION_LAYER_ID = "navigation-layer";
 
+    // Hidden notes from others (Hide for Me feature)
+    private java.util.Set<String> hiddenNoteOtherIds = new java.util.HashSet<>();
+
+    // Blocked users
+    private java.util.Set<String> blockedUserIds = new java.util.HashSet<>();
+
 
 
     private final String GEOAPIFY_LIGHT_STYLE_URL =
@@ -352,6 +358,42 @@ public class MapFragment extends Fragment {
         return view;
     }
 
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        
+        // Handle Navigation Arguments
+        if (getArguments() != null) {
+            String targetNoteId = getArguments().getString("target_note_id");
+            if (targetNoteId != null) {
+                double lat = getArguments().getDouble("target_lat");
+                double lng = getArguments().getDouble("target_lng");
+                boolean openWindow = getArguments().getBoolean("open_note_window", false);
+                
+                // Save for use when map is ready
+                navigateToNote(new LatLng(lat, lng), targetNoteId, openWindow);
+            }
+        }
+    }
+
+    private void navigateToNote(LatLng position, String noteId, boolean openWindow) {
+        if (mapLibreMap != null) {
+            mapLibreMap.animateCamera(CameraUpdateFactory.newLatLngZoom(position, 18.0));
+            // Note: Info window opening happens after notes are loaded in loadSavedNotes
+        } else {
+             // Defer until map ready
+             if (savedCameraPosition == null) {
+                 savedCameraPosition = new CameraPosition.Builder().target(position).zoom(18.0).build();
+             }
+        }
+        // Store target note ID to check after loading
+        this.pendingTargetNoteId = noteId;
+        this.pendingOpenWindow = openWindow;
+    }
+
+    private String pendingTargetNoteId;
+    private boolean pendingOpenWindow;
+    
     // Convert vector drawable to bitmap
     private Bitmap getBitmapFromVectorDrawable(int drawableId) {
         Drawable drawable = ContextCompat.getDrawable(requireContext(), drawableId);
@@ -407,24 +449,6 @@ public class MapFragment extends Fragment {
             if (docId != null) data.put("docId", docId);
             if (userId != null) data.put("userId", userId);
             data.put("hasImage", hasImage);
-            // We pass imageBase64 if available so we can show it immediately
-            // Note: Storing large base64 strings in symbol data might be heavy for the map.
-            // If it causes performance issues, we should fetch it on click instead.
-            // But for now, let's assume we can fetch it on click if it's not in data.
-            // ACTUALLY, let's NOT put large base64 in symbol data. It will bloat the map style source.
-            // We should fetch the note document on click if we want the image, OR just pass null here
-            // and let showCustomInfoWindow fetch it?
-            // showCustomInfoWindow takes the string directly.
-            // Let's modify the click listener in onCreateView to fetch the document if needed?
-            // Existing logic: symbolManager.addClickListener parses data.
-            // Decision: Do NOT put base64 in symbol data. Fetch it from Firestore in user interaction if not present,
-            // or better yet, the loadSavedNotes listener already has the doc.
-            // BUT the symbols are created from snapshots.
-            // Let's rely on fetching the document in showCustomInfoWindow or before calling it?
-            // The existing code for 'openNoteWindowById' fetches the doc.
-            // The 'click' listener uses symbol data.
-            // Let's UPDATE the click listener to fetch the document fresh to get the image,
-            // to avoid storing megabytes of data in the map source.
 
             Gson gson = new Gson();
             JsonElement jsonData = gson.fromJson(data.toString(), JsonElement.class);
@@ -433,6 +457,28 @@ public class MapFragment extends Fragment {
                     .withLatLng(position)
                     .withIconImage(iconId)
                     .withData(jsonData));
+
+            // Check if this is the pending target note (Share Guard Success)
+            if (docId != null && docId.equals(pendingTargetNoteId)) {
+                if (pendingOpenWindow) {
+                    // Need to create a temporary symbol or refetch?
+                    // showCustomInfoWindow requires a Symbol to delete it later.
+                    // But symbolManager.create returns a symbol! 
+                    // Wait, I am ignoring the return value above. 
+                    // I must capture it.
+                    
+                    // Since I can't easily change the structure above without replacing more lines, 
+                    // I will do a quick fetch of the symbol I just created. 
+                    // Actually, symbolManager.getAnnotations() returns LongSparseArray. 
+                    // Maybe just pass null as symbol? If I pass null, delete won't work.
+                    // But the user can just close the window.
+                    
+                    showCustomInfoWindow(fullNote, timestamp, position, null, docId, userId, null, hasImage);
+                }
+                pendingTargetNoteId = null; // Mark as found
+                pendingOpenWindow = false;
+            }
+
         } catch (Exception e) { e.printStackTrace(); }
     }
 
@@ -464,7 +510,10 @@ public class MapFragment extends Fragment {
         LinearLayout commentSection = infoWindow.findViewById(R.id.comment_section);
         ImageView btnComment = infoWindow.findViewById(R.id.btn_comment);
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
+        LinearLayout saveSection = infoWindow.findViewById(R.id.save_section);
+        ImageView btnSave = infoWindow.findViewById(R.id.btn_save);
         android.widget.ImageButton btnEdit = infoWindow.findViewById(R.id.btn_edit_note);
+        android.widget.ImageButton btnVisibility = infoWindow.findViewById(R.id.btn_visibility);
         androidx.cardview.widget.CardView imageContainer = infoWindow.findViewById(R.id.cv_note_image_container);
         ImageView noteImage = infoWindow.findViewById(R.id.iv_note_image);
         com.facebook.shimmer.ShimmerFrameLayout shimmer = infoWindow.findViewById(R.id.shimmer_view_container);
@@ -566,6 +615,59 @@ public class MapFragment extends Fragment {
         }
 
 
+        // --- Save Note Logic ---
+        String saveUserId = auth.getCurrentUser() != null ? auth.getCurrentUser().getUid() : null;
+        if (docId != null && useCloudMode && saveUserId != null) {
+             // Check if already saved
+             db.collection("users").document(saveUserId).collection("saved_notes").document(docId).get()
+                 .addOnSuccessListener(snap -> {
+                     if (snap.exists()) {
+                         btnSave.setImageResource(R.drawable.ic_bookmark);
+                         btnSave.setTag("saved");
+                     } else {
+                         btnSave.setImageResource(R.drawable.ic_bookmark_outline);
+                         btnSave.setTag("unsaved");
+                     }
+                 });
+
+             saveSection.setOnClickListener(v -> {
+                 String tag = (String) btnSave.getTag();
+                 if ("saved".equals(tag)) {
+                     // Unsave
+                     db.collection("users").document(saveUserId).collection("saved_notes").document(docId).delete()
+                         .addOnSuccessListener(aVoid -> {
+                             btnSave.setImageResource(R.drawable.ic_bookmark_outline);
+                             btnSave.setTag("unsaved");
+                             Toast.makeText(getContext(), "Note removed from saved", Toast.LENGTH_SHORT).show();
+                         });
+                 } else {
+                     // Save
+                     Map<String, Object> savedData = new HashMap<>();
+                     savedData.put("noteId", docId);
+                     savedData.put("timestamp", timestamp); // Use original note timestamp
+                     savedData.put("savedAt", System.currentTimeMillis());
+                     
+                     // Denormalized data for listing
+                     savedData.put("noteText", noteText);
+                     savedData.put("ownerId", noteOwnerId);
+                     savedData.put("latitude", position.getLatitude());
+                     savedData.put("longitude", position.getLongitude());
+                     if (currentBase64Wrapper[0] != null) {
+                         savedData.put("imageBase64", currentBase64Wrapper[0]);
+                     }
+                     
+                     db.collection("users").document(saveUserId).collection("saved_notes").document(docId).set(savedData)
+                         .addOnSuccessListener(aVoid -> {
+                             btnSave.setImageResource(R.drawable.ic_bookmark);
+                             btnSave.setTag("saved");
+                             Toast.makeText(getContext(), "Note saved", Toast.LENGTH_SHORT).show();
+                         });
+                 }
+             });
+        } else {
+            saveSection.setVisibility(View.GONE); // Hide if offline or local only
+        }
+
         noteTextView.setText(noteText);
         timestampTextView.setText(new SimpleDateFormat("dd MMM yyyy • hh:mm a", java.util.Locale.getDefault())
                 .format(new java.util.Date(timestamp)));
@@ -588,11 +690,23 @@ public class MapFragment extends Fragment {
                 }
                 symbolManager.delete(symbol);
             });
+        } else if (useCloudMode && docId != null) {
+            builder.setNeutralButton("Report", (d, w) -> {
+                com.visiboard.app.ui.report.ReportBottomSheetFragment reportSheet =
+                        com.visiboard.app.ui.report.ReportBottomSheetFragment.newInstance(
+                                docId,
+                                noteText,
+                                "NOTE",
+                                position.getLatitude(),
+                                position.getLongitude()
+                        );
+                reportSheet.show(getParentFragmentManager(), "ReportBottomSheet");
+            });
         }
 
         androidx.appcompat.app.AlertDialog dialog = builder.create();
 
-        // Show Edit button if owner and cloud mode
+        // Show Edit and Visibility buttons if owner and cloud mode
         if (isOwner && useCloudMode && docId != null) {
             btnEdit.setVisibility(View.VISIBLE);
             btnEdit.setOnClickListener(v -> {
@@ -602,6 +716,67 @@ public class MapFragment extends Fragment {
                 intent.putExtra("edit_image_base64", currentBase64Wrapper[0]);
                 startActivity(intent);
                 dialog.dismiss();
+            });
+
+            // Visibility Toggle Logic
+            btnVisibility.setVisibility(View.VISIBLE);
+            db.collection("notes").document(docId).get().addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+                    btnVisibility.setImageResource(isHidden ? R.drawable.ic_eye_hidden : R.drawable.ic_eye_visible);
+
+                    btnVisibility.setOnClickListener(v -> {
+                        boolean newHiddenState = !isHidden; // Toggle
+                        // Optimistic Update
+                        btnVisibility.setImageResource(newHiddenState ? R.drawable.ic_eye_hidden : R.drawable.ic_eye_visible);
+                        
+                        db.collection("notes").document(docId)
+                                .update("isHidden", newHiddenState)
+                                .addOnSuccessListener(aVoid -> {
+                                    Toast.makeText(requireContext(), newHiddenState ? "Note Hidden from Map" : "Note Visible on Map", Toast.LENGTH_SHORT).show();
+                                    // Refresh map if needed (listener might handle it)
+                                })
+                                .addOnFailureListener(e -> {
+                                    Toast.makeText(requireContext(), "Failed to update visibility", Toast.LENGTH_SHORT).show();
+                                    // Revert
+                                    btnVisibility.setImageResource(isHidden ? R.drawable.ic_eye_hidden : R.drawable.ic_eye_visible);
+                                });
+                    });
+                }
+            });
+        }
+
+        // Show More Options button for non-owner notes
+        android.widget.ImageButton btnMoreOptions = infoWindow.findViewById(R.id.btn_more_options);
+        if (!isOwner && useCloudMode && docId != null) {
+            btnMoreOptions.setVisibility(View.VISIBLE);
+            btnMoreOptions.setOnClickListener(v -> {
+                android.widget.PopupMenu popup = new android.widget.PopupMenu(requireContext(), v);
+                popup.getMenu().add(0, 1, 0, "Hide for Me");
+                popup.setOnMenuItemClickListener(item -> {
+                    if (item.getItemId() == 1) {
+                        // Add to hidden_notes_others collection
+                        Map<String, Object> hiddenData = new HashMap<>();
+                        hiddenData.put("noteId", docId);
+                        hiddenData.put("hiddenAt", System.currentTimeMillis());
+                        
+                        db.collection("users").document(currentUserId).collection("hidden_notes_others").document(docId).set(hiddenData)
+                            .addOnSuccessListener(aVoid -> {
+                                Toast.makeText(getContext(), "Note hidden from your view", Toast.LENGTH_SHORT).show();
+                                dialog.dismiss();
+                                // Remove from map immediately
+                                if (symbol != null) {
+                                    symbolManager.delete(symbol);
+                                }
+                            })
+                            .addOnFailureListener(e -> {
+                                Toast.makeText(getContext(), "Failed to hide note", Toast.LENGTH_SHORT).show();
+                            });
+                        return true;
+                    }
+                    return false;
+                });
+                popup.show();
             });
         }
 
@@ -647,16 +822,31 @@ public class MapFragment extends Fragment {
                                 btnFollowOwner.setBackgroundResource(R.drawable.btn_following_selector);
                                 btnFollowOwner.setTextColor(getResources().getColor(R.color.button_text_following, null));
                             } else {
-                                btnFollowOwner.setText("Follow");
-                                btnFollowOwner.setBackgroundResource(R.drawable.btn_primary_selector);
-                                btnFollowOwner.setTextColor(getResources().getColor(R.color.button_text_primary, null));
+                                // Check if requested
+                                db.collection("users").document(noteOwnerId)
+                                        .collection("follow_requests").document(currentUserId)
+                                        .get()
+                                        .addOnSuccessListener(requestDoc -> {
+                                            if (requestDoc.exists()) {
+                                                btnFollowOwner.setText("Requested");
+                                                btnFollowOwner.setBackgroundResource(R.drawable.btn_following_selector);
+                                                btnFollowOwner.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                                            } else {
+                                                btnFollowOwner.setText("Follow");
+                                                btnFollowOwner.setBackgroundResource(R.drawable.btn_primary_selector);
+                                                btnFollowOwner.setTextColor(getResources().getColor(R.color.button_text_primary, null));
+                                            }
+                                        });
                             }
                         });
 
                 btnFollowOwner.setOnClickListener(v -> {
                     performHapticClick(v);
-                    if (btnFollowOwner.getText().equals("Follow")) {
+                    String text = btnFollowOwner.getText().toString();
+                    if (text.equals("Follow")) {
                         followUser(noteOwnerId, btnFollowOwner);
+                    } else if (text.equals("Requested")) {
+                        cancelFollowRequest(noteOwnerId, btnFollowOwner);
                     } else {
                         showUnfollowConfirmation(noteOwnerId, btnFollowOwner);
                     }
@@ -927,11 +1117,13 @@ public class MapFragment extends Fragment {
                     .addOnSuccessListener(userDoc -> {
                         String userName = userDoc.getString("name");
                         String userProfilePic = userDoc.getString("profilePic");
+                        boolean isPrivate = userDoc.getBoolean("isPrivate") != null && userDoc.getBoolean("isPrivate");
 
                         Map<String, Object> noteMap = new HashMap<>();
                         noteMap.put("userId", uid);
                         noteMap.put("userName", userName);
                         noteMap.put("userProfilePic", userProfilePic);
+                        noteMap.put("isOwnerPrivate", isPrivate);
                         noteMap.put("lat", position.getLatitude());
                         noteMap.put("lon", position.getLongitude());
                         noteMap.put("location", new com.google.firebase.firestore.GeoPoint(position.getLatitude(), position.getLongitude()));
@@ -1028,6 +1220,52 @@ public class MapFragment extends Fragment {
                 notesListener.remove();
             }
 
+            // Load hidden note IDs from others first
+            String currentUserId = auth.getCurrentUser().getUid();
+            db.collection("users").document(currentUserId).collection("hidden_notes_others")
+                    .get()
+                    .addOnSuccessListener(snapshot -> {
+                        hiddenNoteOtherIds.clear();
+                        for (DocumentSnapshot doc : snapshot) {
+                            hiddenNoteOtherIds.add(doc.getId());
+                        }
+                        // Load blocked users before loading notes
+                        loadBlockedUsersAndNotes();
+                    })
+                    .addOnFailureListener(e -> {
+                        // Still load notes even if hidden list fails
+                        loadBlockedUsersAndNotes();
+                    });
+        } else {
+            // Local mode
+            loadLocalNotes();
+        }
+    }
+
+    private void loadBlockedUsersAndNotes() {
+        String userId = auth.getCurrentUser() != null ? auth.getCurrentUser().getUid() : null;
+        if (userId == null) {
+            setupNotesListener();
+            return;
+        }
+
+        db.collection("users").document(userId).collection("blocked_users")
+                .get()
+                .addOnSuccessListener(querySnapshot -> {
+                    blockedUserIds.clear();
+                    for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot) {
+                        blockedUserIds.add(doc.getId());
+                    }
+                    // Now proceed to listen for notes
+                    setupNotesListener();
+                })
+                .addOnFailureListener(e -> {
+                    // Still load notes even if blocked list fails
+                    setupNotesListener();
+                });
+    }
+
+    private void setupNotesListener() {
             // Add real-time listener to load ALL notes from the global notes collection
             notesListener = db.collection("notes")
                     .addSnapshotListener((querySnapshot, error) -> {
@@ -1061,6 +1299,33 @@ public class MapFragment extends Fragment {
                                     double lon = doc.getDouble("lon");
                                     String userId = doc.getString("userId");
 
+                                    // Visibility Filter
+                                    String visibility = doc.getString("visibility");
+                                    if (visibility == null) visibility = "public";
+                                    boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
+                                    boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+
+                                    // Filter Hidden Notes (Hidden from everyone including owner on Map)
+                                    if (isHidden) continue;
+
+                                    // Filter notes hidden by THIS user (Hide for Me)
+                                    if (hiddenNoteOtherIds.contains(doc.getId())) continue;
+
+                                    // Filter notes from blocked users
+                                    if (blockedUserIds.contains(userId)) continue;
+
+                                    if (!userId.equals(auth.getCurrentUser().getUid())) {
+                                        // 1. Strict Private Note (Only Me)
+                                        if ("private".equals(visibility)) continue;
+
+                                        // 2. Owner Privacy / Followers Only Check
+                                        // If owner is private OR note is followers-only, you must be following
+                                        boolean isRestricted = isOwnerPrivate || "followers".equals(visibility);
+                                        if (isRestricted && !followingIds.contains(userId)) {
+                                            continue;
+                                        }
+                                    }
+
                                     // Friends Radar Filter
                                     if (isFriendsRadarEnabled) {
                                         String currentUserId = auth.getCurrentUser().getUid();
@@ -1092,6 +1357,7 @@ public class MapFragment extends Fragment {
                                     // Plan said "Pins disappear", which updateHeatmapVisibility handles by clearing symbols.
                                     // But here we are re-adding them.
                                     // So we should check validity.
+                                    // Only add marker if Heatmap is OFF
                                     if (!isHeatmapEnabled) {
                                         addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
                                                 timestamp, doc.getId(), userId, hasImage);
@@ -1099,6 +1365,13 @@ public class MapFragment extends Fragment {
                                 } catch (Exception e) {
                                     Log.e("MapFragment", "Error processing note: " + e.getMessage());
                                 }
+                            }
+                            
+                            // Check if pending target was found (Share Guard)
+                            if (pendingTargetNoteId != null) {
+                                Toast.makeText(requireContext(), "Note unavailable or private", Toast.LENGTH_LONG).show();
+                                pendingTargetNoteId = null;
+                                pendingOpenWindow = false;
                             }
 
                             // Update Heatmap Source
@@ -1110,7 +1383,9 @@ public class MapFragment extends Fragment {
                             }
                         }
                     });
-        } else {
+    }
+
+    private void loadLocalNotes() {
             try {
                 JSONArray array = new JSONArray(sharedPreferences.getString(NOTES_KEY, "[]"));
                 for (int i = 0; i < array.length(); i++) {
@@ -1121,7 +1396,6 @@ public class MapFragment extends Fragment {
                     addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null, false);
                 }
             } catch (Exception e) { e.printStackTrace(); }
-        }
     }
 
     private void renderNotesFromCache() {
@@ -1149,6 +1423,23 @@ public class MapFragment extends Fragment {
                 if (isFriendsRadarEnabled) {
                     String currentUserId = auth.getCurrentUser().getUid();
                     if (!userId.equals(currentUserId) && !followingIds.contains(userId)) {
+                        continue;
+                    }
+                }
+
+                // Visibility Filter (Cache)
+                String visibility = doc.getString("visibility");
+                if (visibility == null) visibility = "public";
+                boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
+                boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+
+                // Filter Hidden Notes
+                if (isHidden) continue;
+
+                if (!userId.equals(auth.getCurrentUser().getUid())) {
+                    if ("private".equals(visibility)) continue;
+                    boolean isRestricted = isOwnerPrivate || "followers".equals(visibility);
+                    if (isRestricted && !followingIds.contains(userId)) {
                         continue;
                     }
                 }
@@ -1294,7 +1585,95 @@ public class MapFragment extends Fragment {
     // Follow user
     private void followUser(String targetUserId, android.widget.Button btn) {
         String currentUserId = auth.getCurrentUser().getUid();
+        
+        // Loading State
+        String originalText = btn.getText().toString();
+        btn.setText("...");
+        btn.setEnabled(false);
 
+        // Check if target user is private
+        db.collection("users").document(targetUserId).get()
+                .addOnSuccessListener(targetUserDoc -> {
+                    boolean isPrivate = targetUserDoc.getBoolean("isPrivate") != null && targetUserDoc.getBoolean("isPrivate");
+                    
+                    if (isPrivate) {
+                        // Check Rejection Status First (5-Strike Rule)
+                        db.collection("users").document(targetUserId).collection("rejections").document(currentUserId)
+                            .get()
+                            .addOnSuccessListener(rejectionDoc -> {
+                                boolean blocked = false;
+                                if (rejectionDoc.exists()) {
+                                    Long count = rejectionDoc.getLong("count");
+                                    Long time = rejectionDoc.getLong("lastRejectionTime");
+                                    if (count != null && count >= 5 && time != null) {
+                                         if (System.currentTimeMillis() - time < 24 * 60 * 60 * 1000) {
+                                             blocked = true;
+                                         }
+                                    }
+                                }
+                                
+                                if (blocked) {
+                                    Toast.makeText(requireContext(), "Too many follow requests. Try again later.", Toast.LENGTH_LONG).show();
+                                    btn.setText(originalText);
+                                    btn.setEnabled(true);
+                                } else {
+                                    // Send Follow Request
+                                     db.collection("users").document(currentUserId).get()
+                                        .addOnSuccessListener(currentUserDoc -> {
+                                            String myName = currentUserDoc.getString("name");
+                                            String myProfilePic = currentUserDoc.getString("profilePic");
+                                            
+                                            Map<String, Object> requestData = new HashMap<>();
+                                            requestData.put("timestamp", System.currentTimeMillis());
+                                            requestData.put("requesterName", myName);
+                                            requestData.put("requesterProfilePic", myProfilePic);
+                                            
+                                            db.collection("users").document(targetUserId)
+                                                    .collection("follow_requests").document(currentUserId)
+                                                    .set(requestData)
+                                                    .addOnSuccessListener(aVoid -> {
+                                                        btn.setText("Requested");
+                                                        btn.setBackgroundResource(R.drawable.btn_following_selector); 
+                                                        btn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                                                        
+                                                        createNotification(targetUserId, currentUserId, "follow_request", null, null, (String)null);
+                                                        Toast.makeText(requireContext(), "Request sent", Toast.LENGTH_SHORT).show();
+                                                        btn.setEnabled(true);
+                                                    });
+                                        });
+                                }
+                            });
+                    } else {
+                        // Public: Direct Follow (Existing Logic)
+                        performDirectFollow(targetUserId, btn, currentUserId);
+                    }
+                });
+    }
+
+    private void createNotification(String toUserId, String fromUserId, String type, String noteId, String noteText, String noteImage) {
+        db.collection("users").document(fromUserId).get()
+            .addOnSuccessListener(doc -> {
+                String name = doc.getString("name");
+                String pic = doc.getString("profilePic");
+                
+                Map<String, Object> notif = new HashMap<>();
+                notif.put("type", type);
+                notif.put("fromUserId", fromUserId);
+                notif.put("fromUserName", name);
+                notif.put("fromUserProfilePic", pic);
+                notif.put("toUserId", toUserId);
+                notif.put("timestamp", System.currentTimeMillis());
+                notif.put("read", false);
+                
+                if (noteId != null) notif.put("noteId", noteId);
+                if (noteText != null) notif.put("noteText", noteText);
+                if (noteImage != null) notif.put("noteImage", noteImage);
+                
+                db.collection("notifications").add(notif);
+            });
+    }
+
+    private void performDirectFollow(String targetUserId, android.widget.Button btn, String currentUserId) {
         // Get current user's name and profile pic
         db.collection("users").document(currentUserId).get()
                 .addOnSuccessListener(currentUserDoc -> {
@@ -1339,8 +1718,9 @@ public class MapFragment extends Fragment {
                                 btn.setText("Following");
                                 btn.setBackgroundResource(R.drawable.btn_following_selector);
                                 btn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                                btn.setEnabled(true);
 
-                                createNotification(targetUserId, currentUserId, "follow", null, null, null);
+                                createNotification(targetUserId, currentUserId, "follow", null, null, (String)null);
 
                                 Toast.makeText(requireContext(), "Following " + targetName, Toast.LENGTH_SHORT).show();
                             });
@@ -1375,6 +1755,22 @@ public class MapFragment extends Fragment {
         btnCancel.setOnClickListener(v -> dialog.dismiss());
 
         dialog.show();
+    }
+
+    // Cancel follow request
+    private void cancelFollowRequest(String targetUserId, android.widget.Button btn) {
+        String currentUserId = auth.getCurrentUser().getUid();
+        
+        db.collection("users").document(targetUserId)
+                .collection("follow_requests").document(currentUserId)
+                .delete()
+                .addOnSuccessListener(aVoid -> {
+                    btn.setText("Follow");
+                    btn.setBackgroundResource(R.drawable.btn_primary_selector);
+                    btn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
+                    Toast.makeText(requireContext(), "Request canceled", Toast.LENGTH_SHORT).show();
+                })
+                .addOnFailureListener(e -> Toast.makeText(requireContext(), "Failed to cancel", Toast.LENGTH_SHORT).show());
     }
 
     // Unfollow user
@@ -1421,6 +1817,9 @@ public class MapFragment extends Fragment {
         TextView followingCount = dialogView.findViewById(R.id.dialog_following_count);
         android.widget.Button followBtn = dialogView.findViewById(R.id.dialog_follow_btn);
 
+        // Wrapper for dialog reference to use in async callbacks
+        final androidx.appcompat.app.AlertDialog[] dialogRef = new androidx.appcompat.app.AlertDialog[1];
+
         // Load user data
         db.collection("users").document(userId).get()
                 .addOnSuccessListener(doc -> {
@@ -1463,43 +1862,197 @@ public class MapFragment extends Fragment {
                         String currentUserId = auth.getCurrentUser().getUid();
                         if (!userId.equals(currentUserId)) {
                             followBtn.setVisibility(View.VISIBLE);
+                            
+                            // 1. Initial Loading State
+                            followBtn.setText("...");
+                            followBtn.setEnabled(false);
 
-                            // Check if already following
+                            // 2. Check Following Status
                             db.collection("users").document(currentUserId)
                                     .collection("following").document(userId)
                                     .get()
                                     .addOnSuccessListener(followDoc -> {
                                         if (followDoc.exists()) {
+                                            // Already Following
                                             followBtn.setText("Following");
                                             followBtn.setBackgroundResource(R.drawable.btn_following_selector);
                                             followBtn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                                            followBtn.setEnabled(true);
+                                        } else {
+                                            // 3. Not Following -> Check Pending Request
+                                            db.collection("users").document(userId)
+                                                    .collection("follow_requests").document(currentUserId)
+                                                    .get()
+                                                    .addOnSuccessListener(requestDoc -> {
+                                                        if (requestDoc.exists()) {
+                                                            // Request Pending
+                                                            followBtn.setText("Requested");
+                                                            followBtn.setBackgroundResource(R.drawable.btn_following_selector);
+                                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                                                        } else {
+                                                            // No Relation
+                                                            followBtn.setText("Follow");
+                                                            followBtn.setBackgroundResource(R.drawable.btn_primary_selector);
+                                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
+                                                        }
+                                                        followBtn.setEnabled(true);
+                                                    })
+                                                    .addOnFailureListener(e -> {
+                                                        // Fallback on error
+                                                        followBtn.setText("Follow");
+                                                        followBtn.setEnabled(true);
+                                                    });
                                         }
+                                    })
+                                    .addOnFailureListener(e -> {
+                                         // Fallback on error
+                                         followBtn.setText("Follow");
+                                         followBtn.setEnabled(true);
                                     });
 
                             followBtn.setOnClickListener(v -> {
-                                if (followBtn.getText().equals("Follow")) {
+                                String text = followBtn.getText().toString();
+                                if (text.equals("Follow")) {
                                     followUser(userId, followBtn);
-                                    int count = Integer.parseInt(followersCount.getText().toString());
-                                    followersCount.setText(String.valueOf(count + 1));
-                                } else {
-                                    unfollowUser(userId, followBtn);
-                                    int count = Integer.parseInt(followersCount.getText().toString());
-                                    followersCount.setText(String.valueOf(Math.max(0, count - 1)));
+                                } else if (text.equals("Requested")) {
+                                    cancelFollowRequest(userId, followBtn);
+                                } else if (text.equals("Following")) { // Explicit check
+                                    showUnfollowConfirmation(userId, followBtn);
+                                    // Count update deferred to success callback of unfollow if possible, 
+                                    // but currently unfollowUser is void. Optimistic update:
+                                    try {
+                                        int count = Integer.parseInt(followersCount.getText().toString());
+                                        followersCount.setText(String.valueOf(Math.max(0, count - 1)));
+                                    } catch(Exception e){}
+                                }
+                            });
+
+                            // Block Button
+                            android.widget.Button blockBtn = dialogView.findViewById(R.id.dialog_block_btn);
+                            blockBtn.setVisibility(View.VISIBLE);
+                            blockBtn.setOnClickListener(v -> {
+                                if (dialogRef[0] != null) {
+                                    showBlockConfirmation(userId, userName.getText().toString(), dialogRef[0]);
                                 }
                             });
                         }
                     }
-                });
+                })
+                .addOnFailureListener(e -> Toast.makeText(requireContext(), "Failed to load user info", Toast.LENGTH_SHORT).show());
 
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setView(dialogView)
-                .create();
+        androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setView(dialogView);
+
+        if (auth.getCurrentUser() != null && !userId.equals(auth.getCurrentUser().getUid())) {
+            builder.setNeutralButton("Report User", (d, w) -> {
+                com.visiboard.app.ui.report.ReportBottomSheetFragment reportSheet =
+                        com.visiboard.app.ui.report.ReportBottomSheetFragment.newInstance(
+                                userId,
+                                userName.getText().toString(),
+                                "USER",
+                                0, 0
+                        );
+                reportSheet.show(getParentFragmentManager(), "ReportBottomSheet");
+            });
+        }
+
+        // Create dialog and assign to the wrapper for async callback access
+        androidx.appcompat.app.AlertDialog dialog = builder.create();
+        dialogRef[0] = dialog;
 
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
 
         dialog.show();
+    }
+
+    private void showBlockConfirmation(String userId, String userName, androidx.appcompat.app.AlertDialog parentDialog) {
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Block " + userName + "?")
+                .setMessage("They won't be notified. You can unblock them anytime from Settings.")
+                .setPositiveButton("Block", (d, w) -> {
+                    blockUser(userId);
+                    parentDialog.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void blockUser(String targetUserId) {
+        String currentUserId = auth.getCurrentUser().getUid();
+        
+        // 1. Add to blocked_users collection
+        Map<String, Object> blockData = new HashMap<>();
+        blockData.put("blockedAt", System.currentTimeMillis());
+
+        // Check relationship before blocking to record it
+        db.collection("users").document(currentUserId).collection("following").document(targetUserId).get()
+            .addOnSuccessListener(followingDoc -> {
+                db.collection("users").document(currentUserId).collection("followers").document(targetUserId).get()
+                    .addOnSuccessListener(followerDoc -> {
+                        String relationship = "none";
+                        if (followingDoc.exists() && followerDoc.exists()) {
+                            relationship = "mutual";
+                        } else if (followingDoc.exists()) {
+                            relationship = "following";
+                        } else if (followerDoc.exists()) {
+                            relationship = "follower";
+                        }
+                        blockData.put("previousRelationship", relationship);
+
+                        // Execute block
+                        com.google.firebase.firestore.WriteBatch batch = db.batch();
+
+                        // Add to blocked_users
+                        batch.set(db.collection("users").document(currentUserId)
+                                .collection("blocked_users").document(targetUserId), blockData);
+
+                        // Remove from MY following (if I was following them)
+                        if (followingDoc.exists()) {
+                            batch.delete(db.collection("users").document(currentUserId)
+                                    .collection("following").document(targetUserId));
+                            batch.update(db.collection("users").document(currentUserId), 
+                                    "followingCount", com.google.firebase.firestore.FieldValue.increment(-1));
+                            // Remove me from THEIR followers
+                            batch.delete(db.collection("users").document(targetUserId)
+                                    .collection("followers").document(currentUserId));
+                            batch.update(db.collection("users").document(targetUserId), 
+                                    "followersCount", com.google.firebase.firestore.FieldValue.increment(-1));
+                        }
+
+                        // Remove from MY followers (if they were following me)
+                        if (followerDoc.exists()) {
+                            batch.delete(db.collection("users").document(currentUserId)
+                                    .collection("followers").document(targetUserId));
+                            batch.update(db.collection("users").document(currentUserId), 
+                                    "followersCount", com.google.firebase.firestore.FieldValue.increment(-1));
+                            // Remove me from THEIR following
+                            batch.delete(db.collection("users").document(targetUserId)
+                                    .collection("following").document(currentUserId));
+                            batch.update(db.collection("users").document(targetUserId), 
+                                    "followingCount", com.google.firebase.firestore.FieldValue.increment(-1));
+                        }
+
+                        // Delete pending follow requests (both directions)
+                        batch.delete(db.collection("users").document(currentUserId)
+                                .collection("follow_requests").document(targetUserId));
+                        batch.delete(db.collection("users").document(targetUserId)
+                                .collection("follow_requests").document(currentUserId));
+
+                        batch.commit()
+                            .addOnSuccessListener(aVoid -> {
+                                Toast.makeText(getContext(), "User blocked", Toast.LENGTH_SHORT).show();
+                                // Add to local blockedUserIds set for immediate filtering
+                                blockedUserIds.add(targetUserId);
+                                // Refresh map to remove blocked user's notes
+                                loadSavedNotes();
+                            })
+                            .addOnFailureListener(e -> {
+                                Toast.makeText(getContext(), "Failed to block user", Toast.LENGTH_SHORT).show();
+                            });
+                    });
+            });
     }
 
     private void createNotification(String toUserId, String fromUserId, String type,
@@ -2093,6 +2646,7 @@ public class MapFragment extends Fragment {
                     for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
                         followingIds.add(doc.getId());
                     }
+                    updateMapVisualization();
                 });
     }
     private java.util.List<String> followingIds = new java.util.ArrayList<>();

@@ -124,14 +124,6 @@ public class LeaderboardActivity extends AppCompatActivity implements Leaderboar
         TextView followingCount = dialogView.findViewById(R.id.dialog_following_count);
         android.widget.Button followBtn = dialogView.findViewById(R.id.dialog_follow_btn);
         
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setView(dialogView)
-                .create();
-        
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        }
-        
         db.collection("users").document(userId).get()
                 .addOnSuccessListener(doc -> {
                     if (doc.exists()) {
@@ -160,23 +152,62 @@ public class LeaderboardActivity extends AppCompatActivity implements Leaderboar
                         
                         com.google.firebase.auth.FirebaseUser currentUser = 
                             com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+                            
                         if (currentUser != null && !userId.equals(currentUser.getUid())) {
                             followBtn.setVisibility(View.VISIBLE);
                             
+                            // 1. Initial Loading State
+                            followBtn.setText("...");
+                            followBtn.setEnabled(false);
+
+                            // 2. Check Following Status
                             db.collection("users").document(currentUser.getUid())
                                     .collection("following").document(userId)
                                     .get()
                                     .addOnSuccessListener(followDoc -> {
                                         if (followDoc.exists()) {
+                                            // Already Following
                                             followBtn.setText("Following");
-                                            followBtn.setEnabled(false);
+                                            followBtn.setBackgroundResource(R.drawable.btn_following_selector);
+                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                                            followBtn.setEnabled(true);
+                                        } else {
+                                            // 3. Not Following -> Check Pending Request
+                                            db.collection("users").document(userId)
+                                                    .collection("follow_requests").document(currentUser.getUid())
+                                                    .get()
+                                                    .addOnSuccessListener(requestDoc -> {
+                                                        if (requestDoc.exists()) {
+                                                            // Request Pending
+                                                            followBtn.setText("Requested");
+                                                            followBtn.setBackgroundResource(R.drawable.btn_following_selector);
+                                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                                                        } else {
+                                                            // No Relation
+                                                            followBtn.setText("Follow");
+                                                            followBtn.setBackgroundResource(R.drawable.btn_primary_selector);
+                                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
+                                                        }
+                                                        followBtn.setEnabled(true);
+                                                    })
+                                                    .addOnFailureListener(e -> {
+                                                        followBtn.setText("Follow");
+                                                        followBtn.setEnabled(true);
+                                                    });
                                         }
+                                    })
+                                    .addOnFailureListener(e -> {
+                                         followBtn.setText("Follow");
+                                         followBtn.setEnabled(true);
                                     });
                             
                             followBtn.setOnClickListener(v -> {
-                                if (followBtn.getText().equals("Follow")) {
+                                String text = followBtn.getText().toString();
+                                if (text.equals("Follow")) {
                                     followUser(userId, followBtn, followersCount);
-                                } else {
+                                } else if (text.equals("Requested")) {
+                                    cancelFollowRequest(userId, followBtn);
+                                } else if (text.equals("Following")) {
                                     unfollowUser(userId, followBtn, followersCount);
                                 }
                             });
@@ -187,28 +218,161 @@ public class LeaderboardActivity extends AppCompatActivity implements Leaderboar
                 })
                 .addOnFailureListener(e -> Toast.makeText(this, "Failed to load info", Toast.LENGTH_SHORT).show());
         
+        androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setView(dialogView);
+                
+        // Add Report Button
+        com.google.firebase.auth.FirebaseUser currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser != null && !userId.equals(currentUser.getUid())) {
+             builder.setNeutralButton("Report User", (d, w) -> {
+                 com.visiboard.app.ui.report.ReportBottomSheetFragment reportSheet =
+                         com.visiboard.app.ui.report.ReportBottomSheetFragment.newInstance(
+                                 userId,
+                                 userName.getText().toString(),
+                                 "USER",
+                                 0, 0
+                         );
+                 reportSheet.show(getSupportFragmentManager(), "ReportBottomSheet");
+             });
+        }
+        
+        androidx.appcompat.app.AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
         dialog.show();
     }
     
-    private void followUser(String userId, android.widget.Button followBtn, TextView followersCount) {
+    // Updated Helper Methods
+    
+    private void followUser(String targetUserId, android.widget.Button btn, TextView followersCount) {
         com.google.firebase.auth.FirebaseUser currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
         if (currentUser == null) return;
         String currentUserId = currentUser.getUid();
         
-        db.collection("users").document(currentUserId).collection("following").document(userId).set(new HashMap<>());
-        db.collection("users").document(currentUserId).update("followingCount", com.google.firebase.firestore.FieldValue.increment(1));
+        String originalText = btn.getText().toString();
+        btn.setText("...");
+        btn.setEnabled(false);
+
+        db.collection("users").document(targetUserId).get()
+            .addOnSuccessListener(targetUserDoc -> {
+                boolean isPrivate = targetUserDoc.getBoolean("isPrivate") != null && targetUserDoc.getBoolean("isPrivate");
+                
+                if (isPrivate) {
+                     // Check Rejection Status First (5-Strike Rule)
+                    db.collection("users").document(targetUserId).collection("rejections").document(currentUserId)
+                        .get()
+                        .addOnSuccessListener(rejectionDoc -> {
+                            boolean blocked = false;
+                            if (rejectionDoc.exists()) {
+                                Long count = rejectionDoc.getLong("count");
+                                Long time = rejectionDoc.getLong("lastRejectionTime");
+                                if (count != null && count >= 5 && time != null) {
+                                     if (System.currentTimeMillis() - time < 24 * 60 * 60 * 1000) {
+                                         blocked = true;
+                                     }
+                                }
+                            }
+                            
+                            if (blocked) {
+                                Toast.makeText(this, "Too many follow requests. Try again later.", Toast.LENGTH_LONG).show();
+                                btn.setText(originalText);
+                                btn.setEnabled(true);
+                            } else {
+                                sendFollowRequest(targetUserId, btn, currentUserId);
+                            }
+                        })
+                        .addOnFailureListener(e -> {
+                            btn.setText(originalText);
+                            btn.setEnabled(true);
+                        });
+                } else {
+                    performDirectFollow(targetUserId, btn, currentUserId, followersCount);
+                }
+            })
+            .addOnFailureListener(e -> {
+                 btn.setText(originalText);
+                 btn.setEnabled(true);
+            });
+    }
+
+    private void sendFollowRequest(String targetUserId, android.widget.Button btn, String currentUserId) {
+        db.collection("users").document(currentUserId).get().addOnSuccessListener(currentUserDoc -> {
+             String myName = currentUserDoc.getString("name");
+             String myProfilePic = currentUserDoc.getString("profilePic");
+             java.util.Map<String, Object> requestData = new HashMap<>();
+             requestData.put("timestamp", System.currentTimeMillis());
+             requestData.put("requesterName", myName);
+             requestData.put("requesterProfilePic", myProfilePic);
+             
+             db.collection("users").document(targetUserId).collection("follow_requests").document(currentUserId)
+                 .set(requestData)
+                 .addOnSuccessListener(aVoid -> {
+                     btn.setText("Requested");
+                     btn.setBackgroundResource(R.drawable.btn_following_selector); 
+                     btn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                     
+                     createNotification(targetUserId, currentUserId, "follow_request");
+                     Toast.makeText(this, "Request sent", Toast.LENGTH_SHORT).show();
+                     btn.setEnabled(true);
+                 })
+                 .addOnFailureListener(e -> btn.setEnabled(true));
+        });
+    }
+
+    private void performDirectFollow(String targetUserId, android.widget.Button btn, String currentUserId, TextView followersCount) {
+        db.collection("users").document(currentUserId).get().addOnSuccessListener(currentUserDoc -> {
+             String myName = currentUserDoc.getString("name");
+             String myProfilePic = currentUserDoc.getString("profilePic");
+             
+             java.util.Map<String, Object> followerData = new HashMap<>();
+             followerData.put("timestamp", System.currentTimeMillis());
+             followerData.put("followerName", myName);
+             followerData.put("followerProfilePic", myProfilePic);
+             db.collection("users").document(targetUserId).collection("followers").document(currentUserId).set(followerData);
+             db.collection("users").document(targetUserId).update("followersCount", com.google.firebase.firestore.FieldValue.increment(1));
+             
+             db.collection("users").document(targetUserId).get().addOnSuccessListener(targetUserDoc -> {
+                 String targetName = targetUserDoc.getString("name");
+                 String targetProfilePic = targetUserDoc.getString("profilePic");
+                 
+                 java.util.Map<String, Object> followingData = new HashMap<>();
+                 followingData.put("timestamp", System.currentTimeMillis());
+                 followingData.put("followedName", targetName);
+                 followingData.put("followedProfilePic", targetProfilePic);
+                 
+                 db.collection("users").document(currentUserId).collection("following").document(targetUserId).set(followingData);
+                 db.collection("users").document(currentUserId).update("followingCount", com.google.firebase.firestore.FieldValue.increment(1));
+                 
+                 btn.setText("Following");
+                 btn.setBackgroundResource(R.drawable.btn_following_selector);
+                 btn.setTextColor(getResources().getColor(R.color.button_text_following, null));
+                 btn.setEnabled(true);
+                 
+                 int count = Integer.parseInt(followersCount.getText().toString());
+                 followersCount.setText(String.valueOf(count + 1));
+                 
+                 createNotification(targetUserId, currentUserId, "follow");
+                 Toast.makeText(this, "Following " + targetName, Toast.LENGTH_SHORT).show();
+             });
+        });
+    }
+
+    private void cancelFollowRequest(String targetUserId, android.widget.Button btn) {
+        com.google.firebase.auth.FirebaseUser currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser == null) return;
         
-        db.collection("users").document(userId).collection("followers").document(currentUserId).set(new HashMap<>());
-        db.collection("users").document(userId).update("followersCount", com.google.firebase.firestore.FieldValue.increment(1));
-        
-        followBtn.setText("Following");
-        followBtn.setEnabled(false);
-        followersCount.setText(String.valueOf(Integer.parseInt(followersCount.getText().toString()) + 1));
-        Toast.makeText(this, "Following user", Toast.LENGTH_SHORT).show();
+        db.collection("users").document(targetUserId).collection("follow_requests").document(currentUser.getUid()).delete()
+            .addOnSuccessListener(aVoid -> {
+                btn.setText("Follow");
+                btn.setBackgroundResource(R.drawable.btn_primary_selector);
+                btn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
+                Toast.makeText(this, "Request canceled", Toast.LENGTH_SHORT).show();
+            });
     }
 
     private void unfollowUser(String userId, android.widget.Button followBtn, TextView followersCount) {
-         com.google.firebase.auth.FirebaseUser currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        com.google.firebase.auth.FirebaseUser currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
         if (currentUser == null) return;
         String currentUserId = currentUser.getUid();
         
@@ -219,9 +383,32 @@ public class LeaderboardActivity extends AppCompatActivity implements Leaderboar
         db.collection("users").document(userId).update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1));
         
         followBtn.setText("Follow");
-        followBtn.setEnabled(true);
-        followersCount.setText(String.valueOf(Math.max(0, Integer.parseInt(followersCount.getText().toString()) - 1)));
+        followBtn.setBackgroundResource(R.drawable.btn_primary_selector);
+        followBtn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
+        
+        int count = Integer.parseInt(followersCount.getText().toString());
+        followersCount.setText(String.valueOf(Math.max(0, count - 1)));
+        
         Toast.makeText(this, "Unfollowed user", Toast.LENGTH_SHORT).show();
+    }
+
+    private void createNotification(String toUserId, String fromUserId, String type) {
+        db.collection("users").document(fromUserId).get()
+            .addOnSuccessListener(doc -> {
+                String name = doc.getString("name");
+                String pic = doc.getString("profilePic");
+                
+                java.util.Map<String, Object> notif = new HashMap<>();
+                notif.put("type", type);
+                notif.put("fromUserId", fromUserId);
+                notif.put("fromUserName", name);
+                notif.put("fromUserProfilePic", pic);
+                notif.put("toUserId", toUserId);
+                notif.put("timestamp", System.currentTimeMillis());
+                notif.put("read", false);
+                
+                db.collection("notifications").add(notif);
+            });
     }
 
     private class LeaderboardPagerAdapter extends FragmentStateAdapter {

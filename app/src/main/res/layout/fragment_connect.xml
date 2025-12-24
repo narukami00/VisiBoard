@@ -4,23 +4,20 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/background_light">
-
-    <!-- Header Removed (Moved to Connect Tab) -->
+    android:background="?android:attr/colorBackground">
 
     <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tab_layout_feed"
+        android:id="@+id/tab_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/card_background"
-        app:tabIndicatorColor="@color/primary"
-        app:tabSelectedTextColor="@color/primary"
-        app:tabTextColor="@color/text_secondary"
         app:tabMode="fixed"
-        app:tabGravity="fill"/>
+        app:tabGravity="fill"
+        app:tabTextColor="?android:attr/textColorSecondary"
+        app:tabSelectedTextColor="?attr/colorPrimary"
+        app:tabIndicatorColor="?attr/colorPrimary"/>
 
     <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/view_pager_feed"
+        android:id="@+id/view_pager"
         android:layout_width="match_parent"
         android:layout_height="match_parent"/>
 

@@ -124,6 +124,14 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
                     text = notification.getFromUserName() + " shared a note with you";
                     iconRes = R.drawable.ic_share;
                     break;
+                case "follow_request":
+                    text = notification.getFromUserName() + " requested to follow you";
+                    iconRes = R.drawable.ic_profile;
+                    break;
+                case "follow_accepted":
+                    text = notification.getFromUserName() + " accepted your follow request";
+                    iconRes = R.drawable.ic_check;
+                    break;
             }
 
             tvNotificationText.setText(text);

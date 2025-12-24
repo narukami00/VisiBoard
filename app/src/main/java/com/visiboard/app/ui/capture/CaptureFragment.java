@@ -140,6 +140,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private boolean isStepsVisible = false;
     private int filterMode = 0; // 0=Normal, 1=B&W, 2=High Contrast, 3=Chill, 4=Warm
     private int stepCountSession = 0;
+    private boolean isFiltersLoaded = false;
 
     private android.os.Vibrator vibrator;
 
@@ -154,6 +155,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private Location currentLocation;
     private Location virtualLocation; // For dead reckoning
     private List<ARNote> nearbyNotes = new ArrayList<>();
+    private List<String> followingIds = new ArrayList<>();
 
     private SensorManager sensorManager;
     private Sensor accelerometer;
@@ -165,7 +167,11 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private float pitch = 0f;
     private Float initialPitch = null; // Baseline pitch for vertical calibration
     private float lastUpdateAzimuth = 0f;
+    private float lastUpdatePitch = 0f; // Track last pitch update
+    private long lastUpdateTimestamp = 0; // Track last update time
+    private static final long UPDATE_INTERVAL_MS = 16; // Cap at ~60 FPS
     private static final float AZIMUTH_UPDATE_THRESHOLD = 0.5f; // Reduced for smoother updates
+    private static final float PITCH_UPDATE_THRESHOLD = 0.5f; // Threshold for vertical movement updates
     // Dynamic filter constants
     private static final float ALPHA_STEADY = 0.03f; // Very smooth for steady hand
     private static final float ALPHA_MOVE = 0.3f;    // Fast response for movement
@@ -274,6 +280,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         if (stepDetector != null) {
             sensorManager.registerListener(this, stepDetector, SensorManager.SENSOR_DELAY_UI);
         }
+        restoreUiState(); // Restore UI state (icons, etc.) when returning to fragment
     }
 
     @Override
@@ -453,7 +460,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     }
                 }
             }
-            return true; // Consume all touch events to prevent double-tap issues
+            return false; // Return false to allow touch events to pass through to underlying views (e.g. AR notes)
         });
     }
 
@@ -929,6 +936,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         } else {
             startCamera();
             loadUserLocation();
+            loadFollowingList();
             checkActivityPermission();
         }
     }
@@ -1031,7 +1039,22 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         });
     }
 
+    
+    private void loadFollowingList() {
+        if (auth.getCurrentUser() == null) return;
+        db.collection("users").document(auth.getCurrentUser().getUid())
+                .collection("following").get()
+                .addOnSuccessListener(querySnapshot -> {
+                    followingIds.clear();
+                    for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                        followingIds.add(doc.getId());
+                    }
+                    if (currentLocation != null) loadNearbyNotes();
+                });
+    }
+
     private void loadNearbyNotes() {
+        if (auth.getCurrentUser() == null) return;
         String userId = auth.getCurrentUser().getUid();
 
         db.collection("notes")
@@ -1042,6 +1065,24 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
                         try {
                             String noteUserId = doc.getString("userId");
+                            String visibility = doc.getString("visibility");
+                            if (visibility == null) visibility = "public";
+
+                            // Privacy Filter
+                            boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
+                            boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+
+                            // Filter Hidden Notes
+                            if (isHidden) continue;
+
+                            if (!noteUserId.equals(userId)) {
+                                if ("private".equals(visibility)) continue;
+                                
+                                boolean isRestricted = isOwnerPrivate || "followers".equals(visibility);
+                                if (isRestricted && !followingIds.contains(noteUserId)) {
+                                    continue;
+                                }
+                            }
 
                             GeoPoint location = doc.getGeoPoint("location");
                             if (location == null) {
@@ -1438,6 +1479,12 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     newAzimuth += 360;
                 }
 
+                // Throttle updates to ~60 FPS
+                long currentTime = System.currentTimeMillis();
+                if (currentTime - lastUpdateTimestamp < UPDATE_INTERVAL_MS) {
+                    return;
+                }
+
                 // Get pitch (tilt up/down)
                 pitch = (float) Math.toDegrees(orientation[1]);
 
@@ -1451,17 +1498,21 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                 if (azimuthDiff > 180) {
                     azimuthDiff = 360 - azimuthDiff;
                 }
+                
+                float pitchDiff = Math.abs(pitch - lastUpdatePitch);
 
-                if (azimuthDiff >= AZIMUTH_UPDATE_THRESHOLD && !isUpdatingView) {
+                boolean shouldUpdate = (azimuthDiff >= AZIMUTH_UPDATE_THRESHOLD || pitchDiff >= PITCH_UPDATE_THRESHOLD);
+
+                if (shouldUpdate && !isUpdatingView) {
                     azimuth = newAzimuth;
                     lastUpdateAzimuth = newAzimuth;
+                    lastUpdatePitch = pitch;
+                    lastUpdateTimestamp = currentTime;
+                    
                     updateARViewPositions();
                     if (radarView != null) {
                         radarView.setAzimuth(azimuth);
                     }
-                } else {
-                    // Update for pitch changes (depth effect) even if azimuth hasn't changed much
-                    updateARViewPositions();
                 }
             }
         }
@@ -1514,8 +1565,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         if (nearbyNotes.isEmpty()) return;
 
         for (ARNote note : nearbyNotes) {
-            // We need the original note location...
-            // Wait, ARNote stores its own lat/lon. We can just recalculate.
+            // ARNote stores its own lat/lon. We can just recalculate.
 
             note.distance = calculateDistance(
                     virtualLocation.getLatitude(),
@@ -1669,5 +1719,74 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         double distance;
         float bearing;
         long timestamp;
+    }
+
+    private void restoreUiState() {
+        if (getContext() == null) return;
+        
+        int colorPrimary = ContextCompat.getColor(requireContext(), R.color.primary);
+        int colorInactive = ContextCompat.getColor(requireContext(), R.color.text_light);
+
+        // Restore Feature Menu Icons
+        if (ivMenuQr != null) {
+             ivMenuQr.setColorFilter(isQrEnabled ? colorPrimary : colorInactive);
+        }
+        if (ivMenuOcr != null) {
+             ivMenuOcr.setColorFilter(isOcrEnabled ? colorPrimary : colorInactive);
+        }
+        if (ivMenuFlash != null) {
+             ivMenuFlash.setColorFilter(isFlashEnabled ? colorPrimary : colorInactive);
+             // Ensure flash state is reapplied if camera was restarted
+             if (camera != null && camera.getCameraInfo().hasFlashUnit() && isFlashEnabled) {
+                 camera.getCameraControl().enableTorch(true);
+             }
+        }
+        if (ivMenuFilter != null) {
+             ivMenuFilter.setColorFilter(filterMode > 0 ? colorPrimary : colorInactive);
+             if (tvMenuFilter != null) {
+                 String modeName = "Normal";
+                 switch (filterMode) {
+                    case 1: modeName = "B&W"; break;
+                    case 2: modeName = "Contrast"; break;
+                    case 3: modeName = "Cool"; break;
+                    case 4: modeName = "Warm"; break;
+                 }
+                 tvMenuFilter.setText("Filter: " + modeName);
+             }
+             // Re-apply filter background preview if needed
+             if (filterOverlay != null) {
+                switch (filterMode) {
+                    case 0: filterOverlay.setBackgroundColor(Color.TRANSPARENT); break;
+                    case 1: filterOverlay.setBackgroundColor(Color.parseColor("#33888888")); break;
+                    case 2: filterOverlay.setBackgroundColor(Color.parseColor("#11000000")); break;
+                    case 3: filterOverlay.setBackgroundColor(Color.parseColor("#226699CC")); break;
+                    case 4: filterOverlay.setBackgroundColor(Color.parseColor("#22FFAA55")); break;
+                }
+             }
+        }
+        
+        // Restore Status Indicator
+        if (tvStatusIndicator != null) {
+            if (isOcrEnabled) {
+                tvStatusIndicator.setText("Take a photo to scan text");
+                tvStatusIndicator.setVisibility(View.VISIBLE);
+            } else if (isQrEnabled) {
+                 // Optional: Add QR hint if needed, or keep hidden
+                 tvStatusIndicator.setVisibility(View.GONE);
+            } else if (!isArVisible) {
+                tvStatusIndicator.setText("Notes Hidden");
+                tvStatusIndicator.setVisibility(View.VISIBLE);
+            } else {
+                tvStatusIndicator.setVisibility(View.GONE);
+            }
+        }
+        
+        // Restore Menu Visibility Text/Icon
+        if (tvMenuVisibility != null) {
+            tvMenuVisibility.setText(isArVisible ? "Hide Notes" : "Show Notes");
+        }
+        if (ivMenuEye != null) {
+            ivMenuEye.setImageResource(isArVisible ? R.drawable.ic_eye_visible : R.drawable.ic_eye_hidden);
+        }
     }
 }

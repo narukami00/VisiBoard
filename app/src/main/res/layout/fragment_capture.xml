@@ -18,18 +18,18 @@
         android:layout_height="match_parent"
         android:background="#00000000" />
 
+    <!-- Overlay for ML Analysis (QR/OCR) -->
+    <com.visiboard.app.ui.capture.GraphicOverlay
+        android:id="@+id/graphic_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <!-- Overlay for AR notes -->
     <FrameLayout
         android:id="@+id/ar_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent" >
     </FrameLayout>
-
-    <!-- Overlay for ML Analysis (QR/OCR) -->
-    <com.visiboard.app.ui.capture.GraphicOverlay
-        android:id="@+id/graphic_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
 
     <!-- Step Counter Overlay (Moved to Top) -->
     <!-- Removed from here, will place inside Top Info Bar or just below it -->

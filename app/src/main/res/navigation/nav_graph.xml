@@ -32,6 +32,11 @@
         android:label="Feed" />
 
     <fragment
+        android:id="@+id/connectFragment"
+        android:name="com.visiboard.app.ui.connect.ConnectFragment"
+        android:label="Connect" />
+
+    <fragment
         android:id="@+id/profileFragment"
         android:name="com.visiboard.app.ui.profile.ProfileFragment"
         android:label="Profile" />

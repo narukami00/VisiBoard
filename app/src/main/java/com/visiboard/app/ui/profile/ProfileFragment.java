@@ -142,6 +142,9 @@ public class ProfileFragment extends Fragment {
 
         profileImage.setOnClickListener(v -> pickImage());
         logoutIcon.setOnClickListener(v -> showLogoutConfirmation());
+        view.findViewById(R.id.settings_icon).setOnClickListener(v -> {
+            startActivity(new Intent(getActivity(), com.visiboard.app.ui.settings.SettingsActivity.class));
+        });
         view.findViewById(R.id.btn_view_all_notes).setOnClickListener(v -> showAllNotesDialog());
         nameText.setOnClickListener(v -> showEditNameDialog());
         view.findViewById(R.id.btn_about).setOnClickListener(v -> showAboutDialog());

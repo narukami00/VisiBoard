@@ -83,6 +83,16 @@
                     android:visibility="gone" />
 
                 <ImageButton
+                    android:id="@+id/btn_visibility"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_eye_visible"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="8dp"
+                    android:visibility="gone"
+                    android:contentDescription="Toggle Visibility" />
+
+                <ImageButton
                     android:id="@+id/btn_edit_note"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
@@ -91,6 +101,16 @@
                     android:padding="8dp"
                     android:visibility="gone"
                     android:contentDescription="Edit Note" />
+
+                <ImageButton
+                    android:id="@+id/btn_more_options"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_more_vert"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="8dp"
+                    android:visibility="gone"
+                    android:contentDescription="More Options" />
 
             </LinearLayout>
 
@@ -243,6 +263,36 @@
                         android:textColor="@color/text_primary"
                         android:fontFamily="@font/poppins_semibold"
                         android:layout_marginStart="8dp" />
+
+                </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="24dp"
+                    android:background="@color/divider"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/save_section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <ImageView
+                        android:id="@+id/btn_save"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_bookmark_outline"
+                        app:tint="@color/text_primary"/>
 
                 </LinearLayout>
 

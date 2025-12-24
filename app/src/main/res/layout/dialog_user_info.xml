@@ -195,6 +195,20 @@
                 android:fontFamily="@font/poppins_semibold"
                 android:visibility="gone" />
 
+            <!-- Block Button -->
+            <Button
+                android:id="@+id/dialog_block_btn"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:text="Block"
+                android:textColor="#FF5252"
+                android:background="@android:color/transparent"
+                android:textAllCaps="false"
+                android:fontFamily="@font/poppins_regular"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
         </LinearLayout>
 
     </ScrollView>

@@ -15,4 +15,5 @@ public class Note {
     public String imageUrl;
     public int status; // 0=pending,1=syncing,2=synced
     public long timestamp;
+    public String visibility = "public"; // "public", "followers", "private"
 }

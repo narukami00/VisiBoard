@@ -55,4 +55,9 @@ public class UserInfo {
     private int totalLikes;
     public int getTotalLikes() { return totalLikes; }
     public void setTotalLikes(int totalLikes) { this.totalLikes = totalLikes; }
+    
+    // Privacy
+    private boolean isPrivate;
+    public boolean isPrivate() { return isPrivate; }
+    public void setPrivate(boolean isPrivate) { this.isPrivate = isPrivate; }
 }

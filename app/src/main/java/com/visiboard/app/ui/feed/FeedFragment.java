@@ -11,6 +11,7 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -43,10 +44,10 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
     
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
-    private RecyclerView rvSearchResults;
-    private ImageButton btnMessages;
-    private TextInputEditText etSearchUsers;
-    private UserSearchAdapter userSearchAdapter;
+    // private RecyclerView rvSearchResults;
+    // private ImageButton btnMessages;
+    // private TextInputEditText etSearchUsers;
+    // private UserSearchAdapter userSearchAdapter;
     private FollowingAdapter followingAdapter;
     
     private FirebaseAuth auth;
@@ -54,6 +55,8 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
     
     private View customNotificationTab;
     private TextView tvNotificationBadge;
+    
+    private java.util.List<String> followingIds = new java.util.ArrayList<>();
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -69,14 +72,31 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         
         tabLayout = view.findViewById(R.id.tab_layout_feed);
         viewPager = view.findViewById(R.id.view_pager_feed);
-        rvSearchResults = view.findViewById(R.id.rv_search_results);
-        btnMessages = view.findViewById(R.id.btn_messages);
-        etSearchUsers = view.findViewById(R.id.et_search_users);
+        // rvSearchResults = view.findViewById(R.id.rv_search_results);
+        // btnMessages = view.findViewById(R.id.btn_messages);
+        // etSearchUsers = view.findViewById(R.id.et_search_users);
         
         setupTabs();
-        setupSearchBar();
-        setupMessagesButton();
-        setupSearchRecyclerView();
+        // setupSearchBar();
+        // setupMessagesButton();
+        // setupSearchRecyclerView();
+        
+        loadFollowingList();
+    }
+    
+    private void loadFollowingList() {
+        if (auth.getCurrentUser() == null) return;
+        db.collection("users").document(auth.getCurrentUser().getUid())
+                .collection("following")
+                .addSnapshotListener((snapshots, e) -> {
+                    if (e != null) return;
+                    if (snapshots != null) {
+                        followingIds.clear();
+                        for (DocumentSnapshot doc : snapshots.getDocuments()) {
+                            followingIds.add(doc.getId());
+                        }
+                    }
+                });
     }
     
     private void setupTabs() {
@@ -112,6 +132,7 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         });
     }
     
+    /*
     private void setupSearchRecyclerView() {
         rvSearchResults.setLayoutManager(new LinearLayoutManager(getContext()));
         userSearchAdapter = new UserSearchAdapter(user -> {
@@ -127,7 +148,9 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             android.view.animation.AnimationUtils.loadLayoutAnimation(getContext(), R.anim.layout_animation_fall_down);
         rvSearchResults.setLayoutAnimation(controller);
     }
+    */
 
+    /*
     private void setupSearchBar() {
         etSearchUsers.addTextChangedListener(new TextWatcher() {
             @Override
@@ -175,7 +198,9 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             })
             .addOnFailureListener(e -> Log.e(TAG, "Error searching users", e));
     }
+    */
 
+    /*
     private void setupMessagesButton() {
         btnMessages.setOnClickListener(v -> {
             v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
@@ -185,6 +210,7 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             showFollowingDialog(null);
         });
     }
+    */
 
     // Callbacks
     @Override
@@ -250,13 +276,58 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             showMessageDialog(notification);
         } else if ("shared_note".equals(type)) {
             showSharedNoteView(notification);
+        } else if ("follow_request".equals(type)) {
+             startActivity(new android.content.Intent(requireContext(), com.visiboard.app.ui.settings.FollowRequestsActivity.class));
+        } else if ("follow_accepted".equals(type)) {
+             showUserInfoDialog(notification.getFromUserId());
         } else {
              // Default to note navigation
              String targetId = notification.getNoteId();
              if (targetId != null) {
-                 navigateToNoteOnMap(notification.getNoteLat(), notification.getNoteLng(), targetId);
+                 verifyNoteAccessAndNavigate(targetId, notification.getNoteLat(), notification.getNoteLng());
              }
         }
+    }
+
+    private void verifyNoteAccessAndNavigate(String noteId, double lat, double lng) {
+        if (auth.getCurrentUser() == null) return;
+        String currentUid = auth.getCurrentUser().getUid();
+
+        db.collection("notes").document(noteId).get()
+            .addOnSuccessListener(doc -> {
+                if (!doc.exists()) {
+                    Toast.makeText(getContext(), "Note no longer exists", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                
+                String ownerId = doc.getString("userId");
+                String visibility = doc.getString("visibility");
+                if (visibility == null) visibility = "public";
+                
+                boolean isAllowed = false;
+                
+                if (currentUid.equals(ownerId)) {
+                    isAllowed = true;
+                } else if ("public".equals(visibility)) {
+                    isAllowed = true;
+                } else if ("followers".equals(visibility)) {
+                    if (followingIds.contains(ownerId)) {
+                        isAllowed = true;
+                    }
+                } else if ("private".equals(visibility)) {
+                     // Only owner allowed (handled above)
+                    isAllowed = false;
+                }
+                
+                if (isAllowed) {
+                    navigateToNoteOnMap(lat, lng, noteId);
+                } else {
+                    Toast.makeText(getContext(), "This note is private", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .addOnFailureListener(e -> {
+                 Toast.makeText(getContext(), "Failed to verify note access", Toast.LENGTH_SHORT).show();
+            });
     }
 
     private class FeedPagerAdapter extends FragmentStateAdapter {
@@ -343,8 +414,6 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         return "Just now";
     }
     
-
-    
     private void showUserInfoDialog(String userId) {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_user_info, null);
         
@@ -398,16 +467,55 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                     if (!currentUserId.equals(userId)) {
                         followBtn.setVisibility(View.VISIBLE);
                         
+                        // 1. Initial Loading State
+                        followBtn.setText("...");
+                        followBtn.setEnabled(false);
+
+                        // 2. Check Following Status
                         db.collection("users").document(currentUserId)
                                 .collection("following").document(userId)
                                 .get()
                                 .addOnSuccessListener(doc -> {
                                     if (doc.exists()) {
+                                        // Already Following
                                         followBtn.setText("Following");
+                                        followBtn.setEnabled(true);
                                     } else {
-                                        followBtn.setText("Follow");
+                                        // 3. Not Following -> Check Pending Request
+                                        db.collection("users").document(userId)
+                                                .collection("follow_requests").document(currentUserId)
+                                                .get()
+                                                .addOnSuccessListener(requestDoc -> {
+                                                    if (requestDoc.exists()) {
+                                                        // Request Pending
+                                                        followBtn.setText("Requested");
+                                                    } else {
+                                                        // No Relation
+                                                        followBtn.setText("Follow");
+                                                    }
+                                                    followBtn.setEnabled(true);
+                                                })
+                                                .addOnFailureListener(e -> {
+                                                    followBtn.setText("Follow");
+                                                    followBtn.setEnabled(true);
+                                                });
                                     }
+                                })
+                                .addOnFailureListener(e -> {
+                                    followBtn.setText("Follow");
+                                    followBtn.setEnabled(true);
                                 });
+
+                        followBtn.setOnClickListener(v -> {
+                            String text = followBtn.getText().toString();
+                            if ("Follow".equals(text)) {
+                                followUser(userId, followBtn);
+                            } else if ("Requested".equals(text)) {
+                                cancelFollowRequest(userId, followBtn);
+                            } else {
+                                unfollowUser(userId, followBtn);
+                            }
+                        });
                     }
                 });
         
@@ -433,8 +541,6 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         }
     }
     
-
-    
     private void showFollowingDialog(@Nullable NearbyNote noteToShare) {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_following, null);
         
@@ -443,16 +549,14 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         TextView tvNoData = dialogView.findViewById(R.id.tv_no_following_dialog);
         ImageButton btnCloseHeader = dialogView.findViewById(R.id.btn_close_header);
         TextInputEditText etSearch = dialogView.findViewById(R.id.et_search_following);
-        TextView tvTitle = dialogView.findViewById(R.id.dialog_title); // ID was dialog_title
+        TextView tvTitle = dialogView.findViewById(R.id.dialog_title); 
         
-        // Update Title if sharing
         if (noteToShare != null) {
             if (tvTitle != null) {
                 tvTitle.setText("Share Note");
             }
         }
         
-        // List to hold all users for filtering
         final List<UserInfo> allFollowingList = new ArrayList<>();
         
         rvDialog.setLayoutManager(new LinearLayoutManager(getContext()));
@@ -469,22 +573,16 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                      dialog.dismiss();
                 } else {
                      showSendMessageDialog(user);
-                     // dialog.dismiss(); // Optional: keep open to message multiple?
                 }
             }
         );
         rvDialog.setAdapter(dialogAdapter);
         
-
-        
         btnCloseHeader.setOnClickListener(v -> dialog.dismiss());
         
-        // Search Filter
         etSearch.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 String query = s.toString().toLowerCase().trim();
                 if (allFollowingList.isEmpty()) return;
                 
@@ -496,8 +594,7 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                 }
                 dialogAdapter.setUsers(filtered);
             }
-            @Override
-            public void afterTextChanged(Editable s) {}
+            @Override public void afterTextChanged(Editable s) {}
         });
         
         dialog.show();
@@ -529,10 +626,8 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                     return;
                 }
                 
-                // Clear list just in case
                 allFollowingList.clear();
                 
-                // Show list container immediately for progressive loading
                 pbLoading.setVisibility(View.GONE);
                 rvContent.setVisibility(View.VISIBLE);
                 
@@ -549,20 +644,16 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                                 
                                 allFollowingList.add(user);
                                 
-                                // Sort alphabetically
                                 java.util.Collections.sort(allFollowingList, (u1, u2) -> {
                                     String n1 = u1.getName() != null ? u1.getName() : "";
                                     String n2 = u2.getName() != null ? u2.getName() : "";
                                     return n1.compareToIgnoreCase(n2);
                                 });
                                 
-                                // Update adapter incrementally
                                 adapter.setUsers(new ArrayList<>(allFollowingList));
                             }
                         })
-                        .addOnFailureListener(e -> {
-                            // handle error silently for individual user
-                        });
+                        .addOnFailureListener(e -> {});
                 }
             })
             .addOnFailureListener(e -> {
@@ -572,17 +663,44 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
             });
     }
 
-    
     private void showSendMessageDialog(UserInfo recipient) {
+        String currentUserId = auth.getCurrentUser().getUid();
+
+        db.collection("users").document(recipient.getUserId()).get()
+            .addOnSuccessListener(userDoc -> {
+                boolean isPrivate = userDoc.getBoolean("isPrivate") != null && userDoc.getBoolean("isPrivate");
+
+                if (isPrivate) {
+                     db.collection("users").document(currentUserId)
+                         .collection("following").document(recipient.getUserId())
+                         .get()
+                         .addOnSuccessListener(followDoc -> {
+                             if (followDoc.exists()) {
+                                 performShowSendMessageDialog(recipient);
+                             } else {
+                                 new AlertDialog.Builder(requireContext())
+                                     .setTitle("Private Account")
+                                     .setMessage("You must be following " + (recipient.getName() != null ? recipient.getName() : "this user") + " to send them a message.")
+                                     .setPositiveButton("OK", null)
+                                     .show();
+                             }
+                         });
+                } else {
+                    performShowSendMessageDialog(recipient);
+                }
+            });
+    }
+
+    private void performShowSendMessageDialog(UserInfo recipient) {
         View dialogView = LayoutInflater.from(requireContext())
             .inflate(R.layout.dialog_send_message, null);
-        
+
         TextView tvRecipient = dialogView.findViewById(R.id.tv_recipient_name);
         com.google.android.material.textfield.TextInputEditText etMessage = dialogView.findViewById(R.id.et_message);
         android.widget.CheckBox cbAnonymous = dialogView.findViewById(R.id.cb_anonymous);
         Button btnSend = dialogView.findViewById(R.id.btn_send);
         Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
-        
+
         tvRecipient.setText("To: " + recipient.getName());
         
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
@@ -629,10 +747,8 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                 message.put("anonymous", anonymous);
                 message.put("read", false);
                 
-                // Save message
                 db.collection("messages").add(message)
                     .addOnSuccessListener(docRef -> {
-                        // Create notification
                         createMessageNotification(toUserId, fromUserId, 
                             anonymous ? "Anonymous" : fromUserName, 
                             anonymous ? null : fromUserProfilePic,
@@ -687,7 +803,6 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                 message.put("read", false);
                 message.put("type", "shared_note");
                 
-                // Note Data Snapshot
                 message.put("noteId", note.getId());
                 message.put("noteText", note.getText());
                 message.put("noteImage", note.getImageBase64());
@@ -696,10 +811,8 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                 message.put("noteLikes", note.getLikesCount());
                 message.put("noteComments", note.getCommentsCount());
                 
-                // Save message
                 db.collection("messages").add(message)
                     .addOnSuccessListener(docRef -> {
-                        // Create notification
                         Map<String, Object> notification = new HashMap<>();
                         notification.put("toUserId", recipient.getUserId());
                         notification.put("fromUserId", fromUserId);
@@ -711,7 +824,6 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                         notification.put("timestamp", System.currentTimeMillis());
                         notification.put("read", false);
                         
-                        // Note extras for notification
                         notification.put("noteId", note.getId());
                         notification.put("noteLat", note.getLat());
                         notification.put("noteLng", note.getLng());
@@ -741,14 +853,12 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         TextView tvTime = dialogView.findViewById(R.id.tv_message_time);
         Button btnClose = dialogView.findViewById(R.id.btn_close);
         
-        // Note Card Views
         androidx.cardview.widget.CardView cvNote = dialogView.findViewById(R.id.cv_shared_note);
         ImageView ivNoteImage = dialogView.findViewById(R.id.iv_note_image);
         TextView tvNoteText = dialogView.findViewById(R.id.tv_note_text);
         TextView tvLikes = dialogView.findViewById(R.id.tv_likes_count);
         TextView tvComments = dialogView.findViewById(R.id.tv_comments_count);
         
-        // Sender Info
         tvSender.setText(notification.getFromUserName() != null ? notification.getFromUserName() : "User");
         tvTime.setText("Shared a note • " + getTimeAgo(notification.getTimestamp()));
         
@@ -758,53 +868,75 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
                 .loadBase64Image(senderPic, ivSender, R.drawable.ic_profile);
         }
 
-        // Note Content
-        String text = notification.getMessageText(); // Might be "Shared a note.." or actual text depending on field
-        // Actually we put note details in extras
-        
-        // Extract note details from notification fields I added
-        // The Notification model might need to support accessing the dynamic map or we just use specific getters if they existed. 
-        // Since Notification class is simple, I should rely on the fact that Firestore doc -> Notification object mapping 
-        // might miss extra fields if they aren't in the class. 
-        // BUT, the Notification object passed to handleNotificationClick comes from Firestore.
-        // Wait, Notification.java (Step 37 was Message.java... I didn't see Notification.java fully).
-        // If Notification.java doesn't have these fields, I can't access them via getters.
-        // However, I can fetch the MESSAGE document which definitely has them.
-        
-        // BETTER APPROACH: Fetch the message document using messageId to get full details.
-        
         if (notification.getMessageId() != null) {
              db.collection("messages").document(notification.getMessageId()).get()
                 .addOnSuccessListener(doc -> {
                     if (doc.exists()) {
-                        String noteText = doc.getString("noteText");
-                        String noteImage = doc.getString("noteImage");
                         String noteId = doc.getString("noteId");
-                        Double lat = doc.getDouble("noteLat");
-                        Double lng = doc.getDouble("noteLng");
                         
-                        Long likes = doc.getLong("noteLikes");
-                        Long comments = doc.getLong("noteComments");
-                        
-                        tvNoteText.setText(noteText != null && !noteText.isEmpty() ? noteText : "");
-                        tvLikes.setText(String.valueOf(likes != null ? likes : 0));
-                        tvComments.setText(String.valueOf(comments != null ? comments : 0));
-                        
-                        if (noteImage != null && !noteImage.isEmpty()) {
-                            ivNoteImage.setVisibility(View.VISIBLE);
-                            com.visiboard.app.utils.ImageCache.getInstance()
-                                .loadBase64Image(noteImage, ivNoteImage, R.drawable.placeholder_image);
+                        // FETCH REAL NOTE to check privacy
+                        if (noteId != null) {
+                            db.collection("notes").document(noteId).get().addOnSuccessListener(noteDoc -> {
+                                if (!noteDoc.exists()) {
+                                    tvNoteText.setText("Note deleted or unavailable");
+                                    cvNote.setVisibility(View.GONE); 
+                                    return;
+                                }
+                                
+                                String visibility = noteDoc.getString("visibility");
+                                String ownerId = noteDoc.getString("userId");
+                                String currentUserId = auth.getCurrentUser().getUid();
+                                
+                                boolean access = false;
+                                if (ownerId != null && ownerId.equals(currentUserId)) access = true;
+                                else if ("public".equals(visibility)) access = true;
+                                else if ("followers".equals(visibility)) {
+                                     // Check if following
+                                     if (followingIds.contains(ownerId)) access = true;
+                                }
+                                
+                                if (access) {
+                                    String noteText = noteDoc.getString("text");
+                                    String noteImage = noteDoc.getString("imageBase64");
+                                    Double lat = noteDoc.getDouble("latitude");
+                                    Double lng = noteDoc.getDouble("longitude");
+                                    Long likes = doc.getLong("noteLikes");
+                                    Long comments = doc.getLong("noteComments");
+                                    
+                                     tvNoteText.setText(noteText != null && !noteText.isEmpty() ? noteText : "");
+                                     tvLikes.setText(String.valueOf(likes != null ? likes : 0));
+                                     tvComments.setText(String.valueOf(comments != null ? comments : 0));
+                                     
+                                    if (noteImage != null && !noteImage.isEmpty()) {
+                                        ivNoteImage.setVisibility(View.VISIBLE);
+                                        com.visiboard.app.utils.ImageCache.getInstance()
+                                            .loadBase64Image(noteImage, ivNoteImage, R.drawable.placeholder_image);
+                                    } else {
+                                        ivNoteImage.setVisibility(View.GONE);
+                                    }
+                                    
+                                    cvNote.setVisibility(View.VISIBLE);
+                                    cvNote.setOnClickListener(v -> {
+                                         if (lat != null && lng != null) {
+                                              navigateToNoteOnMap(lat, lng, noteId);
+                                              // dialog.dismiss();
+                                         }
+                                    });
+                                } else {
+                                    // Access Denied
+                                    tvNoteText.setText("Shared note is private.\nYou must follow the user to view it.");
+                                    tvNoteText.setVisibility(View.VISIBLE);
+                                    ivNoteImage.setVisibility(View.GONE);
+                                    cvNote.setVisibility(View.VISIBLE);
+                                    cvNote.setOnClickListener(null); 
+                                    tvLikes.setText("-");
+                                    tvComments.setText("-");
+                                }
+                            }); 
                         } else {
-                            ivNoteImage.setVisibility(View.GONE);
+                             tvNoteText.setText("Note unavailable");
+                             cvNote.setVisibility(View.GONE);
                         }
-                        
-                        // Click navigation
-                        cvNote.setOnClickListener(v -> {
-                             if (lat != null && lng != null && noteId != null) {
-                                  navigateToNoteOnMap(lat, lng, noteId);
-                                  // Close dialog?
-                             }
-                        });
                     }
                 });
         }
@@ -820,10 +952,162 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         btnClose.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
         
-        // Mark read
-        if (notification.getId() != null) { // Notification ID might be missing if constructed locally? 
-            // The notification passed to handleNotificationClick usually comes from Adapter which gets it from Firestore with ID.
+        if (notification.getId() != null) { 
              db.collection("notifications").document(notification.getId()).update("read", true);
         }
+    }
+
+
+    // --- Follow Logic Helpers ---
+
+    private void followUser(String targetUserId, Button btn) {
+        String currentUserId = auth.getCurrentUser().getUid();
+        
+        // Loading State
+        String originalText = btn.getText().toString();
+        btn.setText("...");
+        btn.setEnabled(false);
+        
+        db.collection("users").document(targetUserId).get()
+            .addOnSuccessListener(targetUserDoc -> {
+                boolean isPrivate = targetUserDoc.getBoolean("isPrivate") != null && targetUserDoc.getBoolean("isPrivate");
+                
+                if (isPrivate) {
+                    // Check Rejection Status First (5-Strike Rule)
+                    db.collection("users").document(targetUserId).collection("rejections").document(currentUserId)
+                        .get()
+                        .addOnSuccessListener(rejectionDoc -> {
+                            boolean blocked = false;
+                            if (rejectionDoc.exists()) {
+                                Long count = rejectionDoc.getLong("count");
+                                Long time = rejectionDoc.getLong("lastRejectionTime");
+                                if (count != null && count >= 5 && time != null) {
+                                     if (System.currentTimeMillis() - time < 24 * 60 * 60 * 1000) {
+                                         blocked = true;
+                                     }
+                                }
+                            }
+                            
+                            if (blocked) {
+                                android.widget.Toast.makeText(requireContext(), "Too many follow requests. Try again later.", android.widget.Toast.LENGTH_LONG).show();
+                                btn.setText(originalText);
+                                btn.setEnabled(true);
+                            } else {
+                                sendFollowRequest(targetUserId, btn, currentUserId);
+                            }
+                        })
+                        .addOnFailureListener(e -> {
+                            btn.setText(originalText);
+                            btn.setEnabled(true);
+                        });
+                } else {
+                    performDirectFollow(targetUserId, btn, currentUserId);
+                }
+            })
+            .addOnFailureListener(e -> {
+                btn.setText(originalText);
+                btn.setEnabled(true);
+            });
+    }
+
+    private void sendFollowRequest(String targetUserId, Button btn, String currentUserId) {
+        db.collection("users").document(currentUserId).get().addOnSuccessListener(currentUserDoc -> {
+             String myName = currentUserDoc.getString("name");
+             String myProfilePic = currentUserDoc.getString("profilePic");
+             Map<String, Object> requestData = new HashMap<>();
+             requestData.put("timestamp", System.currentTimeMillis());
+             requestData.put("requesterName", myName);
+             requestData.put("requesterProfilePic", myProfilePic);
+             
+             db.collection("users").document(targetUserId).collection("follow_requests").document(currentUserId)
+                 .set(requestData)
+                 .addOnSuccessListener(aVoid -> {
+                     btn.setText("Requested");
+                     Toast.makeText(requireContext(), "Request sent", Toast.LENGTH_SHORT).show();
+                     createNotification(targetUserId, currentUserId, "follow_request");
+                     btn.setEnabled(true);
+                 })
+                 .addOnFailureListener(e -> btn.setEnabled(true));
+        });
+    }
+
+    private void performDirectFollow(String targetUserId, Button btn, String currentUserId) {
+        db.collection("users").document(currentUserId).get().addOnSuccessListener(currentUserDoc -> {
+             String myName = currentUserDoc.getString("name");
+             String myProfilePic = currentUserDoc.getString("profilePic");
+             
+             // 1. Add to followers (Target)
+             Map<String, Object> followerData = new HashMap<>();
+             followerData.put("timestamp", System.currentTimeMillis());
+             followerData.put("followerName", myName);
+             followerData.put("followerProfilePic", myProfilePic);
+             db.collection("users").document(targetUserId).collection("followers").document(currentUserId).set(followerData);
+             db.collection("users").document(targetUserId).update("followersCount", com.google.firebase.firestore.FieldValue.increment(1));
+             
+             // 2. Add to following (Me)
+             db.collection("users").document(targetUserId).get().addOnSuccessListener(targetUserDoc -> {
+                 String targetName = targetUserDoc.getString("name");
+                 String targetProfilePic = targetUserDoc.getString("profilePic");
+                 
+                 Map<String, Object> followingData = new HashMap<>();
+                 followingData.put("timestamp", System.currentTimeMillis());
+                 followingData.put("followedName", targetName);
+                 followingData.put("followedProfilePic", targetProfilePic);
+                 
+                 db.collection("users").document(currentUserId).collection("following").document(targetUserId).set(followingData);
+                 db.collection("users").document(currentUserId).update("followingCount", com.google.firebase.firestore.FieldValue.increment(1));
+                 
+                 // Update UI
+                 btn.setText("Following");
+                 btn.setEnabled(true);
+                 createNotification(targetUserId, currentUserId, "follow");
+                 Toast.makeText(requireContext(), "Following " + targetName, Toast.LENGTH_SHORT).show();
+             });
+        })
+        .addOnFailureListener(e -> btn.setEnabled(true));
+    }
+
+    private void cancelFollowRequest(String targetUserId, Button btn) {
+        String currentUserId = auth.getCurrentUser().getUid();
+        db.collection("users").document(targetUserId).collection("follow_requests").document(currentUserId).delete()
+            .addOnSuccessListener(aVoid -> {
+                btn.setText("Follow");
+                Toast.makeText(requireContext(), "Request canceled", Toast.LENGTH_SHORT).show();
+            });
+    }
+
+    private void unfollowUser(String targetUserId, Button btn) {
+        String currentUserId = auth.getCurrentUser().getUid();
+        db.collection("users").document(targetUserId).collection("followers").document(currentUserId).delete();
+        db.collection("users").document(targetUserId).update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1));
+        db.collection("users").document(currentUserId).collection("following").document(targetUserId).delete();
+        db.collection("users").document(currentUserId).update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1));
+        btn.setText("Follow");
+        Toast.makeText(requireContext(), "Unfollowed", Toast.LENGTH_SHORT).show();
+    }
+
+    private void createNotification(String toUserId, String fromUserId, String type) {
+        createNotification(toUserId, fromUserId, type, null, null, null);
+    }
+
+    private void createNotification(String toUserId, String fromUserId, String type, String noteId, String noteText, String noteImage) {
+        db.collection("users").document(fromUserId).get().addOnSuccessListener(doc -> {
+             String name = doc.getString("name");
+             String pic = doc.getString("profilePic");
+             Map<String, Object> notif = new HashMap<>();
+             notif.put("type", type);
+             notif.put("fromUserId", fromUserId);
+             notif.put("fromUserName", name);
+             notif.put("fromUserProfilePic", pic);
+             notif.put("toUserId", toUserId);
+             notif.put("timestamp", System.currentTimeMillis());
+             notif.put("read", false);
+             
+             if (noteId != null) notif.put("noteId", noteId);
+             if (noteText != null) notif.put("noteText", noteText);
+             if (noteImage != null) notif.put("noteImage", noteImage);
+             
+             db.collection("notifications").add(notif);
+        });
     }
 }

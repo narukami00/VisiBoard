@@ -85,4 +85,8 @@ public class NearbyNote {
     private String localImagePath;
     public String getLocalImagePath() { return localImagePath; }
     public void setLocalImagePath(String localImagePath) { this.localImagePath = localImagePath; }
+
+    private boolean isHidden;
+    public boolean isHidden() { return isHidden; }
+    public void setHidden(boolean hidden) { isHidden = hidden; }
 }
