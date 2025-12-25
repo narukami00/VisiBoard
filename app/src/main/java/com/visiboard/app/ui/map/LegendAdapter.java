@@ -44,9 +44,16 @@ public class LegendAdapter extends RecyclerView.Adapter<LegendAdapter.LegendView
         return new LegendViewHolder(view);
     }
 
+    private android.location.Location currentLocationForAdapter;
+
+    public void setCurrentLocation(android.location.Location location) {
+        this.currentLocationForAdapter = location;
+        notifyDataSetChanged();
+    }
+
     @Override
     public void onBindViewHolder(@NonNull LegendViewHolder holder, int position) {
-        holder.bind(users.get(position), position + 1);
+        holder.bind(users.get(position), position + 1, currentLocationForAdapter);
     }
 
     @Override
@@ -75,7 +82,9 @@ public class LegendAdapter extends RecyclerView.Adapter<LegendAdapter.LegendView
             });
         }
 
-        void bind(UserInfo user, int rank) {
+
+
+        void bind(UserInfo user, int rank, @androidx.annotation.Nullable android.location.Location myLocation) {
             tvRank.setText(String.valueOf(rank));
             tvName.setText(user.getName());
             
@@ -97,7 +106,24 @@ public class LegendAdapter extends RecyclerView.Adapter<LegendAdapter.LegendView
                 ivAvatar.setBorderWidth(0);
             }
 
-            if (user.getLastKnownLocation() != null) {
+            // Location & Distance Logic
+            if (myLocation != null && user.getLat() != 0 && user.getLng() != 0) {
+                float[] results = new float[1];
+                android.location.Location.distanceBetween(myLocation.getLatitude(), myLocation.getLongitude(), 
+                        user.getLat(), user.getLng(), results);
+                float distanceKm = results[0] / 1000f;
+                
+                String distanceStr;
+                if (distanceKm < 1) {
+                    distanceStr = String.format("%.0f m away", results[0]);
+                } else {
+                    distanceStr = String.format("%.1f km away", distanceKm);
+                }
+                
+                tvLocation.setText(distanceStr);
+                tvLocation.setVisibility(View.VISIBLE);
+                
+            } else if (user.getLastKnownLocation() != null) {
                 tvLocation.setText(user.getLastKnownLocation());
                 tvLocation.setVisibility(View.VISIBLE);
             } else {
@@ -124,12 +150,7 @@ public class LegendAdapter extends RecyclerView.Adapter<LegendAdapter.LegendView
                 tvTier.setText("No Rank");
                 tvTier.setVisibility(View.VISIBLE);
                 tvTier.setTextColor(Color.parseColor("#9E9E9E")); // Grey
-                tvTier.setBackgroundResource(0); // Remove background capsule if desired, or keep light grey
-                // Let's keep a subtle background or remove it. "Subtle No Rank text" implies just text.
-                // But for consistency with layout, maybe keep it clean.
-                // Actually, Step 595 added bg_capsule_light.
-                // I'll set background to null for text-only look, or a grey capsule.
-                // Let's go with text only for "subtle".
+                tvTier.setBackgroundResource(0);
                 tvTier.setPadding(0, 0, 0, 0);
             }
 

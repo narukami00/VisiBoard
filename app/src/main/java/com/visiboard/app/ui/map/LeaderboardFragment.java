@@ -101,12 +101,9 @@ public class LeaderboardFragment extends Fragment {
         rvLegends.setVisibility(View.GONE);
         emptyState.setVisibility(View.GONE);
 
-        // Fetch top users from Firestore
-        // Note: For real "Local", we would need GeoFliter. For now, mimicking behavior from previous Activity
-        // Logic: Local = limit 10, Global = limit 50, but sorted same way as basic implementation
-        
         db.collection("users")
-            .limit(50)
+            .orderBy("totalLikes", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(100) // Get more users to filter from
             .get()
             .addOnSuccessListener(querySnapshot -> {
                 if (!isAdded()) return;
@@ -123,22 +120,11 @@ public class LeaderboardFragment extends Fragment {
                     }
                 }
 
-                // Sort by totalLikes descending
-                users.sort((u1, u2) -> Integer.compare(u2.getTotalLikes(), u1.getTotalLikes()));
-                
-                // Emulate "Local" filtering behavior (just a subset for now as per previous logic)
-                int limit = isLocal ? 10 : 50;
-                if (users.size() > limit) {
-                    users = users.subList(0, limit);
-                }
-
-                if (users.isEmpty()) {
-                    emptyState.setVisibility(View.VISIBLE);
-                    rvLegends.setVisibility(View.GONE);
+                if (isLocal) {
+                     filterNearbyUsers(users);
                 } else {
-                    rvLegends.setVisibility(View.VISIBLE);
-                    adapter.setUsers(users);
-                    runLayoutAnimation();
+                     adapter.setCurrentLocation(null);
+                     showUsers(users);
                 }
             })
             .addOnFailureListener(e -> {
@@ -147,6 +133,50 @@ public class LeaderboardFragment extends Fragment {
                 emptyState.setVisibility(View.VISIBLE);
                 Log.e(TAG, "Error loading leaderboard", e);
             });
+    }
+
+    private void filterNearbyUsers(List<UserInfo> allUsers) {
+        if (androidx.core.app.ActivityCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            com.google.android.gms.location.FusedLocationProviderClient fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(requireActivity());
+            fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                if (location != null) {
+                    adapter.setCurrentLocation(location);
+                    List<UserInfo> nearbyUsers = new ArrayList<>();
+                    float[] results = new float[1];
+                    
+                    for (UserInfo u : allUsers) {
+                        if (u.getLat() != 0 && u.getLng() != 0) {
+                            android.location.Location.distanceBetween(location.getLatitude(), location.getLongitude(), 
+                                   u.getLat(), u.getLng(), results);
+                            if (results[0] / 1000f <= 50) { // 50km
+                                nearbyUsers.add(u);
+                            }
+                        }
+                    }
+                    if (nearbyUsers.isEmpty()) {
+                        Toast.makeText(getContext(), "No legends around you (50km)", Toast.LENGTH_SHORT).show();
+                    }
+                    showUsers(nearbyUsers);
+                } else {
+                    Toast.makeText(getContext(), "Location unavailable for Nearby", Toast.LENGTH_SHORT).show();
+                    showUsers(new ArrayList<>());
+                }
+            });
+        } else {
+            Toast.makeText(getContext(), "Location permission needed for Nearby", Toast.LENGTH_SHORT).show();
+            showUsers(new ArrayList<>());
+        }
+    }
+
+    private void showUsers(List<UserInfo> users) {
+        if (users.isEmpty()) {
+            emptyState.setVisibility(View.VISIBLE);
+            rvLegends.setVisibility(View.GONE);
+        } else {
+            rvLegends.setVisibility(View.VISIBLE);
+            adapter.setUsers(users);
+            runLayoutAnimation();
+        }
     }
 
     private void runLayoutAnimation() {

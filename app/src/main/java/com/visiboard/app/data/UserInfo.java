@@ -60,4 +60,14 @@ public class UserInfo {
     private boolean isPrivate;
     public boolean isPrivate() { return isPrivate; }
     public void setPrivate(boolean isPrivate) { this.isPrivate = isPrivate; }
+    
+    // Coordinates for Distance Calculation
+    private double lat;
+    private double lng;
+    
+    public double getLat() { return lat; }
+    public void setLat(double lat) { this.lat = lat; }
+    
+    public double getLng() { return lng; }
+    public void setLng(double lng) { this.lng = lng; }
 }

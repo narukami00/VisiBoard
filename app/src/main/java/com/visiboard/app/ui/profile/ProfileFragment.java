@@ -57,7 +57,10 @@ public class ProfileFragment extends Fragment {
     private CircleImageView profileImage;
     private TextView nameText, emailText, tvTotalNotes, tvTotalLikes, tvNoRecentNotes, tvMilestone, tvMilestoneProgress, tvLocation;
     private TextView tvFollowersCount, tvFollowingCount;
-    private ImageView ivTierIcon, logoutIcon, shineView;
+    private TextView tvBio, tvWork, tvEducation, tvRelationship, tvHometown; // New Fields
+    private ImageView ivTierIcon, shineView;
+    private android.view.View rowWork, rowEducation, rowRelationship, rowHometown;
+    private android.widget.LinearLayout llLinksContainer;
     private ProgressBar progressMilestone;
     private android.view.View loadingOverlay, skeletonView;
     private RecyclerView rvRecentNotes;
@@ -85,6 +88,24 @@ public class ProfileFragment extends Fragment {
     private long lastThemeToggleTime = 0;
     private static final long THEME_TOGGLE_COOLDOWN = 2000;
 
+    private com.visiboard.app.ui.profile.FloatingPhysicsLayout physicsHeader;
+    
+    @Nullable
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if (getParentFragmentManager() != null) {
+            getParentFragmentManager().setFragmentResultListener("details_updated", this, (requestKey, result) -> {
+                refreshData();
+                safeToast("Profile Updated");
+            });
+            
+            getParentFragmentManager().setFragmentResultListener("fav_notes_updated", this, (requestKey, result) -> {
+                refreshData(); 
+            });
+        }
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -104,12 +125,36 @@ public class ProfileFragment extends Fragment {
         tvFollowingCount = view.findViewById(R.id.tv_following_count);
         ivTierIcon = view.findViewById(R.id.iv_tier_icon);
         progressMilestone = view.findViewById(R.id.progress_milestone);
-        logoutIcon = view.findViewById(R.id.logout_icon);
+        // logoutIcon removed
         swipeRefreshLayout = view.findViewById(R.id.swipeRefreshLayout);
         locationContainer = view.findViewById(R.id.location_container);
         loadingOverlay = view.findViewById(R.id.loading_overlay);
         skeletonView = view.findViewById(R.id.skeleton_view);
         shineView = view.findViewById(R.id.shine_view);
+        
+        // Bind Physics Header
+        physicsHeader = view.findViewById(R.id.physics_header_container);
+        
+        // New Detail Views
+        tvBio = view.findViewById(R.id.tv_bio);
+        tvWork = view.findViewById(R.id.tv_work);
+        tvEducation = view.findViewById(R.id.tv_education);
+        tvRelationship = view.findViewById(R.id.tv_relationship);
+        tvHometown = view.findViewById(R.id.tv_hometown);
+        
+        rowWork = view.findViewById(R.id.row_work);
+        rowEducation = view.findViewById(R.id.row_education);
+        rowRelationship = view.findViewById(R.id.row_relationship);
+        rowHometown = view.findViewById(R.id.row_hometown);
+        
+        llLinksContainer = view.findViewById(R.id.ll_links_container);
+        
+        // Listen for favorite selection updates
+        getParentFragmentManager().setFragmentResultListener("fav_notes_updated", getViewLifecycleOwner(), (key, bundle) -> {
+            if (bundle.getBoolean("refresh_favs")) {
+                loadUserData(); // Reloads user data which fetches favourites
+            }
+        });
 
         swipeRefreshLayout.setOnRefreshListener(this::refreshData);
         swipeRefreshLayout.setColorSchemeResources(R.color.primary);
@@ -141,13 +186,13 @@ public class ProfileFragment extends Fragment {
         }
 
         profileImage.setOnClickListener(v -> pickImage());
-        logoutIcon.setOnClickListener(v -> showLogoutConfirmation());
+        profileImage.setOnClickListener(v -> pickImage());
+        // logoutIcon listener removed
         view.findViewById(R.id.settings_icon).setOnClickListener(v -> {
             startActivity(new Intent(getActivity(), com.visiboard.app.ui.settings.SettingsActivity.class));
         });
         view.findViewById(R.id.btn_view_all_notes).setOnClickListener(v -> showAllNotesDialog());
         nameText.setOnClickListener(v -> showEditNameDialog());
-        view.findViewById(R.id.btn_about).setOnClickListener(v -> showAboutDialog());
         
         // Create Note Button
         Button btnCreateNote = view.findViewById(R.id.btn_create_first_note);
@@ -218,7 +263,13 @@ public class ProfileFragment extends Fragment {
         view.findViewById(R.id.milestone_card).setOnClickListener(v -> {
             v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
             showRankRoadmapDialog();
+            showRankRoadmapDialog();
         });
+        
+        // Detail Edit Listeners
+        tvBio.setOnClickListener(v -> showEditBioDialog());
+        view.findViewById(R.id.btn_edit_details).setOnClickListener(v -> showEditDetailsDialog());
+        view.findViewById(R.id.btn_add_link).setOnClickListener(v -> showAddLinkDialog());
 
         return view;
     }
@@ -371,8 +422,13 @@ public class ProfileFragment extends Fragment {
                             
                             // Save to Firestore
                             String uid = auth.getCurrentUser().getUid();
+                            java.util.Map<String, Object> updates = new java.util.HashMap<>();
+                            updates.put("lastKnownLocation", locationText);
+                            updates.put("lat", location.getLatitude());
+                            updates.put("lng", location.getLongitude());
+
                             db.collection("users").document(uid)
-                                    .update("lastKnownLocation", locationText)
+                                    .update(updates)
                                     .addOnFailureListener(e -> 
                                             Log.e("ProfileFragment", "Failed to update location: " + e.getMessage()));
                         }
@@ -447,18 +503,41 @@ public class ProfileFragment extends Fragment {
         Long followingCount = doc.getLong("followingCount");
         if (followingCount != null) viewModel.setFollowingCount(followingCount);
 
+        if (followingCount != null) viewModel.setFollowingCount(followingCount);
+
         String pic = doc.getString("profilePic");
         if (pic != null && !pic.isEmpty()) viewModel.setProfilePicBase64(pic);
         
-        // Hide loading progress if basic user data is loaded, 
-        // though stats might still be loading. Best to wait for stats?
-        // Let's keep it visible until stats load too, or hide here if stats are independent.
-        // The user wants "profile fragment is loading".
-        // We'll trust the stats loader to hide it finally, or do it here if stats aren't called?
-        // Actually loadUserStats is called right after loadUserData in refresh logic.
-        // But in initial load, they are called sequentially.
-        // Let's hide it in the final callback of loadUserStats.
+        // --- Load New Details ---
+        String bio = doc.getString("bio");
+        updateBio(bio);
+        
+        String work = doc.getString("work");
+        updateDetailRow(rowWork, tvWork, work, "Works at ");
+        
+        String education = doc.getString("education");
+        updateDetailRow(rowEducation, tvEducation, education, "Studied at ");
+        
+        String relationship = doc.getString("relationship");
+        updateDetailRow(rowRelationship, tvRelationship, relationship, "");
+        
+        String hometown = doc.getString("hometown");
+        updateDetailRow(rowHometown, tvHometown, hometown, "From ");
+        
+        // Load Links
+        List<java.util.Map<String, String>> links = (List<java.util.Map<String, String>>) doc.get("socialLinks");
+        renderLinks(links);
+        
+        // Load Floating Notes (Favorites)
+        List<String> favs = (List<String>) doc.get("favouriteNotes");
+        if (favs == null || favs.isEmpty()) {
+            if (physicsHeader != null) showEmptyFloatingState();
+        } else {
+            if (physicsHeader != null) fetchNotesAndRender(favs);
+        }
     }
+
+
 
     private void loadUserStats() {
         FirebaseUser user = auth.getCurrentUser();
@@ -704,21 +783,41 @@ public class ProfileFragment extends Fragment {
 
         View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_edit_username, null);
         com.google.android.material.textfield.TextInputEditText input = dialogView.findViewById(R.id.et_username_input);
-        input.setText(nameText.getText().toString());
+        Button btnSave = dialogView.findViewById(R.id.btn_save);
+        Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
+        
+        String currentName = nameText.getText().toString();
+        if (!currentName.isEmpty() && !currentName.equals("User Name")) {
+            input.setText(currentName);
+        }
 
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
-                .setTitle("Edit Name")
                 .setView(dialogView)
-                .setPositiveButton("Save", (d, w) -> {
-                    String newName = input.getText().toString().trim();
-                    if (!newName.isEmpty()) {
-                        updateUserName(newName);
-                    } else {
-                        safeToast("Name cannot be empty");
-                    }
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        
+        btnSave.setOnClickListener(v -> {
+            String newName = input.getText().toString().trim();
+            if (newName.isEmpty()) {
+                safeToast("Name cannot be empty");
+                return;
+            }
+            
+            if (newName.length() > 30) {
+                safeToast("Name too long (max 30 characters)");
+                return;
+            }
+            
+            updateUserName(newName);
+            dialog.dismiss();
+        });
+        
+        dialog.show();
     }
     
     private void showAboutDialog() {
@@ -770,33 +869,195 @@ public class ProfileFragment extends Fragment {
                 .addOnFailureListener(e -> safeToast("Failed to update name: " + e.getMessage()));
     }
 
-    private void showLogoutConfirmation() {
-        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_confirmation, null);
-        TextView title = dialogView.findViewById(R.id.dialog_title);
-        TextView message = dialogView.findViewById(R.id.dialog_message);
-        Button btnConfirm = dialogView.findViewById(R.id.btn_confirm);
-        Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
-        
-        title.setText("Logout");
-        message.setText("Are you sure you want to logout?");
-        btnConfirm.setText("Logout");
+    // --- Bio, Details, Links Logic ---
 
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
-                .setView(dialogView)
-                .create();
-        
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+    private void updateBio(String bio) {
+        if (bio != null && !bio.isEmpty()) {
+            tvBio.setText(bio);
+            tvBio.setTextColor(getResources().getColor(R.color.text_primary));
+        } else {
+            tvBio.setText("Tap to add bio...");
+            tvBio.setTextColor(getResources().getColor(R.color.text_secondary));
+        }
+    }
+
+    private void updateDetailRow(View row, TextView tv, String value, String prefix) {
+        if (value != null && !value.isEmpty()) {
+            row.setVisibility(View.VISIBLE);
+            tv.setText(prefix + value);
+        } else {
+            row.setVisibility(View.GONE);
+        }
+    }
+
+    private void renderLinks(List<java.util.Map<String, String>> links) {
+        // Clear existing links (keep only the "Add Link" button, index 0)
+        int childCount = llLinksContainer.getChildCount();
+        if (childCount > 1) {
+            llLinksContainer.removeViews(1, childCount - 1);
         }
 
-        btnConfirm.setOnClickListener(v -> {
-            logoutUser();
-            dialog.dismiss();
-        });
+        if (links != null) {
+            for (java.util.Map<String, String> link : links) {
+                String name = link.get("name");
+                String url = link.get("url");
+                addLinkView(name, url);
+            }
+        }
+    }
 
+    private void addLinkView(String name, String url) {
+        LinearLayout linkBtn = new LinearLayout(getContext());
+        linkBtn.setOrientation(LinearLayout.HORIZONTAL);
+        linkBtn.setBackgroundResource(R.drawable.bg_capsule_light);
+        linkBtn.setPadding(32, 16, 32, 16); // px padding (approx 12dp, 6dp)
+        linkBtn.setGravity(android.view.Gravity.CENTER);
+        
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMarginEnd(16);
+        linkBtn.setLayoutParams(params);
+
+        TextView tv = new TextView(getContext());
+        tv.setText(name);
+        tv.setTextColor(getResources().getColor(R.color.text_primary));
+        tv.setTextSize(12);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        
+        linkBtn.addView(tv);
+        
+        linkBtn.setOnClickListener(v -> {
+            try {
+                 Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                 startActivity(browserIntent);
+            } catch (Exception e) {
+                safeToast("Invalid URL");
+            }
+        });
+        
+        // Long press to delete? For now simple implementation.
+        
+        llLinksContainer.addView(linkBtn);
+    }
+
+    private void showEditBioDialog() {
+        View view = LayoutInflater.from(getContext()).inflate(R.layout.dialog_edit_bio, null);
+        
+        com.google.android.material.textfield.TextInputEditText etBio = view.findViewById(R.id.et_bio_input);
+        Button btnSave = view.findViewById(R.id.btn_save);
+        Button btnCancel = view.findViewById(R.id.btn_cancel);
+        
+        String currentBio = tvBio.getText().toString();
+        if (!currentBio.equals("Tap to add bio...")) {
+            etBio.setText(currentBio);
+        }
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
+            .setView(view)
+            .create();
+            
+        if (dialog.getWindow() != null)
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            
         btnCancel.setOnClickListener(v -> dialog.dismiss());
         
+        btnSave.setOnClickListener(v -> {
+            String newBio = etBio.getText().toString().trim();
+            if (newBio.length() > 150) {
+                safeToast("Bio too long");
+                return;
+            }
+            
+             db.collection("users").document(auth.getCurrentUser().getUid()).update("bio", newBio)
+                 .addOnSuccessListener(a -> {
+                     updateBio(newBio);
+                     dialog.dismiss();
+                 })
+                 .addOnFailureListener(e -> safeToast("Failed to save"));
+        });
+        
         dialog.show();
+    }
+    
+    // Generic Dialog Helper
+    private void showTextInputDialog(String title, String hint, String currentVal,  com.google.android.gms.tasks.OnSuccessListener<String> onSuccess) {
+        View view = LayoutInflater.from(getContext()).inflate(R.layout.dialog_edit_username, null); // Reuse layout
+        com.google.android.material.textfield.TextInputEditText input = view.findViewById(R.id.et_username_input);
+        input.setHint(hint);
+        input.setText(currentVal);
+        
+        new androidx.appcompat.app.AlertDialog.Builder(getContext())
+            .setTitle(title)
+            .setView(view)
+            .setPositiveButton("Save", (d, w) -> {
+                String val = input.getText().toString().trim();
+                onSuccess.onSuccess(val);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void showEditDetailsDialog() {
+        openDetailsEditor(); 
+    }
+    
+    private void openDetailsEditor() {
+         com.visiboard.app.ui.profile.EditDetailsBottomSheet sheet = new com.visiboard.app.ui.profile.EditDetailsBottomSheet();
+         sheet.show(getParentFragmentManager(), "EditDetails");
+    }
+
+    private void showAddLinkDialog() {
+        View view = LayoutInflater.from(getContext()).inflate(R.layout.dialog_add_link, null);
+        
+        com.google.android.material.textfield.TextInputEditText etName = view.findViewById(R.id.et_link_name);
+        com.google.android.material.textfield.TextInputEditText etUrl = view.findViewById(R.id.et_link_url);
+        Button btnAdd = view.findViewById(R.id.btn_add);
+        Button btnCancel = view.findViewById(R.id.btn_cancel);
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
+            .setView(view)
+            .create();
+            
+        if (dialog.getWindow() != null)
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        
+        btnAdd.setOnClickListener(v -> {
+            String name = etName.getText().toString().trim();
+            String url = etUrl.getText().toString().trim();
+            
+            if (name.isEmpty() || url.isEmpty()) {
+                safeToast("Please fill all fields");
+                return;
+            }
+            
+            if (!url.startsWith("http")) {
+                url = "https://" + url;
+            }
+            
+            java.util.Map<String, Object> link = new java.util.HashMap<>();
+            link.put("name", name);
+            link.put("url", url);
+            
+            btnAdd.setText("Adding...");
+            btnAdd.setEnabled(false);
+            
+            db.collection("users").document(auth.getCurrentUser().getUid())
+                .update("socialLinks", com.google.firebase.firestore.FieldValue.arrayUnion(link))
+                .addOnSuccessListener(aVoid -> {
+                    safeToast("Link added");
+                    dialog.dismiss();
+                    refreshData();
+                })
+                .addOnFailureListener(e -> {
+                    safeToast("Failed: " + e.getMessage());
+                    btnAdd.setText("Add Link");
+                    btnAdd.setEnabled(true);
+                });
+        });
+            
+        dialog.show(); 
     }
 
     private void logoutUser() {
@@ -1102,84 +1363,11 @@ public class ProfileFragment extends Fragment {
         dialog.show();
     }
 
-    // Show user info dialog
+    // Show user info dialog - now navigates to full page
     private void showUserInfoDialog(String userId) {
-        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_user_info, null);
-        
-        de.hdodenhof.circleimageview.CircleImageView profilePic = dialogView.findViewById(R.id.dialog_user_profile_pic);
-        TextView userName = dialogView.findViewById(R.id.dialog_user_name);
-        TextView userLocation = dialogView.findViewById(R.id.dialog_user_location);
-        LinearLayout locationContainer = dialogView.findViewById(R.id.dialog_location_container);
-        TextView userRank = dialogView.findViewById(R.id.dialog_user_rank);
-        ImageView rankIcon = dialogView.findViewById(R.id.dialog_user_rank_icon);
-        TextView followersCount = dialogView.findViewById(R.id.dialog_followers_count);
-        TextView followingCount = dialogView.findViewById(R.id.dialog_following_count);
-        android.widget.Button followBtn = dialogView.findViewById(R.id.dialog_follow_btn);
-        
-        // Load user data (same as MapFragment showUserInfoDialog)
-        db.collection("users").document(userId).get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        String name = doc.getString("name");
-                        userName.setText(name != null ? name : "Anonymous");
-                        
-                        String location = doc.getString("lastKnownLocation");
-                        if (location != null && !location.isEmpty()) {
-                            userLocation.setText(location);
-                            locationContainer.setVisibility(View.VISIBLE);
-                        }
-                        
-                        String tier = doc.getString("currentTier");
-                        userRank.setText(tier != null ? tier : "None");
-                        
-                        String pic = doc.getString("profilePic");
-                        if (pic != null && !pic.isEmpty()) {
-                            try {
-                                byte[] bytes = Base64.decode(pic, Base64.DEFAULT);
-                                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                                profilePic.setImageBitmap(bitmap);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                        
-                        Long followers = doc.getLong("followersCount");
-                        Long following = doc.getLong("followingCount");
-                        followersCount.setText(String.valueOf(followers != null ? followers : 0));
-                        followingCount.setText(String.valueOf(following != null ? following : 0));
-                        
-                        String currentUserId = auth.getCurrentUser().getUid();
-                        if (!userId.equals(currentUserId)) {
-                            followBtn.setVisibility(View.VISIBLE);
-                            
-                            db.collection("users").document(currentUserId)
-                                    .collection("following").document(userId)
-                                    .get()
-                                    .addOnSuccessListener(followDoc -> {
-                                        if (followDoc.exists()) {
-                                            followBtn.setText("Unfollow");
-                                            followBtn.setBackgroundResource(R.drawable.bg_button_secondary);
-                                            followBtn.setTextColor(getResources().getColor(R.color.black, null));
-                                        }
-                                    });
-                            
-                            followBtn.setOnClickListener(v -> {
-                                // Implement follow/unfollow logic
-                                Toast.makeText(getContext(), "Follow functionality", Toast.LENGTH_SHORT).show();
-                            });
-                        }
-                    }
-                });
-        
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
-                .setView(dialogView)
-                .create();
-        
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        }
-        
-        dialog.show();
+        Bundle args = new Bundle();
+        args.putString("userId", userId);
+        androidx.navigation.Navigation.findNavController(requireView()).navigate(R.id.userProfileFragment, args);
     }
     
     // Show all notes dialog
@@ -1331,6 +1519,184 @@ public class ProfileFragment extends Fragment {
     private void updateThemeIcon(ImageView themeToggle, boolean isDarkMode) {
         themeToggle.setImageResource(isDarkMode ? R.drawable.ic_sun : R.drawable.ic_moon);
     }
+
+    // --- Floating Physics Notes Logic ---
+
+    private void loadFloatingNotes() {
+        if (auth.getCurrentUser() == null || physicsHeader == null) return;
+        String uid = auth.getCurrentUser().getUid();
+        
+        db.collection("users").document(uid).get().addOnSuccessListener(doc -> {
+            if (!doc.exists()) return;
+            List<String> favs = (List<String>) doc.get("favouriteNotes");
+            
+            if (favs == null || favs.isEmpty()) {
+                showEmptyFloatingState();
+            } else {
+                fetchNotesAndRender(favs);
+            }
+        });
+    }
+
+    private void showEmptyFloatingState() {
+        physicsHeader.removeAllViews();
+        addDecorativeSocialIcons(); // Add background decorative icons
+        View v = LayoutInflater.from(getContext()).inflate(R.layout.item_floating_empty, physicsHeader, false);
+        physicsHeader.addFloatingView(v); 
+        physicsHeader.initializeEntities();
+        
+        v.setOnClickListener(view -> openSelectFavourites());
+        physicsHeader.setOnClickListener(view -> openSelectFavourites()); // Also background click
+    }
+    
+    private void openSelectFavourites() {
+        if (getView() != null) {
+            androidx.navigation.Navigation.findNavController(getView())
+                .navigate(R.id.action_profile_to_favouriteSelection);
+        }
+    }
+    
+    private final java.util.concurrent.atomic.AtomicInteger noteFetchGeneration = new java.util.concurrent.atomic.AtomicInteger(0);
+
+    private void fetchNotesAndRender(List<String> ids) {
+        final int currentGen = noteFetchGeneration.incrementAndGet();
+        physicsHeader.removeAllViews();
+        
+        // Add decorative social icons in the background
+        addDecorativeSocialIcons();
+        
+        // Ensure background clicks open selection even when notes exist
+        physicsHeader.setOnClickListener(view -> openSelectFavourites());
+        
+        // Remove duplicates if any
+        List<String> uniqueIds = new ArrayList<>(new java.util.HashSet<>(ids));
+        final int total = uniqueIds.size();
+        final java.util.concurrent.atomic.AtomicInteger loadedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        
+        for (String id : uniqueIds) {
+            db.collection("notes").document(id).get().addOnSuccessListener(noteDoc -> {
+                // Check if this result belongs to the latest request
+                if (currentGen != noteFetchGeneration.get()) return;
+                
+                if (noteDoc.exists()) {
+                    View v = createFloatingNoteView(noteDoc);
+                    if (v != null) physicsHeader.addFloatingView(v);
+                }
+                if (loadedCount.incrementAndGet() == total) {
+                     physicsHeader.initializeEntities();
+                }
+            }).addOnFailureListener(e -> {
+                 if (currentGen != noteFetchGeneration.get()) return;
+                 if (loadedCount.incrementAndGet() == total) {
+                     physicsHeader.initializeEntities();
+                }
+            });
+        }
+    }
+    
+    private View createFloatingNoteView(com.google.firebase.firestore.DocumentSnapshot doc) {
+        String content = doc.getString("text");
+        if (content == null) content = doc.getString("note"); // Fallback
+        
+        String imageBase64 = doc.getString("imageBase64"); // Correct field name!
+        
+        View v;
+        if (imageBase64 != null && !imageBase64.isEmpty()) {
+            v = LayoutInflater.from(getContext()).inflate(R.layout.item_floating_note_image, physicsHeader, false);
+            ImageView iv = v.findViewById(R.id.iv_note_image);
+            com.visiboard.app.utils.ImageCache.getInstance().loadBase64Image("note_" + doc.getId(), imageBase64, iv, R.drawable.ic_image_placeholder);
+        } else {
+            v = LayoutInflater.from(getContext()).inflate(R.layout.item_floating_note_text, physicsHeader, false);
+            TextView tv = v.findViewById(R.id.tv_note_text);
+            tv.setText(content != null ? content : "...");
+            tv.setTextColor(0xFF000000); // Force Black Text
+            
+            // Random Pastel Helpers
+            int[] pastelColors = {
+                0xFFFFF0F0, // Light Red
+                0xFFF0F4FF, // Light Blue
+                0xFFF0FFF4, // Light Green
+                0xFFFFFDF0, // Light Yellow
+                0xFFE6E6FA, // Lavender
+                0xFFE0F7FA, // Cyan
+                0xFFF8F8FF  // Ghost White
+            };
+            int randomColor = pastelColors[Math.abs(doc.getId().hashCode()) % pastelColors.length];
+            
+            if (v instanceof androidx.cardview.widget.CardView) {
+                ((androidx.cardview.widget.CardView) v).setCardBackgroundColor(randomColor);
+            }
+        }
+        
+        // Random Rotation (-15 to 15 degrees)
+        float randomRotation = (new java.util.Random().nextFloat() * 30) - 15;
+        v.setRotation(randomRotation);
+        
+        v.setOnClickListener(view -> {
+             Double lat = doc.getDouble("lat");
+             Double lng = doc.getDouble("lng");
+             if (lng == null) lng = doc.getDouble("lon");
+             
+             if (lat != null && lng != null) {
+                 navigateToNoteOnMap(lat, lng, doc.getId());
+             }
+        });
+        
+        // Ensure background clicks on physics header still work even with notes
+        physicsHeader.setOnClickListener(view -> openSelectFavourites());
+        
+        return v;
+    }
+    
+    private void addDecorativeSocialIcons() {
+        if (physicsHeader == null || getContext() == null) return;
+        
+        // Social icons to display (heart, like, comment, share, bookmark, send)
+        int[] iconResIds = {
+            R.drawable.ic_heart,
+            R.drawable.ic_heart_outline,
+            R.drawable.ic_like,
+            R.drawable.ic_comment,
+            R.drawable.ic_share,
+            R.drawable.ic_bookmark,
+            R.drawable.ic_send
+        };
+        
+        // Add 8-12 decorative icons randomly distributed
+        java.util.Random random = new java.util.Random();
+        int iconCount = 8 + random.nextInt(5); // 8-12 icons
+        
+        for (int i = 0; i < iconCount; i++) {
+            ImageView iconView = (ImageView) LayoutInflater.from(getContext())
+                .inflate(R.layout.item_floating_social_icon, physicsHeader, false);
+            
+            // Make icons non-clickable so they don't interfere with note clicks
+            iconView.setClickable(false);
+            iconView.setFocusable(false);
+            
+            // Random icon from the list
+            int iconRes = iconResIds[random.nextInt(iconResIds.length)];
+            iconView.setImageResource(iconRes);
+            
+            // Random size variation (24-40dp)
+            int size = 24 + random.nextInt(17); // 24-40dp
+            ViewGroup.LayoutParams params = iconView.getLayoutParams();
+            params.width = (int) (size * getResources().getDisplayMetrics().density);
+            params.height = (int) (size * getResources().getDisplayMetrics().density);
+            iconView.setLayoutParams(params);
+            
+            // Random alpha (0.25-0.5 for subtle effect)
+            float alpha = 0.25f + random.nextFloat() * 0.25f;
+            iconView.setAlpha(alpha);
+            
+            // Random initial rotation
+            iconView.setRotation(random.nextFloat() * 360);
+            
+            // Mark as decorative and add to physics header
+            physicsHeader.addFloatingView(iconView, true);
+        }
+    }
+
     
     @Override
     public void onDestroyView() {
@@ -1346,9 +1712,12 @@ public class ProfileFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // Refresh data if it's stale (older than cache duration)
+        // Always reload basic user data on resume to catch updates from sub-screens (like Favourite Selection)
+        // This is safer than relying solely on FragmentResult for hardware back button cases.
+        loadUserData(); 
+        
+        // Refresh other stats if stale
         if (viewModel.shouldRefreshData()) {
-            loadUserData();
             loadUserStats();
         }
     }

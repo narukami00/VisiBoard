@@ -39,5 +39,27 @@
     <fragment
         android:id="@+id/profileFragment"
         android:name="com.visiboard.app.ui.profile.ProfileFragment"
-        android:label="Profile" />
+        android:label="Profile">
+        <action
+            android:id="@+id/action_profile_to_favouriteSelection"
+            app:destination="@id/favouriteSelectionFragment"
+            app:enterAnim="@android:anim/fade_in"
+            app:exitAnim="@android:anim/fade_out"
+            app:popEnterAnim="@android:anim/fade_in"
+            app:popExitAnim="@android:anim/fade_out"/>
+    </fragment>
+
+    <fragment
+        android:id="@+id/favouriteSelectionFragment"
+        android:name="com.visiboard.app.ui.profile.FavouriteSelectionFragment"
+        android:label="Select Favourites"/>
+
+    <fragment
+        android:id="@+id/userProfileFragment"
+        android:name="com.visiboard.app.ui.profile.UserProfileFragment"
+        android:label="User Profile">
+        <argument
+            android:name="userId"
+            app:argType="string" />
+    </fragment>
 </navigation>

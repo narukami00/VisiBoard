@@ -100,7 +100,7 @@ public class LeaderboardActivity extends AppCompatActivity implements Leaderboar
         
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
             if (position == 0) {
-                tab.setText(currentLocality.isEmpty() ? "Local" : "Local (" + currentLocality + ")");
+                tab.setText("Nearby");
             } else {
                 tab.setText("Global");
             }
@@ -113,134 +113,9 @@ public class LeaderboardActivity extends AppCompatActivity implements Leaderboar
     }
 
     private void showUserInfo(String userId) {
-        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_user_info, null);
-        
-        de.hdodenhof.circleimageview.CircleImageView profilePic = dialogView.findViewById(R.id.dialog_user_profile_pic);
-        TextView userName = dialogView.findViewById(R.id.dialog_user_name);
-        TextView userLocation = dialogView.findViewById(R.id.dialog_user_location);
-        android.widget.LinearLayout locationContainer = dialogView.findViewById(R.id.dialog_location_container);
-        TextView userRank = dialogView.findViewById(R.id.dialog_user_rank);
-        TextView followersCount = dialogView.findViewById(R.id.dialog_followers_count);
-        TextView followingCount = dialogView.findViewById(R.id.dialog_following_count);
-        android.widget.Button followBtn = dialogView.findViewById(R.id.dialog_follow_btn);
-        
-        db.collection("users").document(userId).get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        String name = doc.getString("name");
-                        userName.setText(name != null ? name : "Anonymous");
-                        
-                        String location = doc.getString("lastKnownLocation");
-                        if (location != null && !location.isEmpty()) {
-                            userLocation.setText(location);
-                            locationContainer.setVisibility(View.VISIBLE);
-                        }
-                        
-                        String tier = doc.getString("currentTier");
-                        userRank.setText(tier != null ? tier : "None");
-                        
-                        String pic = doc.getString("profilePic");
-                        if (pic != null && !pic.isEmpty()) {
-                            com.visiboard.app.utils.ImageCache.getInstance()
-                                .loadBase64Image("user_" + userId, pic, profilePic, com.visiboard.app.R.drawable.ic_profile);
-                        }
-                        
-                        Long followers = doc.getLong("followersCount");
-                        Long following = doc.getLong("followingCount");
-                        followersCount.setText(String.valueOf(followers != null ? followers : 0));
-                        followingCount.setText(String.valueOf(following != null ? following : 0));
-                        
-                        com.google.firebase.auth.FirebaseUser currentUser = 
-                            com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
-                            
-                        if (currentUser != null && !userId.equals(currentUser.getUid())) {
-                            followBtn.setVisibility(View.VISIBLE);
-                            
-                            // 1. Initial Loading State
-                            followBtn.setText("...");
-                            followBtn.setEnabled(false);
-
-                            // 2. Check Following Status
-                            db.collection("users").document(currentUser.getUid())
-                                    .collection("following").document(userId)
-                                    .get()
-                                    .addOnSuccessListener(followDoc -> {
-                                        if (followDoc.exists()) {
-                                            // Already Following
-                                            followBtn.setText("Following");
-                                            followBtn.setBackgroundResource(R.drawable.btn_following_selector);
-                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_following, null));
-                                            followBtn.setEnabled(true);
-                                        } else {
-                                            // 3. Not Following -> Check Pending Request
-                                            db.collection("users").document(userId)
-                                                    .collection("follow_requests").document(currentUser.getUid())
-                                                    .get()
-                                                    .addOnSuccessListener(requestDoc -> {
-                                                        if (requestDoc.exists()) {
-                                                            // Request Pending
-                                                            followBtn.setText("Requested");
-                                                            followBtn.setBackgroundResource(R.drawable.btn_following_selector);
-                                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_following, null));
-                                                        } else {
-                                                            // No Relation
-                                                            followBtn.setText("Follow");
-                                                            followBtn.setBackgroundResource(R.drawable.btn_primary_selector);
-                                                            followBtn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
-                                                        }
-                                                        followBtn.setEnabled(true);
-                                                    })
-                                                    .addOnFailureListener(e -> {
-                                                        followBtn.setText("Follow");
-                                                        followBtn.setEnabled(true);
-                                                    });
-                                        }
-                                    })
-                                    .addOnFailureListener(e -> {
-                                         followBtn.setText("Follow");
-                                         followBtn.setEnabled(true);
-                                    });
-                            
-                            followBtn.setOnClickListener(v -> {
-                                String text = followBtn.getText().toString();
-                                if (text.equals("Follow")) {
-                                    followUser(userId, followBtn, followersCount);
-                                } else if (text.equals("Requested")) {
-                                    cancelFollowRequest(userId, followBtn);
-                                } else if (text.equals("Following")) {
-                                    unfollowUser(userId, followBtn, followersCount);
-                                }
-                            });
-                        } else {
-                            followBtn.setVisibility(View.GONE);
-                        }
-                    }
-                })
-                .addOnFailureListener(e -> Toast.makeText(this, "Failed to load info", Toast.LENGTH_SHORT).show());
-        
-        androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setView(dialogView);
-                
-        // Add Report Button
-        com.google.firebase.auth.FirebaseUser currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
-        if (currentUser != null && !userId.equals(currentUser.getUid())) {
-             builder.setNeutralButton("Report User", (d, w) -> {
-                 com.visiboard.app.ui.report.ReportBottomSheetFragment reportSheet =
-                         com.visiboard.app.ui.report.ReportBottomSheetFragment.newInstance(
-                                 userId,
-                                 userName.getText().toString(),
-                                 "USER",
-                                 0, 0
-                         );
-                 reportSheet.show(getSupportFragmentManager(), "ReportBottomSheet");
-             });
-        }
-        
-        androidx.appcompat.app.AlertDialog dialog = builder.create();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        }
-        dialog.show();
+        android.content.Intent intent = new android.content.Intent(this, com.visiboard.app.ui.profile.UserProfileActivity.class);
+        intent.putExtra(com.visiboard.app.ui.profile.UserProfileActivity.EXTRA_USER_ID, userId);
+        startActivity(intent);
     }
     
     // Updated Helper Methods

@@ -34,7 +34,7 @@ public class BlockedUsersActivity extends AppCompatActivity {
     private RecyclerView rvBlockedUsers;
     private LinearLayout layoutEmptyState;
     private ProgressBar pbLoading;
-    private ImageButton btnBack;
+    private androidx.appcompat.widget.Toolbar toolbar;
 
     private BlockedUsersAdapter adapter;
     private FirebaseFirestore db;
@@ -52,9 +52,11 @@ public class BlockedUsersActivity extends AppCompatActivity {
         rvBlockedUsers = findViewById(R.id.rv_blocked_users);
         layoutEmptyState = findViewById(R.id.layout_empty_state);
         pbLoading = findViewById(R.id.progress_loading);
-        btnBack = findViewById(R.id.btn_back);
+        toolbar = findViewById(R.id.toolbar);
 
-        btnBack.setOnClickListener(v -> finish());
+        if (toolbar != null) {
+            toolbar.setNavigationOnClickListener(v -> finish());
+        }
 
         rvBlockedUsers.setLayoutManager(new LinearLayoutManager(this));
         adapter = new BlockedUsersAdapter();

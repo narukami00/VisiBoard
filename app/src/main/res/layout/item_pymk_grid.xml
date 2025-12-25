@@ -3,119 +3,110 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="6dp"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="6dp"
-    app:cardBackgroundColor="@color/card_background">
+    android:layout_margin="4dp"
+    android:foreground="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="?android:attr/colorBackground">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content">
 
-        <!-- 1:1 Aspect Ratio Image -->
+        <!-- Full Avatar -->
         <ImageView
             android:id="@+id/iv_avatar"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:scaleType="centerCrop"
-            android:src="@drawable/ic_profile"
-            app:layout_constraintDimensionRatio="1:1"
-            app:layout_constraintEnd_toEndOf="parent"
+            android:src="@drawable/ic_profile_placeholder"
+            app:layout_constraintDimensionRatio="3:4"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"/>
 
         <!-- Gradient Overlay -->
         <View
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:background="@drawable/gradient_black_transparent"
-            app:layout_constraintBottom_toBottomOf="@id/iv_avatar"
-            app:layout_constraintEnd_toEndOf="@id/iv_avatar"
             app:layout_constraintHeight_percent="0.5"
-            app:layout_constraintStart_toStartOf="@id/iv_avatar" />
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"/>
 
-        <!-- Text Info (On Top of Image/Gradient) -->
+        <!-- User Info Container -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="12dp"
-            app:layout_constraintBottom_toBottomOf="@id/iv_avatar"
-            app:layout_constraintEnd_toStartOf="@id/btn_follow_container"
-            app:layout_constraintStart_toStartOf="parent">
-
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btn_follow">
+            
             <TextView
                 android:id="@+id/tv_name"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:fontFamily="@font/poppins_bold"
+                android:text="User Name"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/white"
+                android:fontFamily="@font/poppins_semibold"
                 android:maxLines="1"
+                android:ellipsize="end"
                 android:shadowColor="#80000000"
                 android:shadowDx="1"
                 android:shadowDy="1"
-                android:shadowRadius="2"
-                android:text="User Name"
-                android:textColor="@color/white"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:shadowRadius="2"/>
 
             <TextView
                 android:id="@+id/tv_tier"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:text="Legend"
+                android:textSize="11sp"
+                android:textColor="#EEFFFFFF"
                 android:fontFamily="@font/poppins_regular"
+                android:maxLines="1"
+                android:ellipsize="end"
                 android:shadowColor="#80000000"
                 android:shadowDx="1"
                 android:shadowDy="1"
                 android:shadowRadius="2"
-                android:text="Tier"
-                android:textColor="#DDFFFFFF"
-                android:textSize="11sp" />
+                android:layout_marginTop="2dp"/>
+                
         </LinearLayout>
 
-        <!-- Floating Follow Button (Mini FAB Style) -->
-        <androidx.cardview.widget.CardView
-            android:id="@+id/btn_follow_container"
-            android:layout_width="36dp"
+        <!-- Follow Button (Overlay) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_follow"
+            android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:layout_marginEnd="12dp"
-            android:layout_marginBottom="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            app:cardBackgroundColor="@color/primary"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="6dp"
-            app:layout_constraintBottom_toBottomOf="@id/iv_avatar"
-            app:layout_constraintEnd_toEndOf="parent">
+            android:layout_margin="8dp"
+            android:text="Follow"
+            android:textSize="10sp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingHorizontal="12dp"
+            android:textAllCaps="false"
+            android:textStyle="bold"
+            android:fontFamily="@font/poppins_medium"
+            app:backgroundTint="?attr/colorPrimary"
+            app:cornerRadius="18dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"/>
 
-            <!-- Using TextView as icon container to match previous logic logic if needed, 
-                 but ImageView is better for FAB. 
-                 The Code uses TextView btnFollow for setText logic? 
-                 Let's check DiscoveryAdapter. -->
-            
-            <ImageView
-                android:id="@+id/iv_follow_icon"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_add"
-                app:tint="@color/white" />
-            
-            <!-- Hidden TextView to maintain compatibility with Adapter logic expecting a TextView? 
-                 I'll need to update Adapter to handle this new layout. 
-                 Ideally, I should update the Adapter to use the ImageView/Container logic. -->
-
-        </androidx.cardview.widget.CardView>
-        
-        <!-- Compatibility TextView (Gone) -->
-        <TextView
-             android:id="@+id/btn_follow_compact"
-             android:layout_width="0dp"
-             android:layout_height="0dp"
-             android:visibility="gone"
-             android:text="Follow"/>
+        <!-- Hidden compat views -->
+        <TextView android:id="@+id/tv_context" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"/>
+        <androidx.cardview.widget.CardView android:id="@+id/btn_follow_container" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"/>
+        <ImageView android:id="@+id/iv_follow_icon" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"/>
+        <ImageButton android:id="@+id/btn_dismiss" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

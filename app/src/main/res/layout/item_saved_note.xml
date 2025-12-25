@@ -3,16 +3,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="12dp"
-    app:cardCornerRadius="12dp"
+    android:layout_marginBottom="8dp"
+    app:cardCornerRadius="16dp"
     app:cardElevation="2dp"
-    app:cardBackgroundColor="@color/card_background">
+    app:cardBackgroundColor="?attr/colorSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -21,10 +21,10 @@
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/cv_image_container"
-                android:layout_width="60dp"
-                android:layout_height="60dp"
-                app:cardCornerRadius="8dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                app:cardCornerRadius="12dp"
+                android:layout_marginEnd="14dp"
                 android:visibility="gone">
                 <ImageView
                     android:id="@+id/iv_note_image"
@@ -44,59 +44,55 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="Note Content"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:textSize="14sp"
+                    android:fontFamily="@font/poppins_medium"
                     android:maxLines="2"
-                    android:ellipsize="end"
-                    android:fontFamily="@font/poppins_medium"/>
+                    android:ellipsize="end"/>
 
                 <TextView
                     android:id="@+id/tv_timestamp"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="2 hrs ago"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="12sp"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="@font/poppins_regular"/>
+                    android:fontFamily="@font/poppins_regular"
+                    android:layout_marginTop="4dp"/>
             </LinearLayout>
 
         </LinearLayout>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/divider"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="8dp"/>
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="end">
+            android:gravity="end"
+            android:layout_marginTop="12dp">
             
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_view_map"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:text="View on Map"
-                android:textAllCaps="false"
-                android:textColor="@color/text_primary"
-                android:background="?attr/selectableItemBackground"
                 android:textSize="12sp"
+                android:textAllCaps="false"
                 android:fontFamily="@font/poppins_medium"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:textColor="?attr/colorPrimary"
                 android:layout_marginEnd="8dp"/>
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_remove"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:text="Remove"
-                android:textAllCaps="false"
-                android:textColor="@color/button_text_primary"
-                android:background="@drawable/btn_primary_selector"
                 android:textSize="12sp"
-                android:fontFamily="@font/poppins_semibold"/>
+                android:textAllCaps="false"
+                android:fontFamily="@font/poppins_medium"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:textColor="@color/error"
+                app:strokeColor="@color/error"
+                app:cornerRadius="18dp"/>
         </LinearLayout>
 
     </LinearLayout>

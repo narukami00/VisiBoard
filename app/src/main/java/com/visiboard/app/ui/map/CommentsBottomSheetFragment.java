@@ -61,7 +61,12 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
         this.userClickListener = listener;
     }
 
-    public static CommentsBottomSheetFragment newInstance(String noteId, String noteOwnerId, String noteText, double lat, double lng) {
+    private static final String ARG_IS_COMMENTS_DISABLED = "is_comments_disabled";
+    
+    // ...
+    private boolean isCommentsDisabled;
+
+    public static CommentsBottomSheetFragment newInstance(String noteId, String noteOwnerId, String noteText, double lat, double lng, boolean isCommentsDisabled) {
         CommentsBottomSheetFragment fragment = new CommentsBottomSheetFragment();
         Bundle args = new Bundle();
         args.putString(ARG_NOTE_ID, noteId);
@@ -69,6 +74,7 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
         args.putString(ARG_NOTE_TEXT, noteText);
         args.putDouble(ARG_NOTE_LAT, lat);
         args.putDouble(ARG_NOTE_LNG, lng);
+        args.putBoolean(ARG_IS_COMMENTS_DISABLED, isCommentsDisabled);
         fragment.setArguments(args);
         return fragment;
     }
@@ -82,6 +88,7 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
             noteText = getArguments().getString(ARG_NOTE_TEXT);
             noteLat = getArguments().getDouble(ARG_NOTE_LAT);
             noteLng = getArguments().getDouble(ARG_NOTE_LNG);
+            isCommentsDisabled = getArguments().getBoolean(ARG_IS_COMMENTS_DISABLED);
         }
         db = FirebaseFirestore.getInstance();
         auth = FirebaseAuth.getInstance();
@@ -112,7 +119,19 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
             loadComments();
         }
 
-        btnSend.setOnClickListener(v -> postComment());
+        if (isCommentsDisabled) {
+            btnSend.setVisibility(View.GONE);
+            
+            // Reuse existing EditText to show message
+            etComment.setText("Comments are turned off");
+            etComment.setEnabled(false);
+            etComment.setFocusable(false); 
+            etComment.setGravity(android.view.Gravity.CENTER);
+            etComment.setTextColor(getResources().getColor(R.color.text_secondary, null));
+            etComment.setBackground(null); // Remove input background
+        } else {
+            btnSend.setOnClickListener(v -> postComment());
+        }
     }
 
     private void setupRecyclerView() {

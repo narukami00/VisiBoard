@@ -29,8 +29,8 @@ public class FollowRequestsActivity extends AppCompatActivity {
 
     private RecyclerView rvRequests;
     private View pbLoading;
-    private TextView tvNoData;
-    private View btnBack;
+    private View tvNoData;
+    private androidx.appcompat.widget.Toolbar toolbar;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -47,9 +47,11 @@ public class FollowRequestsActivity extends AppCompatActivity {
         rvRequests = findViewById(R.id.rv_requests);
         pbLoading = findViewById(R.id.pb_loading);
         tvNoData = findViewById(R.id.tv_no_data);
-        btnBack = findViewById(R.id.btn_back);
+        toolbar = findViewById(R.id.toolbar);
 
-        btnBack.setOnClickListener(v -> finish());
+        if (toolbar != null) {
+            toolbar.setNavigationOnClickListener(v -> finish());
+        }
 
         rvRequests.setLayoutManager(new LinearLayoutManager(this));
         adapter = new RequestsAdapter();

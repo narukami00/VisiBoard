@@ -28,7 +28,7 @@ public class SettingsActivity extends AppCompatActivity {
     private LinearLayout btnBlockedUsers;
     private TextView tvRequestsCount;
     private LinearLayout btnLogout;
-    private View btnBack;
+    private androidx.appcompat.widget.Toolbar toolbar;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -56,7 +56,7 @@ public class SettingsActivity extends AppCompatActivity {
         btnBlockedUsers = findViewById(R.id.btn_blocked_users);
         tvRequestsCount = findViewById(R.id.tv_requests_count);
         btnLogout = findViewById(R.id.btn_logout);
-        btnBack = findViewById(R.id.btn_back);
+        toolbar = findViewById(R.id.toolbar);
 
         setupListeners();
         loadUserSettings();
@@ -64,7 +64,9 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
-        btnBack.setOnClickListener(v -> finish());
+        if (toolbar != null) {
+            toolbar.setNavigationOnClickListener(v -> finish());
+        }
 
         btnLogout.setOnClickListener(v -> {
             auth.signOut();

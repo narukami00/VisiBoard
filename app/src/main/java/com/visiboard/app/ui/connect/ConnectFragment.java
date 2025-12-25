@@ -44,7 +44,7 @@ public class ConnectFragment extends Fragment {
             if (position == 0) {
                 tab.setText("Chats");
             } else {
-                tab.setText("Discovery");
+                tab.setText("Connect");
             }
         }).attach();
     }

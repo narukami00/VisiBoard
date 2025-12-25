@@ -49,8 +49,12 @@ public class DiscoveryFragment extends Fragment {
     
     private boolean isGridMode = false;
     private Set<String> followingIds = new HashSet<>();
-    private List<DiscoveryItem> discoveryItems = new ArrayList<>(); // Default list (Nearby + Popular)
+    private List<DiscoveryItem> discoveryItems = new ArrayList<>(); 
     private boolean isSearching = false;
+    
+    // Location for Distance Calculation
+    private com.google.android.gms.location.FusedLocationProviderClient fusedLocationClient;
+    private android.location.Location currentLocation;
 
     @Nullable
     @Override
@@ -66,6 +70,18 @@ public class DiscoveryFragment extends Fragment {
         FirebaseAuth auth = FirebaseAuth.getInstance();
         if (auth.getCurrentUser() != null) {
             currentUserId = auth.getCurrentUser().getUid();
+        }
+        
+        fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(requireActivity());
+        
+        // Check permissions and get location immediately
+        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                if (location != null) {
+                    currentLocation = location;
+                    if (adapter != null) adapter.notifyDataSetChanged(); // Refresh if data already loaded
+                }
+            });
         }
 
         rvDiscovery = view.findViewById(R.id.rv_discovery);
@@ -86,11 +102,13 @@ public class DiscoveryFragment extends Fragment {
         layoutManager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override
             public int getSpanSize(int position) {
-                switch (adapter.getItemViewType(position)) {
-                    case DiscoveryAdapter.TYPE_USER:
-                        return isGridMode ? 1 : 2; // Grid: 1 col (half width), List: 2 cols (full width)
-                    default:
-                        return 2; // Headers always full width
+                int viewType = adapter.getItemViewType(position);
+                if (viewType == DiscoveryAdapter.TYPE_USER_GRID) {
+                    return 1; // Grid: 1 col (half width)
+                } else if (viewType == DiscoveryAdapter.TYPE_USER_LIST) {
+                    return 2; // List: 2 cols (full width)
+                } else {
+                    return 2; // Headers always full width
                 }
             }
         });
@@ -170,9 +188,9 @@ public class DiscoveryFragment extends Fragment {
                 discoveryItems.clear();
                 
                 if (!popularUsers.isEmpty()) {
-                    discoveryItems.add(new DiscoveryItem("Most Popular"));
+                    discoveryItems.add(new DiscoveryItem("People You May Know")); // Renamed title
                     for (UserInfo u : popularUsers) {
-                        discoveryItems.add(new DiscoveryItem(u, "Trending"));
+                        discoveryItems.add(new DiscoveryItem(u, null)); 
                     }
                 }
                 
@@ -214,6 +232,137 @@ public class DiscoveryFragment extends Fragment {
                      }
                 }
                 adapter.setItems(results);
+            });
+    }
+
+    // --- Haptic Feedback Helper ---
+    private void performHapticFeedback(View v) {
+        if (v != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+        } else if (v != null) {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
+        }
+    }
+
+    // --- MaterialButton Follow Logic for Grid Mode ---
+    private void setupFollowButtonMaterial(com.google.android.material.button.MaterialButton btn, UserInfo user) {
+        if (currentUserId == null || user.getUserId().equals(currentUserId)) {
+            btn.setVisibility(View.GONE);
+            return;
+        }
+
+        btn.setVisibility(View.VISIBLE);
+        btn.setEnabled(true);
+        
+        // Check Following (Local Cache) first
+        if (followingIds.contains(user.getUserId())) {
+            btn.setText("Following");
+            btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(requireContext(), R.color.button_following)));
+        } else {
+            // Default to Follow, then check for pending request
+            btn.setText("Follow");
+            btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(requireContext(), R.color.primary)));
+                    
+            // Check for pending follow request (async)
+            db.collection("users").document(user.getUserId())
+                .collection("follow_requests").document(currentUserId)
+                .get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        btn.setText("Requested");
+                        btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                                androidx.core.content.ContextCompat.getColor(requireContext(), R.color.button_secondary)));
+                    }
+                });
+        }
+
+        btn.setOnClickListener(v -> {
+            performHapticFeedback(v);
+            handleFollowClickMaterial(user.getUserId(), btn);
+        });
+    }
+
+    private void handleFollowClickMaterial(String targetUserId, com.google.android.material.button.MaterialButton btn) {
+        String text = btn.getText().toString();
+        if ("Following".equals(text)) {
+            unfollowUserMaterial(targetUserId, btn);
+        } else if ("Requested".equals(text)) {
+            cancelFollowRequestMaterial(targetUserId, btn);
+        } else {
+            performDirectFollowMaterial(targetUserId, btn);
+        }
+    }
+
+    private void cancelFollowRequestMaterial(String targetUserId, com.google.android.material.button.MaterialButton btn) {
+        btn.setEnabled(false);
+        db.collection("users").document(targetUserId)
+            .collection("follow_requests").document(currentUserId)
+            .delete()
+            .addOnSuccessListener(aVoid -> {
+                btn.setText("Follow");
+                btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                        androidx.core.content.ContextCompat.getColor(requireContext(), R.color.primary)));
+                btn.setEnabled(true);
+            })
+            .addOnFailureListener(e -> btn.setEnabled(true));
+    }
+
+    private void performDirectFollowMaterial(String targetUserId, com.google.android.material.button.MaterialButton btn) {
+        btn.setEnabled(false);
+        btn.setText("...");
+
+        // Add to MY following
+        Map<String, Object> followData = new HashMap<>();
+        followData.put("followedAt", System.currentTimeMillis());
+
+        db.collection("users").document(currentUserId).collection("following").document(targetUserId)
+            .set(followData)
+            .addOnSuccessListener(aVoid -> {
+                // Add ME to THEIR followers
+                db.collection("users").document(targetUserId).collection("followers").document(currentUserId)
+                    .set(followData)
+                    .addOnSuccessListener(aVoid2 -> {
+                        // Increment counts
+                        db.collection("users").document(currentUserId)
+                            .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1));
+                        db.collection("users").document(targetUserId)
+                            .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1));
+                        
+                        followingIds.add(targetUserId);
+                        btn.setText("Following");
+                        btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                                androidx.core.content.ContextCompat.getColor(requireContext(), R.color.button_following)));
+                        btn.setEnabled(true);
+
+                        createNotification(targetUserId, "follow");
+                    });
+            })
+            .addOnFailureListener(e -> {
+                btn.setText("Follow");
+                btn.setEnabled(true);
+            });
+    }
+
+    private void unfollowUserMaterial(String targetUserId, com.google.android.material.button.MaterialButton btn) {
+        btn.setEnabled(false);
+
+        db.collection("users").document(currentUserId).collection("following").document(targetUserId)
+            .delete()
+            .addOnSuccessListener(aVoid -> {
+                db.collection("users").document(targetUserId).collection("followers").document(currentUserId)
+                    .delete();
+                db.collection("users").document(currentUserId)
+                    .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1));
+                db.collection("users").document(targetUserId)
+                    .update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1));
+                
+                followingIds.remove(targetUserId);
+                btn.setText("Follow");
+                btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                        androidx.core.content.ContextCompat.getColor(requireContext(), R.color.primary)));
+                btn.setEnabled(true);
             });
     }
 
@@ -570,7 +719,8 @@ public class DiscoveryFragment extends Fragment {
 
     private class DiscoveryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         static final int TYPE_HEADER = 0;
-        static final int TYPE_USER = 1;
+        static final int TYPE_USER_LIST = 1;
+        static final int TYPE_USER_GRID = 2;
         
         private List<DiscoveryItem> items = new ArrayList<>();
 
@@ -581,7 +731,13 @@ public class DiscoveryFragment extends Fragment {
 
         @Override
         public int getItemViewType(int position) {
-            return items.get(position).type;
+            DiscoveryItem item = items.get(position);
+            if (item.type == DiscoveryItem.TYPE_HEADER) {
+                return TYPE_HEADER;
+            } else {
+                // Return different type based on current mode to force ViewHolder recreation
+                return isGridMode ? TYPE_USER_GRID : TYPE_USER_LIST;
+            }
         }
 
         @NonNull
@@ -591,15 +747,13 @@ public class DiscoveryFragment extends Fragment {
             if (viewType == TYPE_HEADER) {
                 View v = inflater.inflate(R.layout.item_discovery_header, parent, false);
                 return new HeaderViewHolder(v);
+            } else if (viewType == TYPE_USER_GRID) {
+                View v = inflater.inflate(R.layout.item_pymk_grid, parent, false);
+                return new UserViewHolder(v, true);
             } else {
-                // Return Grid or List layout based on mode
-                // Note: Using isGridMode here works because adapter is notified when mode changes, triggering full rebind/create?
-                // Actually, RecyclerView rebinds existing ViewHolders if they are compatible.
-                // We MUST use different viewTypes OR ensure we re-create holders.
-                // Or simply: check isGridMode here.
-                int layoutId = isGridMode ? R.layout.item_pymk_grid : R.layout.item_pymk_user;
-                View v = inflater.inflate(layoutId, parent, false);
-                return new UserViewHolder(v, isGridMode);
+                // TYPE_USER_LIST
+                View v = inflater.inflate(R.layout.item_pymk_user, parent, false);
+                return new UserViewHolder(v, false);
             }
         }
 
@@ -616,11 +770,48 @@ public class DiscoveryFragment extends Fragment {
         private void bindUser(UserViewHolder holder, DiscoveryItem item) {
             UserInfo u = item.user;
             holder.tvName.setText(u.getName() != null ? u.getName() : "Anonymous");
-            holder.tvTier.setText(u.getCurrentTier() != null ? u.getCurrentTier() : "None");
             
-            // Set Context only if available in layout
-            if (item.context != null && holder.tvContext != null) {
+            // Build tier + context string
+            // Build tier + context string
+            String tier = u.getCurrentTier();
+            boolean hasTier = tier != null && !tier.isEmpty();
+            
+            if (hasTier) {
+                holder.tvTier.setText(tier);
+                holder.tvTier.setVisibility(View.VISIBLE);
+                
+                if (tier.equalsIgnoreCase("None")) {
+                    holder.tvTier.setBackground(null); // No badge for None
+                    holder.tvTier.setPadding(0, 0, 0, 0); // Remove padding if badge had it
+                } else {
+                    holder.tvTier.setBackgroundResource(R.drawable.bg_badge_transparent);
+                    int pad = (int) (8 * holder.itemView.getContext().getResources().getDisplayMetrics().density);
+                    holder.tvTier.setPadding(pad, pad/2, pad, pad/2);
+                }
+            } else {
+                 holder.tvTier.setVisibility(View.GONE);
+            }
+            // Context is now handled by tvContext exclusively (distance or mutuals)
+            
+            // Distance Calculation and Display
+            if (DiscoveryFragment.this.currentLocation != null && u.getLat() != 0 && u.getLng() != 0) {
+                 float[] results = new float[1];
+                 android.location.Location.distanceBetween(
+                         DiscoveryFragment.this.currentLocation.getLatitude(), DiscoveryFragment.this.currentLocation.getLongitude(),
+                         u.getLat(), u.getLng(),
+                         results);
+                 float distanceKm = results[0] / 1000f;
+                 String distText = String.format(java.util.Locale.US, "%.1f km away", distanceKm);
+                 
+                 holder.tvContext.setVisibility(View.VISIBLE);
+                 holder.tvContext.setText(distText);
+                 holder.tvContext.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_location_small, 0, 0, 0); // Assuming icon exists or 0
+            } else if (item.context != null) {
                  holder.tvContext.setText(item.context);
+                 holder.tvContext.setVisibility(View.VISIBLE);
+                 holder.tvContext.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+            } else {
+                 holder.tvContext.setVisibility(View.GONE);
             }
             
             if (u.getProfilePic() != null) {
@@ -629,15 +820,24 @@ public class DiscoveryFragment extends Fragment {
                 holder.ivAvatar.setImageResource(R.drawable.ic_profile);
             }
             
-            if (holder.btnFollowContainer != null) {
+            // Handle follow button - now use MaterialButton for grid mode
+            if (holder.isGridMode && holder.btnFollowMaterial != null) {
+                setupFollowButtonMaterial(holder.btnFollowMaterial, u);
+            } else if (holder.btnFollowContainer != null) {
                 setupFollowButtonGrid(holder.btnFollowContainer, holder.ivFollowIcon, u);
-            } else {
+            } else if (holder.btnFollow != null) {
                 setupFollowButton(holder.btnFollow, u);
             }
             
             if (holder.btnDismiss != null) {
                  holder.btnDismiss.setVisibility(View.GONE); 
             }
+
+            // Add click listener for card with haptic feedback
+            holder.itemView.setOnClickListener(v -> {
+                performHapticFeedback(v);
+                // Could navigate to profile here
+            });
         }
 
         @Override
@@ -655,30 +855,36 @@ public class DiscoveryFragment extends Fragment {
         TextView tvName, tvTier, tvContext;
         android.widget.ImageView ivAvatar; 
         
-        // List Mode
-        TextView btnFollow; 
+        // Both modes now use MaterialButton
+        com.google.android.material.button.MaterialButton btnFollowMaterial;
         ImageButton btnDismiss;
 
-        // Grid Mode
+        // Legacy compatibility (hidden in new layout)
         androidx.cardview.widget.CardView btnFollowContainer;
         ImageView ivFollowIcon;
+        TextView btnFollow; // For list mode legacy
+
+        boolean isGridMode;
 
         UserViewHolder(View v, boolean isGrid) {
             super(v);
+            this.isGridMode = isGrid;
             tvName = v.findViewById(R.id.tv_name);
             tvTier = v.findViewById(R.id.tv_tier);
             ivAvatar = v.findViewById(R.id.iv_avatar);
+            tvContext = v.findViewById(R.id.tv_context);
             
             if (isGrid) {
+                // New grid mode uses MaterialButton
+                btnFollowMaterial = v.findViewById(R.id.btn_follow);
                 btnFollowContainer = v.findViewById(R.id.btn_follow_container);
                 ivFollowIcon = v.findViewById(R.id.iv_follow_icon);
-                tvContext = null; 
-                btnDismiss = null;
+                btnDismiss = v.findViewById(R.id.btn_dismiss);
                 btnFollow = null;
             } else {
-                tvContext = v.findViewById(R.id.tv_context);
                 btnFollow = v.findViewById(R.id.btn_follow);
                 btnDismiss = v.findViewById(R.id.btn_dismiss);
+                btnFollowMaterial = null;
                 btnFollowContainer = null;
                 ivFollowIcon = null;
             }

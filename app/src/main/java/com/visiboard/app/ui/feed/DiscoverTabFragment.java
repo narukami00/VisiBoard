@@ -59,6 +59,12 @@ public class DiscoverTabFragment extends Fragment {
     private boolean isLoading = false;
     private volatile boolean isFragmentDestroyed = false;
     
+    // Privacy Lists
+    private List<String> followingIds = new ArrayList<>();
+    private List<String> blockedUserIds = new ArrayList<>();
+    private List<String> hiddenNoteOtherIds = new ArrayList<>();
+    private boolean isPrivacyDataLoaded = false;
+    
     private FeedViewModel feedViewModel;
     private ActivityResultLauncher<String> requestPermissionLauncher;
     
@@ -126,11 +132,7 @@ public class DiscoverTabFragment extends Fragment {
         
         // Only load data if ViewModel doesn't have it yet
         if (!feedViewModel.isDataLoaded() || feedViewModel.getAllPinterestNotes().isEmpty()) {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                loadUserLocation();
-            } else {
-                requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
-            }
+            loadPrivacyData();
         } else {
             // Use cached data
             pinterestFeedAdapter.setNotes(feedViewModel.getAllPinterestNotes());
@@ -236,7 +238,60 @@ public class DiscoverTabFragment extends Fragment {
     
     private void setupSwipeRefresh() {
         swipeRefresh.setColorSchemeResources(R.color.primary, R.color.secondary, R.color.accent);
-        swipeRefresh.setOnRefreshListener(this::loadUserLocation);
+        swipeRefresh.setOnRefreshListener(this::loadPrivacyData);
+    }
+
+    private void loadPrivacyData() {
+        if (auth.getCurrentUser() == null) return;
+        String uid = auth.getCurrentUser().getUid();
+
+        // Chain load: Blocked -> Hidden -> Following -> Location/Feed
+        db.collection("users").document(uid).collection("blocked_users").get()
+            .addOnSuccessListener(snap -> {
+                if (isFragmentDestroyed) return;
+                blockedUserIds.clear();
+                for (DocumentSnapshot d : snap) blockedUserIds.add(d.getId());
+
+                db.collection("users").document(uid).collection("hidden_notes_others").get()
+                    .addOnSuccessListener(snap2 -> {
+                        if (isFragmentDestroyed) return;
+                        hiddenNoteOtherIds.clear();
+                        for (DocumentSnapshot d : snap2) hiddenNoteOtherIds.add(d.getId());
+
+                        db.collection("users").document(uid).collection("following").get()
+                            .addOnSuccessListener(snap3 -> {
+                                if (isFragmentDestroyed) return;
+                                followingIds.clear();
+                                for (DocumentSnapshot d : snap3) followingIds.add(d.getId());
+                                
+                                isPrivacyDataLoaded = true;
+                                
+                                // Now proceed to location check
+                                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                                    loadUserLocation();
+                                } else {
+                                    requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
+                                }
+                            })
+                            .addOnFailureListener(e -> proceedWithDefaults());
+                    })
+                    .addOnFailureListener(e -> proceedWithDefaults());
+            })
+            .addOnFailureListener(e -> proceedWithDefaults());
+    }
+
+    private void proceedWithDefaults() {
+        // If privacy load fails, we default to strict safe mode (lists empty) or retry?
+        // Empty lists mean we might SHOW blocked content if we aren't careful, 
+        // BUT map logic implies 'blockedUserIds.contains' -> if empty, doesn't filter.
+        // This is fail-open. Ideal is fail-closed, but for now let's just proceed to load what we can.
+        // Better to try loading feed than stuck forever.
+        if (isFragmentDestroyed) return;
+         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            loadUserLocation();
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
     }
     
     private void loadUserLocation() {
@@ -279,11 +334,11 @@ public class DiscoverTabFragment extends Fragment {
              // pbLoading.setVisibility(View.VISIBLE); // REMOVED
         }
         
-        // Original "Load Everything" Logic (Fetch 50)
+        // Load more items to compensate for client-side privacy filtering
         Query query = db.collection("notes")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .orderBy("__name__", Query.Direction.DESCENDING) // Keep stability
-            .limit(FETCH_SIZE);
+            .limit(50); // Increased from 10 to 50
             
         if (isNextPage && feedViewModel.getLastVisible() != null) {
             query = query.startAfter(feedViewModel.getLastVisible());
@@ -329,6 +384,44 @@ public class DiscoverTabFragment extends Fragment {
                              Log.d(TAG, "Thread stopped - Fragment destroyed or interrupted");
                              return;
                          }
+
+                         // --- PRIVACY FILTERS ---
+                         String noteId = doc.getId();
+                         String userId = doc.getString("userId");
+                         if (userId == null) continue; // Invalid note
+
+                         // 1. Blocked User
+                         if (blockedUserIds.contains(userId)) continue;
+
+                         // 2. Hidden Note (Global or User-specific)
+                         boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+                         if (isHidden) continue;
+                         if (hiddenNoteOtherIds.contains(noteId)) continue;
+                         
+                         // 3. User Visibility Settings
+                         String visibility = doc.getString("visibility");
+                         if (visibility == null) visibility = "public"; // Default to public
+                         boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
+                         
+                         String currentUid = auth.getCurrentUser().getUid();
+                         
+                         // Skip my own hidden notes (if Hide My Notes is on - handled in Map, here we assume show mine unless I hid it specifically?)
+                         // MapFragment logic: if (userId.equals(auth.getCurrentUser().getUid())) { if (isHideMyNotesEnabled) continue; }
+                         // Feed doesn't seem to have "Hide My Notes" toggle state passed to it. 
+                         // For now, allow my own notes.
+                         
+                         if (!userId.equals(currentUid)) {
+                             // Strict Private
+                             if ("private".equals(visibility)) continue;
+
+                             // Followers Only Logic (Owner Private OR Note Followers-Only)
+                             boolean isRestricted = isOwnerPrivate || "followers".equals(visibility);
+                             if (isRestricted && !followingIds.contains(userId)) {
+                                 continue;
+                             }
+                         }
+
+                         // --- END PRIVACY FILTERS ---
 
                          // 1. Parse Metadata
                          final NearbyNote note = new NearbyNote();

@@ -307,6 +307,26 @@
             tools:visibility="visible"/>
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/fab_hide_my_notes"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginBottom="12dp"
+            android:text="Hide My Notes"
+            android:textSize="12sp"
+            android:textColor="@color/text_primary"
+            android:fontFamily="@font/poppins_medium"
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_visibility_off"
+            app:iconTint="@color/text_primary"
+            app:iconSize="18dp"
+            app:backgroundTint="@color/card_background"
+            app:cornerRadius="20dp"
+            app:elevation="6dp"
+            android:stateListAnimator="@null"
+            android:visibility="invisible"
+            tools:visibility="visible"/>
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/fab_recenter"
             android:layout_width="wrap_content"
             android:layout_height="40dp"

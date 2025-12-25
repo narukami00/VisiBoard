@@ -48,6 +48,7 @@ public class NotificationTabFragment extends Fragment {
     
     private NotificationAdapter notificationAdapter;
     private List<Notification> allNotifications = new ArrayList<>();
+    private List<String> blockedUserIds = new ArrayList<>(); // Blocked users filter
     
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -137,6 +138,22 @@ public class NotificationTabFragment extends Fragment {
         
         swipeRefresh.setRefreshing(true);
         
+        // Load Blocked Users first
+        db.collection("users").document(uid).collection("blocked_users").get()
+            .addOnSuccessListener(blockedSnap -> {
+                blockedUserIds.clear();
+                for (DocumentSnapshot d : blockedSnap) blockedUserIds.add(d.getId());
+                
+                setupRealtimeListener(uid);
+            })
+            .addOnFailureListener(e -> {
+                 // Even if blocked load fails, load notifications (fail open? or empty?)
+                 // Let's load notifications but with empty blocked list
+                 setupRealtimeListener(uid);
+            });
+    }
+
+    private void setupRealtimeListener(String uid) {
         notificationListener = db.collection("notifications")
             .whereEqualTo("toUserId", uid)
             .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
@@ -160,6 +177,11 @@ public class NotificationTabFragment extends Fragment {
                     for (DocumentSnapshot doc : snapshots.getDocuments()) {
                         Notification n = doc.toObject(Notification.class);
                         if (n != null) {
+                            // Filter Blocked Users
+                            if (n.getFromUserId() != null && blockedUserIds.contains(n.getFromUserId())) {
+                                continue;
+                            }
+                            
                             n.setId(doc.getId());
                             newNotifications.add(n);
                             if (!n.isRead()) unreadCount++;

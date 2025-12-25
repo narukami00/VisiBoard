@@ -46,11 +46,13 @@ public class CreateNoteActivity extends AppCompatActivity {
     private ImageButton btnRotateImage;
     private float currentRotation = 0f;
     private android.graphics.Bitmap currentBitmap;
-    private Button btnPost;
+    private com.google.android.material.button.MaterialButton btnPost;
     private com.google.android.material.button.MaterialButton btnAddImage;
     private ProgressBar progressBar;
-    private ImageButton btnBack;
+    private ImageButton btnClose;
     private android.widget.Spinner spinnerVisibility;
+    private android.widget.TextView tvUserName;
+    private de.hdodenhof.circleimageview.CircleImageView ivUserAvatar;
 
     private Uri selectedImageUri;
     private FusedLocationProviderClient fusedLocationClient;
@@ -91,8 +93,12 @@ public class CreateNoteActivity extends AppCompatActivity {
         btnPost = findViewById(R.id.btn_post);
         btnAddImage = findViewById(R.id.btn_add_image);
         progressBar = findViewById(R.id.progress_bar);
-        btnBack = findViewById(R.id.btn_back);
+        btnClose = findViewById(R.id.btn_close);
         spinnerVisibility = findViewById(R.id.spinner_visibility);
+        tvUserName = findViewById(R.id.tv_user_name);
+        ivUserAvatar = findViewById(R.id.iv_user_avatar);
+
+        fetchUserInfo();
 
         // Setup Spinner
         String[] items = new String[]{"Public", "Followers", "Private"};
@@ -133,12 +139,19 @@ public class CreateNoteActivity extends AppCompatActivity {
         if (selectedImageUri != null) {
              updateImagePreview();
         }
+
+        // Fetch Note Details if Editing (for Visibility and fresh data)
+        if (editNoteId != null) {
+            fetchNoteDetails(editNoteId);
+        }
         
         setupListeners();
     }
 
+
+
     private void setupListeners() {
-        btnBack.setOnClickListener(v -> finish());
+        btnClose.setOnClickListener(v -> finish());
         
         btnAddImage.setOnClickListener(v -> pickImage.launch("image/*"));
         
@@ -411,6 +424,48 @@ public class CreateNoteActivity extends AppCompatActivity {
         progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
         btnPost.setEnabled(!isLoading);
         etNoteContent.setEnabled(!isLoading);
-        btnBack.setEnabled(!isLoading);
+        btnClose.setEnabled(!isLoading);
+    }
+
+    private void fetchUserInfo() {
+        if (auth.getCurrentUser() != null) {
+            String uid = auth.getCurrentUser().getUid();
+            db.collection("users").document(uid).get().addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    String name = doc.getString("name");
+                    String profilePic = doc.getString("profilePic");
+                    
+                    tvUserName.setText(name != null ? name : "User");
+                    
+                    if (profilePic != null && !profilePic.isEmpty()) {
+                        byte[] decodedString = android.util.Base64.decode(profilePic, android.util.Base64.DEFAULT);
+                        android.graphics.Bitmap decodedByte = android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                        ivUserAvatar.setImageBitmap(decodedByte);
+                    }
+                }
+            });
+        }
+    }
+
+    private void fetchNoteDetails(String noteId) {
+        db.collection("notes").document(noteId).get()
+            .addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    // Set Visibility Spinner
+                    String visibility = doc.getString("visibility");
+                    if (visibility != null) {
+                        if (visibility.equalsIgnoreCase("followers")) {
+                            spinnerVisibility.setSelection(1);
+                        } else if (visibility.equalsIgnoreCase("private")) {
+                            spinnerVisibility.setSelection(2);
+                        } else {
+                            spinnerVisibility.setSelection(0); // Public default
+                        }
+                    }
+                }
+            })
+            .addOnFailureListener(e -> {
+                Toast.makeText(this, "Failed to load note details", Toast.LENGTH_SHORT).show();
+            });
     }
 }

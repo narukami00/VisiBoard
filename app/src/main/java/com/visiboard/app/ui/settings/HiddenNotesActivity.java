@@ -38,7 +38,7 @@ public class HiddenNotesActivity extends AppCompatActivity {
     private RecyclerView rvHiddenNotes;
     private LinearLayout layoutEmptyState;
     private ProgressBar progressLoading;
-    private View btnBack;
+    private androidx.appcompat.widget.Toolbar toolbar;
 
     private HiddenNotesAdapter adapter;
     private List<NearbyNote> hiddenNotes;
@@ -63,9 +63,11 @@ public class HiddenNotesActivity extends AppCompatActivity {
         rvHiddenNotes = findViewById(R.id.rv_hidden_notes);
         layoutEmptyState = findViewById(R.id.layout_empty_state);
         progressLoading = findViewById(R.id.progress_loading);
-        btnBack = findViewById(R.id.btn_back);
+        toolbar = findViewById(R.id.toolbar);
 
-        btnBack.setOnClickListener(v -> finish());
+        if (toolbar != null) {
+            toolbar.setNavigationOnClickListener(v -> finish());
+        }
 
         // Setup RecyclerView
         hiddenNotes = new ArrayList<>();
