@@ -3,6 +3,7 @@ package com.visiboard.app;
 import android.content.Intent;
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.Fragment;
 import androidx.navigation.NavController;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
@@ -107,9 +108,94 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Check for navigation intent extras (e.g., from Saved Notes "View on Map")
+        handleNavigationIntent(getIntent(), navController);
+
         // Asynchronously recalculate total likes to ensure consistency
         recalculateTotalLikes();
         updateBottomNavProfileIcon();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        Log.d("MainActivity", "onNewIntent called");
+        setIntent(intent);
+        
+        // Handle navigation when activity is already running
+        NavHostFragment navHostFragment =
+                (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
+        if (navHostFragment != null) {
+            NavController navController = navHostFragment.getNavController();
+            handleNavigationIntent(intent, navController);
+        }
+    }
+
+    private void handleNavigationIntent(Intent intent, NavController navController) {
+        Log.d("MainActivity", "handleNavigationIntent called");
+        if (intent != null && intent.hasExtra("navigate_to_note_id")) {
+            String noteId = intent.getStringExtra("navigate_to_note_id");
+            double lat = intent.getDoubleExtra("navigate_to_lat", 0);
+            double lng = intent.getDoubleExtra("navigate_to_lng", 0);
+            boolean openWindow = intent.getBooleanExtra("open_note_window", false);
+            
+            Log.d("MainActivity", "Navigation extras found - noteId: " + noteId + ", lat: " + lat + ", lng: " + lng + ", openWindow: " + openWindow);
+            
+            // Pass to MapFragment via NavController arguments
+            Bundle args = new Bundle();
+            args.putString("note_id", noteId);
+            args.putFloat("latitude", (float) lat);
+            args.putFloat("longitude", (float) lng);
+            args.putBoolean("open_note_window", openWindow);
+            
+            try {
+                // If already on MapFragment, update via fragment directly
+                if (navController.getCurrentDestination() != null && 
+                    navController.getCurrentDestination().getId() == R.id.mapFragment) {
+                    
+                    Log.d("MainActivity", "Already on MapFragment, sending FragmentResult");
+                    // Pass data to existing MapFragment
+                    NavHostFragment navHostFragment =
+                            (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
+                    if (navHostFragment != null) {
+                        Fragment currentFragment = navHostFragment.getChildFragmentManager().getPrimaryNavigationFragment();
+                        if (currentFragment instanceof com.visiboard.app.ui.map.MapFragment) {
+                            // Set arguments on existing fragment
+                            currentFragment.setArguments(args);
+                            // Notify fragment to handle navigation
+                            Bundle result = new Bundle();
+                            result.putString("note_id", noteId);
+                            result.putDouble("latitude", lat);
+                            result.putDouble("longitude", lng);
+                            result.putBoolean("open_note_window", openWindow);
+                            getSupportFragmentManager().setFragmentResult("navigate_to_note", result);
+                            Log.d("MainActivity", "FragmentResult sent");
+                        }
+                    }
+                } else {
+                    Log.d("MainActivity", "Not on MapFragment, navigating with args");
+                    // Navigate to MapFragment with args
+                    navController.navigate(R.id.mapFragment, args);
+                    Log.d("MainActivity", "Navigation executed");
+                }
+            } catch (Exception e) {
+                Log.e("MainActivity", "Navigation error", e);
+                // Fallback: just navigate to map without args
+                try {
+                    navController.navigate(R.id.mapFragment);
+                } catch (Exception e2) {
+                    // Already on map, do nothing
+                }
+            }
+            
+            // Clear extras to prevent re-navigation on config changes
+            intent.removeExtra("navigate_to_note_id");
+            intent.removeExtra("navigate_to_lat");
+            intent.removeExtra("navigate_to_lng");
+            intent.removeExtra("open_note_window");
+        } else {
+            Log.d("MainActivity", "No navigation extras in intent");
+        }
     }
 
     private void recalculateTotalLikes() {

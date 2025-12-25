@@ -62,8 +62,8 @@ public class UserProfileFragment extends Fragment {
     private TextView tvRank, tvFavsHeader;
     private ImageView ivRankIcon, btnBack, btnOptionsMenu;
     private LinearLayout locationContainer, llDetailsContainer, llPrivateMessage, rankContainer;
-    private LinearLayout rowWork, rowEducation, rowRelationship, rowHometown;
-    private TextView tvWork, tvEducation, tvRelationship, tvHometown;
+    private LinearLayout rowWork, rowEducation, rowRelationship, rowHometown, rowBirthday;
+    private TextView tvWork, tvEducation, tvRelationship, tvHometown, tvBirthday, tvJoinedDate;
     private LinearLayout llLinksContainer;
     private View svLinks;
     private Button btnFollow;
@@ -149,6 +149,9 @@ public class UserProfileFragment extends Fragment {
         tvEducation = view.findViewById(R.id.tv_education);
         tvRelationship = view.findViewById(R.id.tv_relationship);
         tvHometown = view.findViewById(R.id.tv_hometown);
+        rowBirthday = view.findViewById(R.id.row_birthday);
+        tvBirthday = view.findViewById(R.id.tv_birthday);
+        tvJoinedDate = view.findViewById(R.id.tv_joined_date);
         svLinks = view.findViewById(R.id.sv_links);
         llLinksContainer = view.findViewById(R.id.ll_links_container);
         tvTotalNotes = view.findViewById(R.id.tv_total_notes);
@@ -375,6 +378,22 @@ public class UserProfileFragment extends Fragment {
             tvHometown.setText("From " + hometown);
             rowHometown.setVisibility(View.VISIBLE);
             llDetailsContainer.setVisibility(View.VISIBLE);
+        }
+        
+        String birthday = doc.getString("birthday");
+        if (birthday != null && !birthday.isEmpty()) {
+            tvBirthday.setText("Born on " + birthday);
+            rowBirthday.setVisibility(View.VISIBLE);
+            llDetailsContainer.setVisibility(View.VISIBLE);
+        }
+        
+        // Joined Date
+        Long createdAt = doc.getLong("createdAt");
+        if (createdAt != null && tvJoinedDate != null) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.getDefault());
+            String joined = "Joined in " + sdf.format(new java.util.Date(createdAt));
+            tvJoinedDate.setText(joined);
+            tvJoinedDate.setVisibility(View.VISIBLE);
         }
         
         // Links

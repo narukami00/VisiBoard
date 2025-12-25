@@ -49,6 +49,8 @@
         <activity android:name=".ui.settings.HiddenNotesActivity" android:screenOrientation="portrait"/>
         <activity android:name=".ui.settings.SavedNotesActivity" android:screenOrientation="portrait"/>
         <activity android:name=".ui.settings.BlockedUsersActivity" android:screenOrientation="portrait"/>
+        <activity android:name=".ui.settings.HelpActivity" android:screenOrientation="portrait"/>
+        <activity android:name=".ui.settings.AboutActivity" android:screenOrientation="portrait"/>
         <activity android:name=".ui.profile.UserProfileActivity" android:screenOrientation="portrait"/>
         <!-- FileProvider for sharing images -->
         <provider

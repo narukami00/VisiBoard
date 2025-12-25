@@ -18,17 +18,33 @@
             android:orientation="vertical"
             android:padding="24dp">
 
-            <!-- Header -->
-            <TextView
+            <!-- Header with Close Button -->
+            <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Ranking System"
-                android:textSize="22sp"
-                android:textStyle="bold"
-                android:textColor="@color/primaryDark"
-                android:fontFamily="@font/poppins_semibold"
-                android:gravity="center"
-                android:layout_marginBottom="24dp" />
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Ranking System"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/primaryDark"
+                    android:fontFamily="@font/poppins_semibold"
+                    android:layout_centerHorizontal="true" />
+
+                <ImageButton
+                    android:id="@+id/btn_close_ranking"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_alignParentEnd="true"
+                    android:src="@drawable/ic_close"
+                    android:background="@drawable/bg_circle_glass"
+                    android:backgroundTint="#40000000"
+                    app:tint="@color/white"
+                    android:contentDescription="Close" />
+            </RelativeLayout>
 
             <!-- Current Rank Card -->
             <androidx.cardview.widget.CardView

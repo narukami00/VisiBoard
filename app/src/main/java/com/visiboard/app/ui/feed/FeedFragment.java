@@ -1,5 +1,6 @@
 package com.visiboard.app.ui.feed;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -469,6 +470,93 @@ public class FeedFragment extends Fragment implements DiscoverTabFragment.NoteCl
         rvDialog.setAdapter(dialogAdapter);
         
         btnCloseHeader.setOnClickListener(v -> dialog.dismiss());
+
+        // Social Share Buttons
+        ImageButton btnShareFacebook = dialogView.findViewById(R.id.btn_share_facebook);
+        ImageButton btnShareInstagram = dialogView.findViewById(R.id.btn_share_instagram);
+        ImageButton btnShareWhatsapp = dialogView.findViewById(R.id.btn_share_whatsapp);
+        ImageButton btnShareEmail = dialogView.findViewById(R.id.btn_share_email);
+
+        View.OnClickListener socialShareListener = v -> {
+            String shareText = "";
+            if (noteToShare != null) {
+                shareText = "Check out this note on VisiBoard!\n\n";
+                if (noteToShare.getText() != null) {
+                    shareText += "\"" + noteToShare.getText() + "\"\n\n";
+                }
+                shareText += "📍 Location: https://maps.google.com/?q=" + noteToShare.getLat() + "," + noteToShare.getLng();
+            } else {
+                shareText = "Check out VisiBoard - an AR note-taking app!";
+            }
+
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("text/plain");
+            shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+
+            String packageName = null;
+            int viewId = v.getId();
+            if (viewId == R.id.btn_share_facebook) {
+                packageName = "com.facebook.katana";
+            } else if (viewId == R.id.btn_share_instagram) {
+                packageName = "com.instagram.android";
+            } else if (viewId == R.id.btn_share_whatsapp) {
+                packageName = "com.whatsapp";
+            } else if (viewId == R.id.btn_share_email) {
+                shareIntent = new Intent(Intent.ACTION_SENDTO);
+                shareIntent.setData(android.net.Uri.parse("mailto:"));
+                shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Check out this VisiBoard Note!");
+                shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+            }
+
+            if (packageName != null) {
+                shareIntent.setPackage(packageName);
+            }
+
+            try {
+                startActivity(shareIntent);
+                dialog.dismiss();
+            } catch (Exception e) {
+                if (packageName != null) {
+                    Intent chooser = Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText), "Share via");
+                    startActivity(chooser);
+                } else {
+                    Toast.makeText(requireContext(), "No email app found", Toast.LENGTH_SHORT).show();
+                }
+            }
+        };
+
+        if (btnShareFacebook != null) btnShareFacebook.setOnClickListener(socialShareListener);
+        if (btnShareInstagram != null) btnShareInstagram.setOnClickListener(socialShareListener);
+        if (btnShareWhatsapp != null) btnShareWhatsapp.setOnClickListener(socialShareListener);
+        if (btnShareEmail != null) btnShareEmail.setOnClickListener(socialShareListener);
+        
+        // Messenger Button
+        ImageButton btnShareMessenger = dialogView.findViewById(R.id.btn_share_messenger);
+        if (btnShareMessenger != null) {
+            btnShareMessenger.setOnClickListener(v -> {
+                String shareText = "";
+                if (noteToShare != null) {
+                    shareText = "Check out this note on VisiBoard!\n\n";
+                    if (noteToShare.getText() != null) {
+                        shareText += "\"" + noteToShare.getText() + "\"\n\n";
+                    }
+                    shareText += "📍 Location: https://maps.google.com/?q=" + noteToShare.getLat() + "," + noteToShare.getLng();
+                } else {
+                    shareText = "Check out VisiBoard - an AR note-taking app!";
+                }
+                Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                shareIntent.setType("text/plain");
+                shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+                shareIntent.setPackage("com.facebook.orca");
+                try {
+                    startActivity(shareIntent);
+                    dialog.dismiss();
+                } catch (Exception e) {
+                    Intent chooser = Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText), "Share via");
+                    startActivity(chooser);
+                }
+            });
+        }
         
         etSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}

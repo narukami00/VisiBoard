@@ -91,7 +91,7 @@ public class CapturePreviewFragment extends Fragment {
             runOcrOnImage();
         }
         
-        setupListeners();
+        setupListeners(view);
         
         return view;
     }
@@ -110,7 +110,7 @@ public class CapturePreviewFragment extends Fragment {
         }
     }
     
-    private void setupListeners() {
+    private void setupListeners(View view) {
         btnSave.setOnClickListener(v -> saveImage());
         btnRetake.setOnClickListener(v -> {
             // Navigate back to capture fragment
@@ -123,6 +123,9 @@ public class CapturePreviewFragment extends Fragment {
                 startActivity(intent);
             }
         });
+        
+        // Share button removed as per request
+
         
         if (btnExtractText != null) {
             btnExtractText.setOnClickListener(v -> runOcrOnImage());
@@ -270,9 +273,8 @@ public class CapturePreviewFragment extends Fragment {
                 if (savedUri != null) {
                     requireActivity().runOnUiThread(() -> {
                         progressSaving.setVisibility(View.GONE);
-                        Toast.makeText(requireContext(), "Image saved to VisiBoard Captures", Toast.LENGTH_LONG).show();
-                        // Navigate back to capture fragment
-                        requireActivity().onBackPressed();
+                        // Show dialog asking to share
+                        showShareConfirmation(savedUri);
                     });
                 } else {
                     showError("Failed to save image");
@@ -344,6 +346,43 @@ public class CapturePreviewFragment extends Fragment {
             btnRetake.setEnabled(true);
             Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
         });
+    }
+
+    private void showShareConfirmation(Uri savedUri) {
+        new android.app.AlertDialog.Builder(requireContext())
+            .setTitle("Image Saved! ✨")
+            .setMessage("The image has been saved to your gallery.\n\nDo you want to share it?")
+            .setCancelable(false)
+            .setPositiveButton("Yes, Share", (dialog, which) -> {
+                shareImage(savedUri);
+            })
+            .setNegativeButton("No", (dialog, which) -> {
+                // Return to capture screen
+                requireActivity().onBackPressed();
+            })
+            .show();
+    }
+
+    private void shareImage(Uri uri) {
+        try {
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("image/*");
+            shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+            shareIntent.putExtra(Intent.EXTRA_TEXT, "Captured with VisiBoard 📸");
+            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(shareIntent, "Share Image"));
+            
+            // Optionally close the preview screen after launching share, 
+            // so user doesn't come back to the "Do you want to share?" dialog or the preview.
+            // But let's keep it open or close it? The standard behavior for "Share" usually keeps context.
+            // But since "No" closes it, "Yes" should probably also close it to be consistent with "Done".
+            // However, startActivity is async-ish. Let's close it so subsequent back press goes to camera.
+            requireActivity().onBackPressed();
+            
+        } catch (Exception e) {
+            Toast.makeText(requireContext(), "Error sharing image", Toast.LENGTH_SHORT).show();
+            // Even if error, close? Maybe not.
+        }
     }
     
     @Override

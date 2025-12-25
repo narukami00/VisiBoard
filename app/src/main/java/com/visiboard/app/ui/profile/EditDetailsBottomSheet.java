@@ -21,7 +21,7 @@ import java.util.Map;
 
 public class EditDetailsBottomSheet extends BottomSheetDialogFragment {
 
-    private TextInputEditText etWork, etEducation, etRelationship, etHometown;
+    private TextInputEditText etWork, etEducation, etRelationship, etHometown, etBirthday;
     private Button btnSave;
     private FirebaseFirestore db;
     private FirebaseAuth auth;
@@ -35,6 +35,7 @@ public class EditDetailsBottomSheet extends BottomSheetDialogFragment {
         etEducation = view.findViewById(R.id.et_education);
         etRelationship = view.findViewById(R.id.et_relationship);
         etHometown = view.findViewById(R.id.et_hometown);
+        etBirthday = view.findViewById(R.id.et_birthday);
         btnSave = view.findViewById(R.id.btn_save_details);
 
         db = FirebaseFirestore.getInstance();
@@ -57,6 +58,7 @@ public class EditDetailsBottomSheet extends BottomSheetDialogFragment {
                         etEducation.setText(documentSnapshot.getString("education"));
                         etRelationship.setText(documentSnapshot.getString("relationship"));
                         etHometown.setText(documentSnapshot.getString("hometown"));
+                        etBirthday.setText(documentSnapshot.getString("birthday"));
                     }
                 });
     }
@@ -68,12 +70,14 @@ public class EditDetailsBottomSheet extends BottomSheetDialogFragment {
         String education = etEducation.getText().toString().trim();
         String relationship = etRelationship.getText().toString().trim();
         String hometown = etHometown.getText().toString().trim();
+        String birthday = etBirthday.getText().toString().trim();
 
         Map<String, Object> updates = new HashMap<>();
         updates.put("work", work);
         updates.put("education", education);
         updates.put("relationship", relationship);
         updates.put("hometown", hometown);
+        updates.put("birthday", birthday);
 
         btnSave.setEnabled(false);
         btnSave.setText("Saving...");

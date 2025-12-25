@@ -157,6 +157,7 @@ public class SavedNotesActivity extends AppCompatActivity {
                     intent.putExtra("navigate_to_note_id", noteId);
                     intent.putExtra("navigate_to_lat", lat);
                     intent.putExtra("navigate_to_lng", lng);
+                    intent.putExtra("open_note_window", true);
                     intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     startActivity(intent);
                 } else {

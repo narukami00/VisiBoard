@@ -13,17 +13,34 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- Header Title -->
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- Header with Close Button -->
+        <RelativeLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Connections"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="@font/poppins_semibold"
-            android:textColor="@color/text_primary"
-            android:layout_marginBottom="16dp"
-            android:layout_gravity="center_horizontal" />
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connections"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/poppins_semibold"
+                android:textColor="@color/text_primary"
+                android:layout_centerInParent="true" />
+
+            <ImageButton
+                android:id="@+id/btn_close_dialog"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_close"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#20FFFFFF"
+                app:tint="@color/white"
+                android:contentDescription="Close" />
+        </RelativeLayout>
 
         <!-- Tabs Container -->
         <LinearLayout

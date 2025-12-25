@@ -105,11 +105,11 @@ public class UserFollowAdapter extends RecyclerView.Adapter<UserFollowAdapter.Us
             if (isFollowingList) {
                 followBtn.setText("Unfollow");
                 followBtn.setBackgroundResource(R.drawable.bg_button_secondary);
-                followBtn.setTextColor(itemView.getContext().getColor(R.color.button_text_secondary));
+                followBtn.setTextColor(itemView.getContext().getColor(R.color.white));
             } else {
                 followBtn.setText("Remove");
                 followBtn.setBackgroundResource(R.drawable.bg_button_secondary);
-                followBtn.setTextColor(itemView.getContext().getColor(R.color.button_text_secondary));
+                followBtn.setTextColor(itemView.getContext().getColor(R.color.white));
             }
 
             // Click listeners

@@ -26,6 +26,8 @@ public class SettingsActivity extends AppCompatActivity {
     private LinearLayout btnHiddenNotes;
     private LinearLayout btnSavedNotes;
     private LinearLayout btnBlockedUsers;
+    private LinearLayout btnHelp;
+    private LinearLayout btnAbout;
     private TextView tvRequestsCount;
     private LinearLayout btnLogout;
     private androidx.appcompat.widget.Toolbar toolbar;
@@ -54,6 +56,8 @@ public class SettingsActivity extends AppCompatActivity {
         btnHiddenNotes = findViewById(R.id.btn_hidden_notes);
         btnSavedNotes = findViewById(R.id.btn_saved_notes);
         btnBlockedUsers = findViewById(R.id.btn_blocked_users);
+        btnHelp = findViewById(R.id.btn_help);
+        btnAbout = findViewById(R.id.btn_about);
         tvRequestsCount = findViewById(R.id.tv_requests_count);
         btnLogout = findViewById(R.id.btn_logout);
         toolbar = findViewById(R.id.toolbar);
@@ -89,6 +93,14 @@ public class SettingsActivity extends AppCompatActivity {
 
         btnBlockedUsers.setOnClickListener(v -> {
             startActivity(new Intent(this, BlockedUsersActivity.class));
+        });
+
+        btnHelp.setOnClickListener(v -> {
+            startActivity(new Intent(this, HelpActivity.class));
+        });
+
+        btnAbout.setOnClickListener(v -> {
+            startActivity(new Intent(this, AboutActivity.class));
         });
 
         switchPrivateAccount.setOnCheckedChangeListener((buttonView, isChecked) -> {

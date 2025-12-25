@@ -21,7 +21,7 @@
             app:navigationIconTint="?android:attr/textColorPrimary"
             app:title="Saved Notes"
             app:titleTextColor="?android:attr/textColorPrimary"
-            app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"/>
+            app:titleTextAppearance="@style/ToolbarTitleStyle"/>
     </com.google.android.material.appbar.AppBarLayout>
 
     <FrameLayout

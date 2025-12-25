@@ -42,6 +42,7 @@ public class DiscoveryFragment extends Fragment {
     private EditText etSearch;
     private ImageButton btnViewMode;
     private ProgressBar pbLoading;
+    private TextView tvEmptyState;
     
     private DiscoveryAdapter adapter;
     private FirebaseFirestore db;
@@ -88,6 +89,7 @@ public class DiscoveryFragment extends Fragment {
         etSearch = view.findViewById(R.id.et_search);
         btnViewMode = view.findViewById(R.id.btn_view_mode);
         pbLoading = view.findViewById(R.id.pb_loading);
+        tvEmptyState = view.findViewById(R.id.tv_empty_state);
 
         setupRecyclerView();
         setupViewModeToggle();
@@ -192,6 +194,13 @@ public class DiscoveryFragment extends Fragment {
                     for (UserInfo u : popularUsers) {
                         discoveryItems.add(new DiscoveryItem(u, null)); 
                     }
+                    // Hide empty state, show list
+                    if (tvEmptyState != null) tvEmptyState.setVisibility(View.GONE);
+                    rvDiscovery.setVisibility(View.VISIBLE);
+                } else {
+                    // Show empty state
+                    if (tvEmptyState != null) tvEmptyState.setVisibility(View.VISIBLE);
+                    rvDiscovery.setVisibility(View.GONE);
                 }
                 
                 // TODO: Real "Nearby" logic based on Lat/Lng

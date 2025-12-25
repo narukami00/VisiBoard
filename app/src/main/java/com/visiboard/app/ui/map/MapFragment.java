@@ -390,31 +390,36 @@ public class MapFragment extends Fragment {
             }
         });
         
+        // Listen for navigation requests when fragment is already visible
+        getParentFragmentManager().setFragmentResultListener("navigate_to_note", this, (requestKey, bundle) -> {
+            String targetNoteId = bundle.getString("note_id");
+            if (targetNoteId != null) {
+                double lat = bundle.getDouble("latitude", 0);
+                double lng = bundle.getDouble("longitude", 0);
+                boolean openWindow = bundle.getBoolean("open_note_window", false);
+                navigateToNote(new LatLng(lat, lng), targetNoteId, openWindow);
+            }
+        });
+        
         // Handle Navigation Arguments
         if (getArguments() != null) {
-            String targetNoteId = getArguments().getString("target_note_id");
+            String targetNoteId = getArguments().getString("note_id");
             if (targetNoteId != null) {
-                double lat = getArguments().getDouble("target_lat");
-                double lng = getArguments().getDouble("target_lng");
+                double lat = getArguments().getDouble("latitude", 0);
+                double lng = getArguments().getDouble("longitude", 0);
                 boolean openWindow = getArguments().getBoolean("open_note_window", false);
                 
                 // Save for use when map is ready
                 navigateToNote(new LatLng(lat, lng), targetNoteId, openWindow);
+                
+                // Clear arguments to prevent re-navigation on config changes
+                getArguments().remove("note_id");
             }
         }
     }
 
     private void navigateToNote(LatLng position, String noteId, boolean openWindow) {
-        if (mapLibreMap != null) {
-            mapLibreMap.animateCamera(CameraUpdateFactory.newLatLngZoom(position, 18.0));
-            // Note: Info window opening happens after notes are loaded in loadSavedNotes
-        } else {
-             // Defer until map ready
-             if (savedCameraPosition == null) {
-                 savedCameraPosition = new CameraPosition.Builder().target(position).zoom(18.0).build();
-             }
-        }
-        // Store target note ID to check after loading
+        // Store for later use
         this.pendingTargetNoteId = noteId;
         this.pendingOpenWindow = openWindow;
     }
@@ -539,6 +544,36 @@ public class MapFragment extends Fragment {
         LinearLayout commentSection = infoWindow.findViewById(R.id.comment_section);
         ImageView btnComment = infoWindow.findViewById(R.id.btn_comment);
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
+        android.widget.Button btnGoToNote = infoWindow.findViewById(R.id.btn_go_to_note);
+        
+        // Show Go button if this window was opened from saved notes
+        if (pendingTargetNoteId != null && docId != null && docId.equals(pendingTargetNoteId)) {
+            btnGoToNote.setVisibility(View.VISIBLE);
+            btnGoToNote.setOnClickListener(v -> {
+                if (mapLibreMap != null && position != null) {
+                    // Close the dialog first
+                    if (currentNoteDialog != null && currentNoteDialog.isShowing()) {
+                        currentNoteDialog.dismiss();
+                    }
+                    
+                    // Then navigate
+                    isNavigating = true;
+                    CameraPosition cameraPosition = new CameraPosition.Builder()
+                        .target(position)
+                        .zoom(18.0)
+                        .build();
+                    mapLibreMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 1500);
+                    Toast.makeText(requireContext(), "Navigating to note...", Toast.LENGTH_SHORT).show();
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        isNavigating = false;
+                    }, 2000);
+                }
+            });
+            // Clear the pending flag
+            pendingTargetNoteId = null;
+        } else {
+            btnGoToNote.setVisibility(View.GONE);
+        }
         
         // Removed saveSection, btnSave, btnEdit, btnVisibility as they are now in the bottom sheet or removed
         androidx.cardview.widget.CardView imageContainer = infoWindow.findViewById(R.id.cv_note_image_container);
@@ -997,6 +1032,105 @@ public class MapFragment extends Fragment {
         scaleAnimation.setRepeatMode(Animation.REVERSE);
         likeBtn.startAnimation(scaleAnimation);
     }
+
+    // Quick Actions Popup on Long Press
+    private android.widget.PopupWindow quickActionsPopup;
+    
+    private void showQuickActionsPopup(Symbol symbol, String docId, String noteText, LatLng position) {
+        if (quickActionsPopup != null && quickActionsPopup.isShowing()) {
+            quickActionsPopup.dismiss();
+        }
+        
+        View popupView = LayoutInflater.from(requireContext()).inflate(R.layout.popup_quick_actions, null);
+        quickActionsPopup = new android.widget.PopupWindow(popupView,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        
+        quickActionsPopup.setElevation(12f);
+        quickActionsPopup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        
+        View actionLike = popupView.findViewById(R.id.action_like);
+        View actionShare = popupView.findViewById(R.id.action_share);
+        View actionTravel = popupView.findViewById(R.id.action_travel);
+        ImageView ivLike = popupView.findViewById(R.id.iv_like);
+        
+        // Check if already liked
+        String currentUserId = auth.getCurrentUser() != null ? auth.getCurrentUser().getUid() : null;
+        if (currentUserId != null) {
+            db.collection("notes").document(docId).get().addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    java.util.List<String> likedBy = (java.util.List<String>) doc.get("likedBy");
+                    boolean isLiked = likedBy != null && likedBy.contains(currentUserId);
+                    ivLike.setColorFilter(isLiked ? 0xFFE84545 : getResources().getColor(R.color.primary, null));
+                }
+            });
+        }
+        
+        // Haptic feedback on show
+        popupView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        
+        // Like Action
+        actionLike.setOnClickListener(v -> {
+            performHapticClick(v);
+            if (currentUserId == null) {
+                Toast.makeText(requireContext(), "Please log in to like", Toast.LENGTH_SHORT).show();
+                quickActionsPopup.dismiss();
+                return;
+            }
+            
+            db.collection("notes").document(docId)
+                .get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        java.util.List<String> likedBy = (java.util.List<String>) doc.get("likedBy");
+                        boolean isLiked = likedBy != null && likedBy.contains(currentUserId);
+                        
+                        db.runTransaction(transaction -> {
+                            com.google.firebase.firestore.DocumentReference noteRef = db.collection("notes").document(docId);
+                            if (isLiked) {
+                                transaction.update(noteRef, "likedBy", com.google.firebase.firestore.FieldValue.arrayRemove(currentUserId));
+                            } else {
+                                transaction.update(noteRef, "likedBy", com.google.firebase.firestore.FieldValue.arrayUnion(currentUserId));
+                            }
+                            return null;
+                        }).addOnSuccessListener(aVoid -> {
+                            animateLike(ivLike);
+                            ivLike.setColorFilter(isLiked ? getResources().getColor(R.color.primary, null) : 0xFFE84545);
+                            Toast.makeText(requireContext(), isLiked ? "Unliked" : "Liked!", Toast.LENGTH_SHORT).show();
+                        });
+                    }
+                });
+            quickActionsPopup.dismiss();
+        });
+        
+        // Share Action - Use in-app sharing with followers
+        actionShare.setOnClickListener(v -> {
+            performHapticClick(v);
+            quickActionsPopup.dismiss();
+            
+            // Create NearbyNote for sharing dialog
+            NearbyNote tempNote = new NearbyNote();
+            tempNote.setId(docId);
+            tempNote.setText(noteText);
+            tempNote.setLat(position.getLatitude());
+            tempNote.setLng(position.getLongitude());
+            tempNote.setTimestamp(System.currentTimeMillis());
+            
+            showFollowingDialog(tempNote);
+        });
+        
+        // Travel Action
+        actionTravel.setOnClickListener(v -> {
+            performHapticClick(v);
+            quickActionsPopup.dismiss();
+            startNavigation(position);
+        });
+        
+        // Show popup at screen center (approximate)
+        android.graphics.Point screenCenter = new android.graphics.Point();
+        requireActivity().getWindowManager().getDefaultDisplay().getSize(screenCenter);
+        quickActionsPopup.showAtLocation(mapView, android.view.Gravity.CENTER, 0, 0);
+    }
     
     // Helper to add subtle press effect (scale down on touch)
     private void addPressEffect(View view) {
@@ -1338,11 +1472,43 @@ public class MapFragment extends Fragment {
                                 }
                             }
                             
-                            // Check if pending target was found (Share Guard)
-                            if (pendingTargetNoteId != null) {
-                                Toast.makeText(requireContext(), "Note unavailable or private", Toast.LENGTH_LONG).show();
-                                pendingTargetNoteId = null;
-                                pendingOpenWindow = false;
+                            // Check if pending target note needs to be opened
+                            if (pendingTargetNoteId != null && pendingOpenWindow) {
+                                String finalPendingId = pendingTargetNoteId;
+                                boolean finalPendingOpen = pendingOpenWindow;
+                                
+                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                                    // Find and open the note
+                                    if (symbolManager != null && finalPendingId != null) {
+                                        androidx.collection.LongSparseArray<Symbol> annotations = symbolManager.getAnnotations();
+                                        for (int i = 0; i < annotations.size(); i++) {
+                                            Symbol symbol = annotations.valueAt(i);
+                                            try {
+                                                JsonElement dataElement = symbol.getData();
+                                                if (dataElement != null && dataElement.isJsonObject()) {
+                                                    com.google.gson.JsonObject jsonObject = dataElement.getAsJsonObject();
+                                                    if (jsonObject.has("docId")) {
+                                                        String docId = jsonObject.get("docId").getAsString();
+                                                        if (docId != null && docId.equals(finalPendingId)) {
+                                                            // Found the note, open info window
+                                                            LatLng notePosition = symbol.getLatLng();
+                                                            String note = jsonObject.get("note").getAsString();
+                                                            long timestamp = jsonObject.get("timestamp").getAsLong();
+                                                            String userId = jsonObject.has("userId") ? jsonObject.get("userId").getAsString() : null;
+                                                            boolean hasImage = jsonObject.has("hasImage") && jsonObject.get("hasImage").getAsBoolean();
+                                                            showCustomInfoWindow(note, timestamp, notePosition, symbol, docId, userId, null, hasImage);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            } catch (Exception e) {
+                                                // Skip
+                                            }
+                                        }
+                                    }
+                                    pendingTargetNoteId = null;
+                                    pendingOpenWindow = false;
+                                }, 500);
                             }
 
                             // Update Heatmap Source
@@ -2219,11 +2385,12 @@ public class MapFragment extends Fragment {
             // Popup Window
             final android.widget.PopupWindow popupWindow = new android.widget.PopupWindow(requireContext());
             popupWindow.setContentView(listView);
-            popupWindow.setWidth((int) (200 * getResources().getDisplayMetrics().density)); // 200dp width
+            popupWindow.setWidth((int) (220 * getResources().getDisplayMetrics().density)); // 220dp width
             popupWindow.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
             popupWindow.setFocusable(true);
-            popupWindow.setBackgroundDrawable(ContextCompat.getDrawable(requireContext(), R.drawable.bg_popup_tree)); // Transparent
-            popupWindow.setElevation(0); // No shadow as requested
+            popupWindow.setBackgroundDrawable(ContextCompat.getDrawable(requireContext(), R.drawable.bg_popup_tree));
+            popupWindow.setElevation(24 * getResources().getDisplayMetrics().density); // High elevation for depth
+            popupWindow.setAnimationStyle(R.style.PopupAnimation); // Animation style
 
             // Item Click
             listView.setOnItemClickListener((parent, view, position, id) -> {
@@ -2234,11 +2401,10 @@ public class MapFragment extends Fragment {
                 
                 // Reload notes
                 loadSavedNotes();
-                Toast.makeText(requireContext(), "Time Travel: " + options[position], Toast.LENGTH_SHORT).show();
             });
 
             // Show Popup
-            popupWindow.showAsDropDown(btnTimeTravel, 0, 0);
+            popupWindow.showAsDropDown(btnTimeTravel, 0, 8);
         });
     }
 
@@ -2309,6 +2475,25 @@ public class MapFragment extends Fragment {
                     boolean hasImage = data.has("hasImage") && data.getBoolean("hasImage");
 
                     showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64, hasImage);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            return true;
+        });
+
+        // Long Click Listener for Quick Actions Popup
+        symbolManager.addLongClickListener(symbol -> {
+            if (symbol.getData() != null) {
+                try {
+                    JSONObject data = new JSONObject(symbol.getData().toString());
+                    String docId = data.has("docId") ? data.getString("docId") : null;
+                    String noteText = data.getString("note");
+                    LatLng position = symbol.getLatLng();
+                    
+                    if (docId != null) {
+                        showQuickActionsPopup(symbol, docId, noteText, position);
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -2826,6 +3011,94 @@ public class MapFragment extends Fragment {
         rvDialog.setAdapter(dialogAdapter);
 
         btnCloseHeader.setOnClickListener(v -> dialog.dismiss());
+
+        // Social Share Buttons
+        ImageButton btnShareFacebook = dialogView.findViewById(R.id.btn_share_facebook);
+        ImageButton btnShareInstagram = dialogView.findViewById(R.id.btn_share_instagram);
+        ImageButton btnShareWhatsapp = dialogView.findViewById(R.id.btn_share_whatsapp);
+        ImageButton btnShareEmail = dialogView.findViewById(R.id.btn_share_email);
+
+        View.OnClickListener socialShareListener = v -> {
+            String shareText = "";
+            if (noteToShare != null) {
+                shareText = "Check out this note on VisiBoard!\n\n";
+                if (noteToShare.getText() != null) {
+                    shareText += "\"" + noteToShare.getText() + "\"\n\n";
+                }
+                shareText += "📍 Location: https://maps.google.com/?q=" + noteToShare.getLat() + "," + noteToShare.getLng();
+            } else {
+                shareText = "Check out VisiBoard - an AR note-taking app!";
+            }
+
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("text/plain");
+            shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+
+            String packageName = null;
+            int viewId = v.getId();
+            if (viewId == R.id.btn_share_facebook) {
+                packageName = "com.facebook.katana";
+            } else if (viewId == R.id.btn_share_instagram) {
+                packageName = "com.instagram.android";
+            } else if (viewId == R.id.btn_share_whatsapp) {
+                packageName = "com.whatsapp";
+            } else if (viewId == R.id.btn_share_email) {
+                shareIntent = new Intent(Intent.ACTION_SENDTO);
+                shareIntent.setData(android.net.Uri.parse("mailto:"));
+                shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Check out this VisiBoard Note!");
+                shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+            }
+
+            if (packageName != null) {
+                shareIntent.setPackage(packageName);
+            }
+
+            try {
+                startActivity(shareIntent);
+                dialog.dismiss();
+            } catch (Exception e) {
+                // App not installed, fallback to chooser
+                if (packageName != null) {
+                    Intent chooser = Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText), "Share via");
+                    startActivity(chooser);
+                } else {
+                    Toast.makeText(requireContext(), "No email app found", Toast.LENGTH_SHORT).show();
+                }
+            }
+        };
+
+        if (btnShareFacebook != null) btnShareFacebook.setOnClickListener(socialShareListener);
+        if (btnShareInstagram != null) btnShareInstagram.setOnClickListener(socialShareListener);
+        if (btnShareWhatsapp != null) btnShareWhatsapp.setOnClickListener(socialShareListener);
+        if (btnShareEmail != null) btnShareEmail.setOnClickListener(socialShareListener);
+        
+        // Messenger Button
+        ImageButton btnShareMessenger = dialogView.findViewById(R.id.btn_share_messenger);
+        if (btnShareMessenger != null) {
+            btnShareMessenger.setOnClickListener(v -> {
+                String shareText = "";
+                if (noteToShare != null) {
+                    shareText = "Check out this note on VisiBoard!\n\n";
+                    if (noteToShare.getText() != null) {
+                        shareText += "\"" + noteToShare.getText() + "\"\n\n";
+                    }
+                    shareText += "📍 Location: https://maps.google.com/?q=" + noteToShare.getLat() + "," + noteToShare.getLng();
+                } else {
+                    shareText = "Check out VisiBoard - an AR note-taking app!";
+                }
+                Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                shareIntent.setType("text/plain");
+                shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+                shareIntent.setPackage("com.facebook.orca");
+                try {
+                    startActivity(shareIntent);
+                    dialog.dismiss();
+                } catch (Exception e) {
+                    Intent chooser = Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText), "Share via");
+                    startActivity(chooser);
+                }
+            });
+        }
 
         // Search Filter
         etSearch.addTextChangedListener(new TextWatcher() {

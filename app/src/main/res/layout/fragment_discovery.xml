@@ -53,4 +53,16 @@
         android:clipToPadding="false"
         android:paddingBottom="16dp"/>
 
+    <!-- Empty State for "You follow everyone" -->
+    <TextView
+        android:id="@+id/tv_empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:text="You follow everyone! 🎉\n\nNo new people to discover right now."
+        android:textSize="16sp"
+        android:textColor="@color/text_secondary"
+        android:fontFamily="@font/poppins_regular"
+        android:visibility="gone"/>
+
 </LinearLayout>

@@ -20,6 +20,7 @@ import android.view.ViewGroup;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -57,9 +58,9 @@ public class ProfileFragment extends Fragment {
     private CircleImageView profileImage;
     private TextView nameText, emailText, tvTotalNotes, tvTotalLikes, tvNoRecentNotes, tvMilestone, tvMilestoneProgress, tvLocation;
     private TextView tvFollowersCount, tvFollowingCount;
-    private TextView tvBio, tvWork, tvEducation, tvRelationship, tvHometown; // New Fields
+    private TextView tvBio, tvWork, tvEducation, tvRelationship, tvHometown, tvBirthday, tvJoinedDate; // Public Details
     private ImageView ivTierIcon, shineView;
-    private android.view.View rowWork, rowEducation, rowRelationship, rowHometown;
+    private android.view.View rowWork, rowEducation, rowRelationship, rowHometown, rowBirthday;
     private android.widget.LinearLayout llLinksContainer;
     private ProgressBar progressMilestone;
     private android.view.View loadingOverlay, skeletonView;
@@ -141,11 +142,14 @@ public class ProfileFragment extends Fragment {
         tvEducation = view.findViewById(R.id.tv_education);
         tvRelationship = view.findViewById(R.id.tv_relationship);
         tvHometown = view.findViewById(R.id.tv_hometown);
+        tvBirthday = view.findViewById(R.id.tv_birthday);
+        tvJoinedDate = view.findViewById(R.id.tv_joined_date);
         
         rowWork = view.findViewById(R.id.row_work);
         rowEducation = view.findViewById(R.id.row_education);
         rowRelationship = view.findViewById(R.id.row_relationship);
         rowHometown = view.findViewById(R.id.row_hometown);
+        rowBirthday = view.findViewById(R.id.row_birthday);
         
         llLinksContainer = view.findViewById(R.id.ll_links_container);
         
@@ -523,6 +527,18 @@ public class ProfileFragment extends Fragment {
         
         String hometown = doc.getString("hometown");
         updateDetailRow(rowHometown, tvHometown, hometown, "From ");
+        
+        String birthday = doc.getString("birthday");
+        updateDetailRow(rowBirthday, tvBirthday, birthday, "Born on ");
+        
+        // Joined Date
+        Long createdAt = doc.getLong("createdAt");
+        if (createdAt != null && tvJoinedDate != null) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.getDefault());
+            String joined = "Joined in " + sdf.format(new java.util.Date(createdAt));
+            tvJoinedDate.setText(joined);
+            tvJoinedDate.setVisibility(View.VISIBLE);
+        }
         
         // Load Links
         List<java.util.Map<String, String>> links = (List<java.util.Map<String, String>>) doc.get("socialLinks");
@@ -1107,11 +1123,16 @@ public class ProfileFragment extends Fragment {
         
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
                 .setView(dialogView)
-                .setPositiveButton("Close", null)
                 .create();
         
         if (dialog.getWindow() != null)
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        
+        // Close button click listener
+        ImageButton btnCloseRanking = dialogView.findViewById(R.id.btn_close_ranking);
+        if (btnCloseRanking != null) {
+            btnCloseRanking.setOnClickListener(v -> dialog.dismiss());
+        }
         
         dialog.show();
     }
@@ -1147,8 +1168,19 @@ public class ProfileFragment extends Fragment {
         android.widget.Button followingTab = dialogView.findViewById(R.id.btn_following_tab);
         androidx.recyclerview.widget.RecyclerView recyclerView = dialogView.findViewById(R.id.users_recycler);
         TextView emptyState = dialogView.findViewById(R.id.empty_state);
+        ImageButton btnCloseDialog = dialogView.findViewById(R.id.btn_close_dialog);
         
         recyclerView.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(getContext()));
+        
+        // Create dialog first so we can reference it in callbacks
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
+                .setView(dialogView)
+                .create();
+        
+        // Close button click listener
+        if (btnCloseDialog != null) {
+            btnCloseDialog.setOnClickListener(v -> dialog.dismiss());
+        }
         
         final boolean[] isFollowingList = {showFollowing};
         final UserFollowAdapter[] adapterHolder = new UserFollowAdapter[1];
@@ -1156,6 +1188,7 @@ public class ProfileFragment extends Fragment {
         UserFollowAdapter adapter = new UserFollowAdapter(new UserFollowAdapter.OnUserClickListener() {
             @Override
             public void onUserClick(com.visiboard.app.data.UserInfo user) {
+                dialog.dismiss(); // Auto-dismiss dialog before navigating
                 showUserInfoDialog(user.getUserId());
             }
             
@@ -1208,10 +1241,6 @@ public class ProfileFragment extends Fragment {
             isFollowingList[0] = true;
             loadUsersList(true, adapter, emptyState);
         });
-        
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(getContext())
-                .setView(dialogView)
-                .create();
         
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
