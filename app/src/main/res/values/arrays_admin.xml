@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="admin_user_filters">
+        <item>All</item>
+        <item>Banned</item>
+        <item>Restricted</item>
+        <item>Warned</item>
+    </string-array>
+</resources>

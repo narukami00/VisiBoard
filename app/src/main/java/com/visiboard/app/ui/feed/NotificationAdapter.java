@@ -103,7 +103,10 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             String text = "";
             int iconRes = R.drawable.ic_like;
 
-            switch (notification.getType()) {
+            String type = notification.getType();
+            if (type == null) type = "unknown";
+
+            switch (type) {
                 case "like":
                     text = notification.getFromUserName() + " liked your note";
                     iconRes = R.drawable.ic_like;
@@ -132,6 +135,16 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
                     text = notification.getFromUserName() + " accepted your follow request";
                     iconRes = R.drawable.ic_check;
                     break;
+                case "admin":
+                    text = notification.getMessageText(); // Admin message content
+                    iconRes = R.drawable.ic_crown; 
+                    // If messageText is null/empty, fallback?
+                    if (text == null || text.isEmpty()) text = "New System Notification";
+                    break;
+                default:
+                     text = "New Notification";
+                     iconRes = R.drawable.ic_launcher_background;
+                     break;
             }
 
             tvNotificationText.setText(text);

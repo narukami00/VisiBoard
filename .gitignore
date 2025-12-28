@@ -9,3 +9,4 @@ google-services.json
 *.md
 !README.md
 visiboard_pc/
+com/visiboard/app/utils/AdminCredentials.java

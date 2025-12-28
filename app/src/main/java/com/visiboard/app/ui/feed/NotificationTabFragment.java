@@ -6,9 +6,9 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.facebook.shimmer.ShimmerFrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -44,7 +44,7 @@ public class NotificationTabFragment extends Fragment {
     private RecyclerView rvNotifications;
     private Button btnClearAll;
     private TextView tvNoNotifications;
-    private ProgressBar pbLoading;
+    private ShimmerFrameLayout shimmerFrameLayout;
     
     private NotificationAdapter notificationAdapter;
     private List<Notification> allNotifications = new ArrayList<>();
@@ -88,12 +88,24 @@ public class NotificationTabFragment extends Fragment {
         rvNotifications = view.findViewById(R.id.rv_notifications_tab);
         btnClearAll = view.findViewById(R.id.btn_clear_notifications_tab);
         tvNoNotifications = view.findViewById(R.id.tv_no_notifications_tab);
-        pbLoading = view.findViewById(R.id.pb_loading_notifications);
+        shimmerFrameLayout = view.findViewById(R.id.shimmer_view_container);
         
         setupRecyclerView();
         setupSwipeRefresh();
         setupClearButton();
         loadingNotifications();
+    }
+    
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Check if user changed or if listener is missing
+        if (auth.getCurrentUser() != null) {
+             String uid = auth.getCurrentUser().getUid();
+             if (!uid.equals(currentUserId) || notificationListener == null) {
+                 loadingNotifications();
+             }
+        }
     }
     
     private void setupRecyclerView() {
@@ -129,12 +141,33 @@ public class NotificationTabFragment extends Fragment {
         });
     }
 
+    private String currentUserId = null;
+
     private void loadingNotifications() {
-        if (auth.getCurrentUser() == null) return;
+        if (auth.getCurrentUser() == null) {
+            currentUserId = null;
+            return;
+        }
         String uid = auth.getCurrentUser().getUid();
+        currentUserId = uid;
         
-        // Use SnapshotListener for real-time updates and badges
+        // Remove existing listener if any
         if (notificationListener != null) notificationListener.remove();
+        
+        // Show Shimmer state
+        if (shimmerFrameLayout != null) {
+            shimmerFrameLayout.setVisibility(View.VISIBLE);
+            shimmerFrameLayout.startShimmer();
+        }
+        if (rvNotifications != null) rvNotifications.setVisibility(View.GONE);
+        if (tvNoNotifications != null) tvNoNotifications.setVisibility(View.GONE);
+        if (btnClearAll != null) btnClearAll.setVisibility(View.GONE);
+
+        // Clear current list to show properly loading state
+        allNotifications.clear();
+        if (notificationAdapter != null) {
+            notificationAdapter.setNotifications(new ArrayList<>());
+        }
         
         swipeRefresh.setRefreshing(true);
         
@@ -164,7 +197,12 @@ public class NotificationTabFragment extends Fragment {
                     return;
                 }
                 
+                if (shimmerFrameLayout != null) {
+                    shimmerFrameLayout.stopShimmer();
+                    shimmerFrameLayout.setVisibility(View.GONE);
+                }
                 swipeRefresh.setRefreshing(false);
+
                 if (e != null) {
                     Log.e(TAG, "Listen failed.", e);
                     return;
@@ -299,7 +337,10 @@ public class NotificationTabFragment extends Fragment {
         rvNotifications = null;
         btnClearAll = null;
         tvNoNotifications = null;
-        pbLoading = null;
+        if (shimmerFrameLayout != null) {
+            shimmerFrameLayout.stopShimmer();
+            shimmerFrameLayout = null;
+        }
         notificationAdapter = null;
     }
 }

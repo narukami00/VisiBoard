@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:fillViewport="true">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <!-- Header with Theme Toggle -->
+        <TextView
+            android:id="@+id/analyticsTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Analytics Dashboard"
+            android:textColor="@color/accent"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/poppins_bold"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btnThemeToggle" />
+
+        <ImageView
+            android:id="@+id/btnThemeToggle"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_theme"
+            app:tint="?attr/colorOnSurface"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:contentDescription="Toggle Theme" />
+
+        <TextView
+            android:id="@+id/analyticsSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Real-time statistics"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:fontFamily="@font/poppins_regular"
+            app:layout_constraintTop_toBottomOf="@id/analyticsTitle"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- Stat Cards Row 1 -->
+        <LinearLayout
+            android:id="@+id/statsRow1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="24dp"
+            app:layout_constraintTop_toBottomOf="@id/analyticsSubtitle">
+
+            <include layout="@layout/item_admin_stat_card" 
+                android:id="@+id/statTotalNotes"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"/>
+
+            <include layout="@layout/item_admin_stat_card"
+                android:id="@+id/statActiveUsers"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"/>
+        </LinearLayout>
+
+        <!-- Map Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/mapCard"
+            android:layout_width="match_parent"
+            android:layout_height="250dp"
+            android:layout_marginTop="24dp"
+            app:cardBackgroundColor="?attr/colorSurface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:layout_constraintTop_toBottomOf="@id/statsRow1">
+
+            <org.maplibre.android.maps.MapView
+                android:id="@+id/mapView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+                
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Geographic Distribution"
+                android:textColor="@color/accent"
+                android:background="@color/overlay_dark"
+                android:layout_gravity="top|start"
+                android:padding="8dp"
+                android:fontFamily="@font/poppins_medium"
+                android:textSize="11sp"/>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Charts Section -->
+        <TextView
+            android:id="@+id/graphTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Notes (7 Days)"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginTop="24dp"
+            android:fontFamily="@font/poppins_semibold"
+            android:textSize="14sp"
+            app:layout_constraintTop_toBottomOf="@id/mapCard"
+            app:layout_constraintStart_toStartOf="parent"/>
+
+        <com.github.mikephil.charting.charts.BarChart
+            android:id="@+id/notesBarChart"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:layout_marginTop="12dp"
+            app:layout_constraintTop_toBottomOf="@id/graphTitle"/>
+
+        <TextView
+            android:id="@+id/usersGraphTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="User Growth (7 Days)"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginTop="24dp"
+            android:fontFamily="@font/poppins_semibold"
+            android:textSize="14sp"
+            app:layout_constraintTop_toBottomOf="@id/notesBarChart"
+            app:layout_constraintStart_toStartOf="parent"/>
+
+        <com.github.mikephil.charting.charts.LineChart
+            android:id="@+id/usersLineChart"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:layout_marginTop="12dp"
+            app:layout_constraintTop_toBottomOf="@id/usersGraphTitle"/>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
+

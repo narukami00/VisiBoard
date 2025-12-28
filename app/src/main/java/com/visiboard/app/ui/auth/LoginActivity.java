@@ -55,11 +55,71 @@ public class LoginActivity extends AppCompatActivity {
         }
 
         // Set click listeners
-        loginBtn.setOnClickListener(v -> loginUser());
-        goToSignup.setOnClickListener(v ->
-                startActivity(new Intent(LoginActivity.this, SignupActivity.class))
-        );
-        forgotPassword.setOnClickListener(v -> showForgotPasswordDialog());
+        // Set click listeners with Haptic Feedback
+        loginBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            loginUser();
+        });
+        
+        goToSignup.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            startActivity(new Intent(LoginActivity.this, SignupActivity.class));
+        });
+        
+        forgotPassword.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            showForgotPasswordDialog();
+        });
+        
+        setupAdminBackdoor();
+        setupDecoyBubbles();
+    }
+
+    private void setupDecoyBubbles() {
+        View d1 = findViewById(R.id.bubble_decoy_1);
+        View d2 = findViewById(R.id.bubble_decoy_2);
+        View d3 = findViewById(R.id.bubble_decoy_3);
+        
+        android.view.View.OnClickListener hapticOnly = v -> 
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            
+        if (d1 != null) d1.setOnClickListener(hapticOnly);
+        if (d2 != null) d2.setOnClickListener(hapticOnly);
+        if (d3 != null) d3.setOnClickListener(hapticOnly);
+    }
+
+    private int backdoorStep = 0;
+    private void setupAdminBackdoor() {
+        View b1 = findViewById(R.id.bubble1);
+        View b2 = findViewById(R.id.bubble2);
+        View b3 = findViewById(R.id.bubble3);
+
+        // Sequence: 1 -> 2 -> 3 -> 1 -> 2
+        b1.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            if (backdoorStep == 0 || backdoorStep == 3) backdoorStep++;
+            else backdoorStep = 0;
+            Log.d(TAG, "Backdoor step: " + backdoorStep);
+        });
+
+        b2.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            if (backdoorStep == 1) backdoorStep++;
+            else if (backdoorStep == 4) {
+                // Success
+                backdoorStep = 0;
+                Toast.makeText(this, "Secret Portal Opened", Toast.LENGTH_SHORT).show();
+                startActivity(new Intent(this, com.visiboard.app.ui.auth.AdminLoginActivity.class));
+            } else backdoorStep = 0;
+            Log.d(TAG, "Backdoor step: " + backdoorStep);
+        });
+
+        b3.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            if (backdoorStep == 2) backdoorStep++;
+            else backdoorStep = 0;
+            Log.d(TAG, "Backdoor step: " + backdoorStep);
+        });
     }
 
     private void loginUser() {

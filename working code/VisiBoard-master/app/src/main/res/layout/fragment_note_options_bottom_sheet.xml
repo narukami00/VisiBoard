@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingBottom="16dp"
+    android:background="@drawable/bg_bottom_sheet_rounded">
+
+    <ImageView
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"
+        android:src="@drawable/bottom_sheet_handle"
+        app:tint="@color/text_secondary" />
+
+    <!-- Save Note -->
+    <LinearLayout
+        android:id="@+id/option_save"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+
+        <ImageView
+            android:id="@+id/icon_save"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_bookmark_outline"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:id="@+id/text_save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Save Note"
+            android:textSize="16sp"
+            android:textColor="@color/text_primary"
+            android:fontFamily="@font/poppins_medium"
+            android:layout_marginStart="16dp" />
+
+    </LinearLayout>
+
+    <!-- Hide Note -->
+    <LinearLayout
+        android:id="@+id/option_hide"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_eye_hidden"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Hide Note"
+            android:textSize="16sp"
+            android:textColor="@color/text_primary"
+            android:fontFamily="@font/poppins_medium"
+            android:layout_marginStart="16dp" />
+
+    </LinearLayout>
+    
+    <!-- Edit Note (Owner Only) -->
+    <LinearLayout
+        android:id="@+id/option_edit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_edit"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Edit Note"
+            android:textSize="16sp"
+            android:textColor="@color/text_primary"
+            android:fontFamily="@font/poppins_medium"
+            android:layout_marginStart="16dp" />
+    </LinearLayout>
+
+    <!-- Turn Off Comments (Owner Only) -->
+    <LinearLayout
+        android:id="@+id/option_comments"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/icon_comments"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_comment_off"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:id="@+id/text_comments"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Turn off comments"
+            android:textSize="16sp"
+            android:textColor="@color/text_primary"
+            android:fontFamily="@font/poppins_medium"
+            android:layout_marginStart="16dp" />
+    </LinearLayout>
+
+    <!-- Delete Note (Owner Only) -->
+    <LinearLayout
+        android:id="@+id/option_delete"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_delete"
+            app:tint="@color/error" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Delete Note"
+            android:textSize="16sp"
+            android:textColor="@color/error"
+            android:fontFamily="@font/poppins_medium"
+            android:layout_marginStart="16dp" />
+    </LinearLayout>
+
+    <!-- Report Note (Non-Owner Only) -->
+    <LinearLayout
+        android:id="@+id/option_report"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_report"
+            app:tint="@color/error" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Report Note"
+            android:textSize="16sp"
+            android:textColor="@color/error"
+            android:fontFamily="@font/poppins_medium"
+            android:layout_marginStart="16dp" />
+    </LinearLayout>
+
+</LinearLayout>

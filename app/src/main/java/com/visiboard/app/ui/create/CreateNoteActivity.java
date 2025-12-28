@@ -83,6 +83,11 @@ public class CreateNoteActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
         storage = FirebaseStorage.getInstance();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        
+        // Check if user is restricted before allowing note creation
+        if (auth.getCurrentUser() != null) {
+            checkRestrictionStatus(auth.getCurrentUser().getUid());
+        }
 
         // Initialize Views
         etNoteContent = findViewById(R.id.et_note_content);
@@ -467,5 +472,62 @@ public class CreateNoteActivity extends AppCompatActivity {
             .addOnFailureListener(e -> {
                 Toast.makeText(this, "Failed to load note details", Toast.LENGTH_SHORT).show();
             });
+    }
+    
+    private void checkRestrictionStatus(String userId) {
+        db.collection("users").document(userId).get()
+            .addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    Boolean restricted = doc.getBoolean("restricted");
+                    Long restrictionExpiryDate = doc.getLong("restrictionExpiryDate");
+                    
+                    if (restricted != null && restricted) {
+                        long now = System.currentTimeMillis();
+                        
+                        if (restrictionExpiryDate != null && restrictionExpiryDate > now) {
+                            // User is restricted and restriction hasn't expired
+                            showRestrictedDialog(restrictionExpiryDate);
+                        } else if (restrictionExpiryDate != null && restrictionExpiryDate <= now) {
+                            // Restriction has expired, auto-lift
+                            db.collection("users").document(userId)
+                                .update("restricted", false)
+                                .addOnSuccessListener(aVoid -> {
+                                    // Restriction lifted, allow creation
+                                });
+                        } else {
+                            // Permanent restriction (no expiry date)
+                            showRestrictedDialog(0);
+                        }
+                    }
+                }
+            });
+    }
+    
+    private void showRestrictedDialog(long expiryDate) {
+        android.view.View dialogView = getLayoutInflater().inflate(R.layout.dialog_restricted, null);
+        
+        android.widget.TextView tvExpiry = dialogView.findViewById(R.id.tv_restrict_expiry);
+        if (expiryDate > 0) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MMMM dd, yyyy", java.util.Locale.getDefault());
+            tvExpiry.setText(sdf.format(new java.util.Date(expiryDate)));
+        } else {
+            tvExpiry.setText("Indefinite");
+        }
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        dialogView.findViewById(R.id.btn_ok).setOnClickListener(v -> {
+            dialog.dismiss();
+            finish(); // Close CreateNoteActivity
+        });
+        
+        dialog.show();
     }
 }

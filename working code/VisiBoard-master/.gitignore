@@ -1,0 +1,11 @@
+.idea/
+.gradle/
+local.properties
+captures/
+build/
+app/build/
+google-services.json
+*.keystore
+*.md
+!README.md
+visiboard_pc/

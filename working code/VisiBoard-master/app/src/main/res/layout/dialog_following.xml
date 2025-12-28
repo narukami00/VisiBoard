@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="@color/card_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/dialog_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="New Message"
+                android:textColor="@color/text_primary"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:layout_centerVertical="true"/>
+
+            <ImageButton
+                android:id="@+id/btn_close_header"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_close"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                app:tint="@color/white"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:contentDescription="Close"/>
+        </RelativeLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/til_search_following"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxCornerRadiusTopEnd="12dp"
+            app:boxCornerRadiusBottomStart="12dp"
+            app:boxCornerRadiusBottomEnd="12dp"
+            app:boxStrokeWidth="0dp"
+            app:boxBackgroundColor="#F0F2F5"
+            app:startIconDrawable="@drawable/ic_search"
+            app:startIconTint="@color/text_secondary"
+            app:hintEnabled="false">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_search_following"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Search followers..."
+                android:paddingVertical="12dp"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:background="@android:color/transparent"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Social Share Buttons Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="12dp">
+
+            <ImageButton
+                android:id="@+id/btn_share_facebook"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_facebook"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#1877F2"
+                android:contentDescription="Share to Facebook"/>
+
+            <ImageButton
+                android:id="@+id/btn_share_messenger"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_messenger"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#0084FF"
+                android:contentDescription="Share to Messenger"/>
+
+            <ImageButton
+                android:id="@+id/btn_share_instagram"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_instagram"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#E4405F"
+                android:contentDescription="Share to Instagram"/>
+
+            <ImageButton
+                android:id="@+id/btn_share_whatsapp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="16dp"
+                android:src="@drawable/ic_whatsapp"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#25D366"
+                android:contentDescription="Share to WhatsApp"/>
+
+            <ImageButton
+                android:id="@+id/btn_share_email"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_email"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="@color/primary"
+                android:contentDescription="Share via Email"/>
+        </LinearLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_following_dialog"
+            android:layout_width="match_parent"
+            android:layout_height="300dp"
+            android:minHeight="100dp"
+            android:nestedScrollingEnabled="false"/>
+
+        <ProgressBar
+            android:id="@+id/pb_loading_following"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="20dp"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/tv_no_following_dialog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="You're not following anyone yet."
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:padding="24dp"
+            android:visibility="gone"/>
+
+        <!-- Hidden button for compatibility if needed, but I will update FeedFragment to use header button -->
+        <Button
+            android:id="@+id/btn_close_dialog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"/>
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="4dp"
+    android:layout_margin="4dp">
+
+    <com.visiboard.app.ui.feed.widgets.GravityBallView
+        android:id="@+id/gravity_ball_view"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:background="#222222" />
+
+</androidx.cardview.widget.CardView>

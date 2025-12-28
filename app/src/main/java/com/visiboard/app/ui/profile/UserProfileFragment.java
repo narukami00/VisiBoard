@@ -68,6 +68,16 @@ public class UserProfileFragment extends Fragment {
     private View svLinks;
     private Button btnFollow;
     private RecyclerView rvFavouriteNotes;
+    private RecyclerView rvAllNotes;
+    private TextView tvAllNotesHeader, tvNoNotes;
+    private android.widget.ProgressBar pbNotesLoading;
+    private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipeRefreshLayout;
+    private RecentNotesAdapter allNotesAdapter;
+    private List<com.google.firebase.firestore.DocumentSnapshot> allNotesList = new ArrayList<>();
+    private com.google.firebase.firestore.DocumentSnapshot lastVisibleNote;
+    private boolean isNotesLoading = false;
+    private boolean isLastNoteReached = false;
+    private static final int NOTES_PAGE_SIZE = 10;
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -163,9 +173,17 @@ public class UserProfileFragment extends Fragment {
         tvRank = view.findViewById(R.id.tv_rank);
         tvFavsHeader = view.findViewById(R.id.tv_favs_header);
         rvFavouriteNotes = view.findViewById(R.id.rv_favourite_notes);
+        rvAllNotes = view.findViewById(R.id.rv_all_notes);
+        tvAllNotesHeader = view.findViewById(R.id.tv_all_notes_header);
+        tvNoNotes = view.findViewById(R.id.tv_no_notes);
+        pbNotesLoading = view.findViewById(R.id.pb_notes_loading);
+        swipeRefreshLayout = view.findViewById(R.id.swipe_refresh_layout);
         llPrivateMessage = view.findViewById(R.id.ll_private_message);
         btnBack = view.findViewById(R.id.btn_back);
         btnOptionsMenu = view.findViewById(R.id.btn_options_menu);
+
+        setupAllNotesRecyclerView();
+        setupSwipeRefresh();
     }
 
     private void setupClickListeners() {
@@ -234,6 +252,30 @@ public class UserProfileFragment extends Fragment {
             updateUIForPrivacy(doc);
             // Load note stats after we know access status
             loadNoteStats();
+            
+            // Load all notes if allowed
+            if (targetUserId.equals(currentUserId) || hasAccessToPrivate) {
+                // Determine visibility filter based on relationship
+                List<String> allowedVisibilities = new ArrayList<>();
+                allowedVisibilities.add("public");
+                if (targetUserId.equals(currentUserId) || isFollowing) {
+                    allowedVisibilities.add("followers");
+                }
+                // Determine if we show private notes (only for self)
+                boolean showPrivate = targetUserId.equals(currentUserId);
+                
+                loadUserNotes(allowedVisibilities, showPrivate, true);
+            } else {
+                 // Public user, non-follower -> show only public notes
+                 if (!isPrivateAccount) {
+                     List<String> publicOnly = new ArrayList<>();
+                     publicOnly.add("public");
+                     loadUserNotes(publicOnly, false, true);
+                 } else {
+                     // Private user, non-follower -> UI handled by updateUIForPrivacy (hides sections)
+                 }
+            }
+
             hideLoading();
         });
                 
@@ -258,6 +300,17 @@ public class UserProfileFragment extends Fragment {
                 Toast.makeText(requireContext(), "Failed to load profile", Toast.LENGTH_SHORT).show();
                 hideLoading();
             });
+    }
+
+    private void setupSwipeRefresh() {
+        swipeRefreshLayout.setOnRefreshListener(() -> {
+            loadUserData();
+            // Also refresh location if needed
+            getCurrentLocation();
+        });
+        
+        // Configure colors
+        swipeRefreshLayout.setColorSchemeResources(R.color.primary, R.color.accent);
     }
 
     private void updateUIForPrivacy(com.google.firebase.firestore.DocumentSnapshot doc) {
@@ -287,6 +340,12 @@ public class UserProfileFragment extends Fragment {
                 rvFavouriteNotes.setVisibility(View.GONE);
                 locationContainer.setVisibility(View.GONE);
                 llPrivateMessage.setVisibility(View.VISIBLE);
+                
+                // Hide All Notes Section for Private + Non-Follower
+                tvAllNotesHeader.setVisibility(View.GONE);
+                rvAllNotes.setVisibility(View.GONE);
+                tvNoNotes.setVisibility(View.GONE);
+                pbNotesLoading.setVisibility(View.GONE);
             }
         }
         
@@ -789,6 +848,186 @@ public class UserProfileFragment extends Fragment {
         return v;
     }
     
+    private void setupAllNotesRecyclerView() {
+        allNotesAdapter = new RecentNotesAdapter(note -> {
+            // Handle note click - open details
+            navigateToNote(note);
+        });
+        
+        rvAllNotes.setLayoutManager(new LinearLayoutManager(getContext()));
+        rvAllNotes.setAdapter(allNotesAdapter);
+        
+        // Add scroll listener for pagination
+        rvAllNotes.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                
+                LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
+                if (layoutManager != null && !isNotesLoading && !isLastNoteReached) {
+                    int visibleItemCount = layoutManager.getChildCount();
+                    int totalItemCount = layoutManager.getItemCount();
+                    int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
+                    
+                    if ((visibleItemCount + firstVisibleItemPosition) >= totalItemCount
+                            && firstVisibleItemPosition >= 0
+                            && totalItemCount >= NOTES_PAGE_SIZE) {
+                        
+                        // Load next page
+                        // Re-determine constraints same as initial load
+                         boolean showPrivate = targetUserId.equals(currentUserId);
+                         List<String> allowedVisibilities = new ArrayList<>();
+                         allowedVisibilities.add("public");
+                         if (targetUserId.equals(currentUserId) || isFollowing) {
+                             allowedVisibilities.add("followers");
+                         }
+                         
+                        loadUserNotes(allowedVisibilities, showPrivate, false);
+                    }
+                }
+            }
+        });
+    }
+
+    private void loadUserNotes(List<String> allowedVisibilities, boolean showPrivate, boolean isFirstLoad) {
+        if (isFirstLoad) {
+            allNotesList.clear();
+            accumulatedNotes.clear();
+            allNotesAdapter.setNotes(new ArrayList<>()); // Clear adapter
+            lastVisibleNote = null;
+            isLastNoteReached = false;
+            
+            tvAllNotesHeader.setVisibility(View.VISIBLE);
+            rvAllNotes.setVisibility(View.VISIBLE);
+            tvNoNotes.setVisibility(View.GONE);
+        }
+        
+        isNotesLoading = true;
+        pbNotesLoading.setVisibility(View.VISIBLE);
+        
+        // Query all notes by user, filter visibility client-side
+        // This handles legacy notes without visibility field (default to "public")
+        com.google.firebase.firestore.Query query = db.collection("notes")
+                .whereEqualTo("userId", targetUserId)
+                .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING);
+        
+        if (lastVisibleNote != null) {
+            query = query.startAfter(lastVisibleNote);
+        }
+        
+        // Fetch more than page size to account for client-side filtering
+        query.limit(NOTES_PAGE_SIZE * 2)
+             .get()
+             .addOnSuccessListener(querySnapshot -> {
+                 if (!isAdded()) return;
+                 isNotesLoading = false;
+                 pbNotesLoading.setVisibility(View.GONE);
+                 
+                 if (querySnapshot.isEmpty()) {
+                     isLastNoteReached = true;
+                     if (isFirstLoad) {
+                         tvNoNotes.setVisibility(View.VISIBLE);
+                         rvAllNotes.setVisibility(View.GONE);
+                     }
+                     return;
+                 }
+                 
+                 lastVisibleNote = querySnapshot.getDocuments().get(querySnapshot.size() - 1);
+                 
+                 List<com.visiboard.app.data.NearbyNote> newNotes = new ArrayList<>();
+                 int includedCount = 0;
+                 
+                 for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot) {
+                     // Check hidden status
+                     boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+                     if (isHidden && !targetUserId.equals(currentUserId)) continue;
+                     
+                     // Get visibility, defaulting to "public" for legacy notes without the field
+                     String visibility = doc.getString("visibility");
+                     if (visibility == null) visibility = "public";
+                     
+                     // Client-side visibility filtering
+                     boolean canView;
+                     if (targetUserId.equals(currentUserId)) {
+                         // Viewing own profile - show all notes
+                         canView = true;
+                     } else if (showPrivate) {
+                         // Has full access (following a private account)
+                         canView = !visibility.equals("private");
+                     } else {
+                         // Check against allowed visibilities
+                         canView = allowedVisibilities.contains(visibility);
+                     }
+                     
+                     if (!canView) continue;
+                     
+                     // Limit to page size
+                     if (includedCount >= NOTES_PAGE_SIZE) break;
+                     includedCount++;
+                     
+                     // Create NearbyNote object (reusing existing data class for adapter)
+                     com.visiboard.app.data.NearbyNote note = new com.visiboard.app.data.NearbyNote();
+                     note.setId(doc.getId());
+                     note.setText(doc.getString("text") != null ? doc.getString("text") : doc.getString("note"));
+                     note.setImageBase64(doc.getString("imageBase64"));
+                     note.setTimestamp(doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0);
+                     note.setUserId(doc.getString("userId"));
+                     note.setUserName(doc.getString("userName"));
+                     note.setUserProfilePic(doc.getString("userProfilePic"));
+                     note.setLikesCount(doc.getLong("likeCount") != null ? doc.getLong("likeCount").intValue() : 0);
+                     note.setCommentsCount(doc.getLong("commentCount") != null ? doc.getLong("commentCount").intValue() : 0);
+                     note.setDistance(-1); // Not needed for profile
+                     
+                     newNotes.add(note);
+                     allNotesList.add(doc);
+                 }
+                 
+                 if (querySnapshot.size() < NOTES_PAGE_SIZE * 2) {
+                     isLastNoteReached = true;
+                 }
+                 
+                 updateAdapterInternal(newNotes);
+                 
+                 // Recursive Load Logic:
+                 // If we fetched data BUT client-side filtering removed everything,
+                 // AND we haven't reached the end, trigger the next load automatically.
+                 if (newNotes.isEmpty() && !querySnapshot.isEmpty() && !isLastNoteReached) {
+                     loadUserNotes(allowedVisibilities, showPrivate, false);
+                 }
+                 
+                 if (allNotesList.isEmpty() && isFirstLoad) {
+                      tvNoNotes.setVisibility(View.VISIBLE);
+                      rvAllNotes.setVisibility(View.GONE);
+                 }
+             })
+             .addOnFailureListener(e -> {
+                 if (!isAdded()) return;
+                 isNotesLoading = false;
+                 pbNotesLoading.setVisibility(View.GONE);
+                 Log.e(TAG, "Error loading notes", e);
+                 if (isFirstLoad) {
+                      tvNoNotes.setText("Error loading notes");
+                      tvNoNotes.setVisibility(View.VISIBLE);
+                 }
+             });
+    }
+
+    private List<com.visiboard.app.data.NearbyNote> accumulatedNotes = new ArrayList<>();
+
+    private void updateAdapterInternal(List<com.visiboard.app.data.NearbyNote> newNotes) {
+        if (accumulatedNotes == null) accumulatedNotes = new ArrayList<>();
+        int startPos = accumulatedNotes.size();
+        accumulatedNotes.addAll(newNotes);
+        
+        // If adapter supports adding, great. If not, full refresh.
+        // Assuming full refresh support for now or I'll check adapter.
+        if (allNotesAdapter != null) {
+            allNotesAdapter.setNotes(accumulatedNotes); 
+            // Optimally: allNotesAdapter.notifyItemRangeInserted(startPos, newNotes.size());
+            // But setNotes likely calls notifyDataSetChanged.
+        }
+    }
+
     private void addDecorativeSocialIcons() {
         if (physicsHeader == null || getContext() == null) return;
         
@@ -1008,6 +1247,9 @@ public class UserProfileFragment extends Fragment {
                 .setDuration(300)
                 .withEndAction(() -> loadingOverlay.setVisibility(View.GONE))
                 .start();
+        }
+        if (swipeRefreshLayout != null) {
+            swipeRefreshLayout.setRefreshing(false);
         }
     }
 }

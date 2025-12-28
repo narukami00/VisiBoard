@@ -1,0 +1,324 @@
+package com.visiboard.app.chat;
+
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.view.HapticFeedbackConstants;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.visiboard.app.R;
+import com.visiboard.app.data.ChatMessage;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * RecyclerView adapter for chat messages.
+ * Supports text and voice messages with different layouts for sent/received.
+ */
+public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+
+    private static final int TYPE_TEXT_SENT = 1;
+    private static final int TYPE_TEXT_RECEIVED = 2;
+    private static final int TYPE_VOICE_SENT = 3;
+    private static final int TYPE_VOICE_RECEIVED = 4;
+
+    private final List<ChatMessage> messages = new ArrayList<>();
+    private final String currentUserId;
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("h:mm a", Locale.getDefault());
+    private final SimpleDateFormat dateTimeFormat = new SimpleDateFormat("MMM d, h:mm a", Locale.getDefault());
+    
+    private VoiceRecorderHelper voiceHelper;
+    private int currentlyPlayingPosition = -1;
+
+    public MessagesAdapter(String currentUserId) {
+        this.currentUserId = currentUserId;
+    }
+    
+    public void setVoiceHelper(VoiceRecorderHelper helper) {
+        this.voiceHelper = helper;
+    }
+
+    @Override
+    public int getItemViewType(int position) {
+        ChatMessage message = messages.get(position);
+        boolean isSent = message.getSenderId().equals(currentUserId);
+        boolean isVoice = message.isVoice();
+        
+        if (isVoice) {
+            return isSent ? TYPE_VOICE_SENT : TYPE_VOICE_RECEIVED;
+        } else {
+            return isSent ? TYPE_TEXT_SENT : TYPE_TEXT_RECEIVED;
+        }
+    }
+
+    @NonNull
+    @Override
+    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        LayoutInflater inflater = LayoutInflater.from(parent.getContext());
+        
+        switch (viewType) {
+            case TYPE_TEXT_SENT:
+                return new TextMessageViewHolder(
+                    inflater.inflate(R.layout.item_message_sent, parent, false));
+            case TYPE_TEXT_RECEIVED:
+                return new TextMessageViewHolder(
+                    inflater.inflate(R.layout.item_message_received, parent, false));
+            case TYPE_VOICE_SENT:
+                return new VoiceMessageViewHolder(
+                    inflater.inflate(R.layout.item_voice_sent, parent, false));
+            case TYPE_VOICE_RECEIVED:
+                return new VoiceMessageViewHolder(
+                    inflater.inflate(R.layout.item_voice_received, parent, false));
+            default:
+                return new TextMessageViewHolder(
+                    inflater.inflate(R.layout.item_message_sent, parent, false));
+        }
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+        ChatMessage message = messages.get(position);
+        
+        if (holder instanceof TextMessageViewHolder) {
+            ((TextMessageViewHolder) holder).bind(message);
+        } else if (holder instanceof VoiceMessageViewHolder) {
+            ((VoiceMessageViewHolder) holder).bind(message, position);
+        }
+    }
+
+    @Override
+    public int getItemCount() {
+        return messages.size();
+    }
+
+    public void addMessage(ChatMessage message) {
+        for (ChatMessage existing : messages) {
+            if (existing.getId() != null && existing.getId().equals(message.getId())) {
+                return;
+            }
+        }
+        messages.add(message);
+        notifyItemInserted(messages.size() - 1);
+    }
+
+    public void updateMessage(ChatMessage message) {
+        for (int i = 0; i < messages.size(); i++) {
+            if (messages.get(i).getId() != null && messages.get(i).getId().equals(message.getId())) {
+                messages.set(i, message);
+                notifyItemChanged(i);
+                return;
+            }
+        }
+    }
+
+    public void setMessages(List<ChatMessage> newMessages) {
+        messages.clear();
+        messages.addAll(newMessages);
+        notifyDataSetChanged();
+    }
+
+    public void clearMessages() {
+        messages.clear();
+        notifyDataSetChanged();
+    }
+
+    public int getLastPosition() {
+        return messages.isEmpty() ? 0 : messages.size() - 1;
+    }
+
+    public ChatMessage getMessage(int position) {
+        return messages.get(position);
+    }
+    
+    private String formatMessageTime(long timestamp) {
+        Calendar msgCal = Calendar.getInstance();
+        msgCal.setTimeInMillis(timestamp);
+        
+        Calendar now = Calendar.getInstance();
+        
+        if (msgCal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR) &&
+            msgCal.get(Calendar.YEAR) == now.get(Calendar.YEAR)) {
+            return timeFormat.format(new Date(timestamp));
+        }
+        
+        Calendar yesterday = Calendar.getInstance();
+        yesterday.add(Calendar.DAY_OF_YEAR, -1);
+        if (msgCal.get(Calendar.DAY_OF_YEAR) == yesterday.get(Calendar.DAY_OF_YEAR) &&
+            msgCal.get(Calendar.YEAR) == yesterday.get(Calendar.YEAR)) {
+            return "Yesterday, " + timeFormat.format(new Date(timestamp));
+        }
+        
+        return dateTimeFormat.format(new Date(timestamp));
+    }
+    
+    private String formatDuration(int seconds) {
+        int mins = seconds / 60;
+        int secs = seconds % 60;
+        return String.format(Locale.getDefault(), "%d:%02d", mins, secs);
+    }
+
+    // --- Text Message ViewHolder ---
+    class TextMessageViewHolder extends RecyclerView.ViewHolder {
+        private TextView tvMessage, tvTime;
+        ImageView ivReadStatus;
+        LinearLayout layoutReply;
+        TextView tvReplyName, tvReplyText;
+
+        TextMessageViewHolder(@NonNull View itemView) {
+            super(itemView);
+            tvMessage = itemView.findViewById(R.id.tv_message);
+            tvTime = itemView.findViewById(R.id.tv_time);
+            ivReadStatus = itemView.findViewById(R.id.iv_read_status);
+            layoutReply = itemView.findViewById(R.id.layout_reply);
+            tvReplyName = itemView.findViewById(R.id.tv_reply_name);
+            tvReplyText = itemView.findViewById(R.id.tv_reply_text);
+        }
+
+        void bind(ChatMessage message) {
+            tvMessage.setText(message.getText());
+            tvTime.setText(formatMessageTime(message.getTimestamp()));
+            
+            if (message.getReplyToId() != null && message.getReplyToName() != null && message.getReplyToText() != null) {
+                layoutReply.setVisibility(View.VISIBLE);
+                tvReplyName.setText(message.getReplyToName());
+                tvReplyText.setText(message.getReplyToText());
+            } else {
+                layoutReply.setVisibility(View.GONE);
+            }
+            
+            itemView.setOnLongClickListener(v -> {
+                copyToClipboard(v.getContext(), message.getText());
+                return true;
+            });
+        }
+        
+        private void copyToClipboard(Context context, String text) {
+            ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("Message", text);
+            clipboard.setPrimaryClip(clip);
+            itemView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // --- Voice Message ViewHolder ---
+    class VoiceMessageViewHolder extends RecyclerView.ViewHolder {
+        private final ImageButton btnPlay;
+        private final ProgressBar progressPlayback;
+        private final TextView tvDuration;
+        private final TextView tvTime;
+        
+        private boolean isPlaying = false;
+
+        public VoiceMessageViewHolder(@NonNull View itemView) {
+            super(itemView);
+            btnPlay = itemView.findViewById(R.id.btn_play);
+            progressPlayback = itemView.findViewById(R.id.progress_playback);
+            tvDuration = itemView.findViewById(R.id.tv_duration);
+            tvTime = itemView.findViewById(R.id.tv_time);
+        }
+
+        public void bind(ChatMessage message, int position) {
+            tvDuration.setText(formatDuration(message.getVoiceDuration()));
+            tvTime.setText(formatMessageTime(message.getTimestamp()));
+            progressPlayback.setProgress(0);
+            
+            // Reset state if another voice is playing
+            if (currentlyPlayingPosition != position) {
+                isPlaying = false;
+                btnPlay.setImageResource(R.drawable.ic_play);
+            }
+            
+            btnPlay.setOnClickListener(v -> {
+                if (voiceHelper == null) {
+                    Toast.makeText(v.getContext(), "Voice playback unavailable", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                
+                if (isPlaying) {
+                    // Pause
+                    voiceHelper.togglePlayback();
+                    isPlaying = false;
+                    btnPlay.setImageResource(R.drawable.ic_play);
+                } else {
+                    // Stop any other playing voice
+                    if (currentlyPlayingPosition != -1 && currentlyPlayingPosition != position) {
+                        voiceHelper.stopPlayback();
+                        notifyItemChanged(currentlyPlayingPosition);
+                    }
+                    
+                    currentlyPlayingPosition = position;
+                    
+                    // Start playback
+                    String voiceBase64 = message.getVoiceBase64();
+                    if (voiceBase64 == null || voiceBase64.isEmpty()) {
+                        Toast.makeText(v.getContext(), "Voice data not available", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    
+                    voiceHelper.playVoiceMessage(voiceBase64, new VoiceRecorderHelper.PlaybackCallback() {
+                        @Override
+                        public void onPlaybackStarted(int totalSeconds) {
+                            isPlaying = true;
+                            btnPlay.setImageResource(R.drawable.ic_pause);
+                        }
+
+                        @Override
+                        public void onPlaybackProgress(int currentSeconds, int totalSeconds) {
+                            if (totalSeconds > 0) {
+                                int progress = (currentSeconds * 100) / totalSeconds;
+                                progressPlayback.setProgress(progress);
+                                tvDuration.setText(formatDuration(currentSeconds) + " / " + formatDuration(totalSeconds));
+                            }
+                        }
+
+                        @Override
+                        public void onPlaybackPaused() {
+                            isPlaying = false;
+                            btnPlay.setImageResource(R.drawable.ic_play);
+                        }
+
+                        @Override
+                        public void onPlaybackResumed() {
+                            isPlaying = true;
+                            btnPlay.setImageResource(R.drawable.ic_pause);
+                        }
+
+                        @Override
+                        public void onPlaybackComplete() {
+                            isPlaying = false;
+                            btnPlay.setImageResource(R.drawable.ic_play);
+                            progressPlayback.setProgress(100);
+                            tvDuration.setText(formatDuration(message.getVoiceDuration()));
+                            currentlyPlayingPosition = -1;
+                        }
+
+                        @Override
+                        public void onError(String error) {
+                            isPlaying = false;
+                            btnPlay.setImageResource(R.drawable.ic_play);
+                            Toast.makeText(itemView.getContext(), error, Toast.LENGTH_SHORT).show();
+                            currentlyPlayingPosition = -1;
+                        }
+                    });
+                }
+            });
+        }
+    }
+}

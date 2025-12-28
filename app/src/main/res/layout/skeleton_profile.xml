@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     app:shimmer_auto_start="true"
-    app:shimmer_base_alpha="0.7"
+    app:shimmer_base_alpha="1.0"
     app:shimmer_highlight_alpha="1.0"
     app:shimmer_duration="1200"
     app:shimmer_direction="left_to_right"

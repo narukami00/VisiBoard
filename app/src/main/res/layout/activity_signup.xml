@@ -6,6 +6,30 @@
     android:layout_height="match_parent"
     android:background="@color/background_light">
 
+    <!-- Decoy Bubble 1 (Top Left) -->
+    <View
+        android:id="@+id/bubble_decoy_s1"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:background="@drawable/bg_circle"
+        android:backgroundTint="#106C5CE7"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="-80dp"
+        android:layout_marginStart="-60dp" />
+
+    <!-- Decoy Bubble 2 (Bottom Right) -->
+    <View
+        android:id="@+id/bubble_decoy_s2"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:background="@drawable/bg_circle"
+        android:backgroundTint="#1074B9FF"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="-40dp"
+        android:layout_marginEnd="-40dp" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -19,7 +43,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="24dp"
+            android:paddingHorizontal="32dp"
+            android:paddingVertical="24dp"
             android:gravity="center_horizontal">
 
             <!-- App Title -->
@@ -28,7 +53,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Create Account"
-                android:textSize="30sp"
+                android:textSize="32sp"
                 android:textStyle="bold"
                 android:textColor="@color/primary"
                 android:fontFamily="@font/poppins_semibold"
@@ -40,70 +65,104 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Join VisiBoard today!"
-                android:textSize="16sp"
+                android:textSize="18sp"
                 android:textColor="@color/text_secondary"
                 android:fontFamily="@font/poppins_regular"
                 android:layout_marginTop="8dp"/>
 
             <!-- Profile Image Selector -->
-            <LinearLayout
+            <RelativeLayout
                 android:id="@+id/profileImageContainer"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:layout_marginTop="24dp">
+                android:layout_marginTop="32dp">
 
                 <de.hdodenhof.circleimageview.CircleImageView
                     android:id="@+id/profileImage"
-                    android:layout_width="110dp"
-                    android:layout_height="110dp"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
                     android:src="@drawable/ic_profile"
-                    android:background="@drawable/bg_fab"
-                    android:scaleType="centerCrop"
-                    android:padding="4dp"/>
+                    app:civ_border_width="2dp"
+                    app:civ_border_color="@color/primary"
+                    android:scaleType="centerCrop" />
 
-                <TextView
-                    android:id="@+id/changePhotoText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Change Photo"
-                    android:textColor="@color/primary"
-                    android:textSize="14sp"
-                    android:fontFamily="@font/poppins_regular"
-                    android:layout_marginTop="6dp"/>
-            </LinearLayout>
+                <ImageView
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:src="@drawable/ic_add_a_photo"
+                    android:background="@drawable/bg_circle"
+                    android:backgroundTint="@color/primary"
+                    android:padding="8dp"
+                    app:tint="@android:color/white"
+                    android:layout_alignBottom="@id/profileImage"
+                    android:layout_alignEnd="@id/profileImage"
+                    android:elevation="4dp"/>
+            </RelativeLayout>
+            
+            <TextView
+                android:id="@+id/changePhotoText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tap to upload photo"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:fontFamily="@font/poppins_regular"
+                android:layout_marginTop="12dp"/>
 
             <!-- Name -->
-            <EditText
-                android:id="@+id/signupName"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
                 android:hint="Full Name"
                 android:textColorHint="@color/text_hint"
-                android:textColor="@color/text_primary"
-                android:background="@drawable/edittext_bg"
-                android:padding="16dp"
-                android:fontFamily="@font/poppins_regular"
-                android:drawableStart="@drawable/ic_profile"
-                android:drawablePadding="12dp"
-                android:layout_marginTop="32dp"/>
+                app:boxBackgroundMode="outline"
+                app:boxBackgroundColor="@android:color/transparent"
+                app:boxStrokeColor="@color/primary"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:startIconDrawable="@drawable/ic_profile"
+                app:startIconTint="@color/primary"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/signupName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_primary"
+                    android:fontFamily="@font/poppins_regular"
+                    android:paddingVertical="16dp"/>
+            </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Email -->
-            <EditText
-                android:id="@+id/signupEmail"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:hint="Email"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:hint="Email Address"
                 android:textColorHint="@color/text_hint"
-                android:textColor="@color/text_primary"
-                android:inputType="textEmailAddress"
-                android:background="@drawable/edittext_bg"
-                android:padding="16dp"
-                android:fontFamily="@font/poppins_regular"
-                android:drawableStart="@drawable/ic_email"
-                android:drawablePadding="12dp"
-                android:layout_marginTop="16dp"/>
+                app:boxBackgroundMode="outline"
+                app:boxBackgroundColor="@android:color/transparent"
+                app:boxStrokeColor="@color/primary"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:startIconDrawable="@drawable/ic_email"
+                app:startIconTint="@color/primary"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/signupEmail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textEmailAddress"
+                    android:textColor="@color/text_primary"
+                    android:fontFamily="@font/poppins_regular"
+                    android:paddingVertical="16dp"/>
+            </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Password -->
             <com.google.android.material.textfield.TextInputLayout
@@ -115,10 +174,14 @@
                 app:boxBackgroundMode="outline"
                 app:boxBackgroundColor="@android:color/transparent"
                 app:boxStrokeColor="@color/primary"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusBottomEnd="16dp"
                 app:endIconMode="password_toggle"
                 app:endIconTint="@color/text_secondary"
                 app:startIconDrawable="@drawable/ic_lock"
-                app:startIconTint="@color/text_secondary"
+                app:startIconTint="@color/primary"
                 android:layout_marginTop="16dp"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
@@ -129,7 +192,7 @@
                     android:inputType="textPassword"
                     android:textColor="@color/text_primary"
                     android:fontFamily="@font/poppins_regular"
-                    android:minHeight="56dp"/>
+                    android:paddingVertical="16dp"/>
 
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -143,10 +206,14 @@
                 app:boxBackgroundMode="outline"
                 app:boxBackgroundColor="@android:color/transparent"
                 app:boxStrokeColor="@color/primary"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusBottomEnd="16dp"
                 app:endIconMode="password_toggle"
                 app:endIconTint="@color/text_secondary"
                 app:startIconDrawable="@drawable/ic_lock"
-                app:startIconTint="@color/text_secondary"
+                app:startIconTint="@color/primary"
                 android:layout_marginTop="16dp"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
@@ -162,30 +229,47 @@
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Signup Button -->
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/signupBtn"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
+                android:layout_height="60dp"
                 android:text="Sign Up"
                 android:textAllCaps="false"
                 android:textSize="16sp"
                 android:fontFamily="@font/poppins_semibold"
-                android:background="@drawable/btn_primary_selector"
                 android:textColor="@color/button_text_primary"
-                android:elevation="4dp"
-                android:layout_marginTop="28dp"/>
+                app:cornerRadius="16dp"
+                app:elevation="6dp"
+                android:layout_marginTop="32dp"/>
 
             <!-- Already have account -->
-            <TextView
-                android:id="@+id/goToLogin"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Already have an account? Log in"
-                android:textColor="@color/text_primary"
-                android:textSize="15sp"
-                android:fontFamily="@font/poppins_regular"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="24dp"/>
+                android:orientation="horizontal"
+                android:layout_gravity="center"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Already have an account? "
+                    android:textColor="@color/text_secondary"
+                    android:fontFamily="@font/poppins_regular" />
+
+                <TextView
+                    android:id="@+id/goToLogin"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Log in"
+                    android:textStyle="bold"
+                    android:textColor="@color/primary"
+                    android:fontFamily="@font/poppins_semibold"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"/>
+            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>

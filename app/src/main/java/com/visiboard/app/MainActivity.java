@@ -34,6 +34,9 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
+        
+        // Check if user is banned
+        checkBanStatus(auth.getCurrentUser().getUid());
 
         // Check initial network connectivity
         if (!com.visiboard.app.utils.NetworkMonitor.isConnected(this)) {
@@ -468,6 +471,63 @@ public class MainActivity extends AppCompatActivity {
                 profileItem.setIcon(profileIconNormal);
             }
         }
+    }
+    
+    private void checkBanStatus(String userId) {
+        FirebaseFirestore.getInstance().collection("users").document(userId).get()
+            .addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    Boolean banned = doc.getBoolean("banned");
+                    Long banExpiryDate = doc.getLong("banExpiryDate");
+                    
+                    if (banned != null && banned) {
+                        long now = System.currentTimeMillis();
+                        
+                        if (banExpiryDate != null && banExpiryDate > now) {
+                            // User is banned and ban hasn't expired
+                            showBannedDialog(banExpiryDate);
+                        } else if (banExpiryDate != null && banExpiryDate <= now) {
+                            // Ban has expired, auto-unban
+                            FirebaseFirestore.getInstance().collection("users").document(userId)
+                                .update("banned", false)
+                                .addOnSuccessListener(aVoid -> Log.d("MainActivity", "User auto-unbanned"));
+                        } else {
+                            // Permanent ban (no expiry date)
+                            showBannedDialog(0);
+                        }
+                    }
+                }
+            })
+            .addOnFailureListener(e -> Log.e("MainActivity", "Error checking ban status", e));
+    }
+    
+    private void showBannedDialog(long expiryDate) {
+        android.view.View dialogView = getLayoutInflater().inflate(R.layout.dialog_banned, null);
+        
+        android.widget.TextView tvExpiry = dialogView.findViewById(R.id.tv_ban_expiry);
+        if (expiryDate > 0) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MMMM dd, yyyy", java.util.Locale.getDefault());
+            tvExpiry.setText(sdf.format(new java.util.Date(expiryDate)));
+        } else {
+            tvExpiry.setText("Permanent");
+        }
+        
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create();
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        
+        dialogView.findViewById(R.id.btn_exit).setOnClickListener(v -> {
+            dialog.dismiss();
+            FirebaseAuth.getInstance().signOut();
+            finishAffinity();
+        });
+        
+        dialog.show();
     }
 
 }

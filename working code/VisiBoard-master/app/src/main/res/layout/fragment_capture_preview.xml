@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark">
+
+    <!-- Captured Image -->
+    <ImageView
+        android:id="@+id/iv_captured_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitCenter"
+        android:contentDescription="Captured Photo"/>
+
+    <!-- Top Bar with Title -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_gravity="top"
+        android:background="@drawable/bg_gradient_top"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Preview"
+            android:textColor="@color/text_on_primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/poppins_semibold"
+            android:layout_gravity="center"/>
+
+    </LinearLayout>
+
+    <!-- Bottom Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_gradient_bottom"
+        android:padding="24dp"
+        android:gravity="center"
+        android:weightSum="3">
+
+        <!-- Retake Button -->
+        <Button
+            android:id="@+id/btn_retake"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/bg_button_secondary"
+            android:text="Retake"
+            android:textColor="@color/button_text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/poppins_semibold"
+            android:elevation="4dp"
+            app:backgroundTint="#666666"/>
+
+        <!-- Save Button -->
+        <Button
+            android:id="@+id/btn_save"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_button_primary"
+            android:text="Save"
+            android:textColor="@color/button_text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/poppins_semibold"
+            android:elevation="4dp"/>
+
+        <!-- Post Button -->
+        <Button
+            android:id="@+id/btn_post_note"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_button_primary"
+            android:text="Post"
+            android:textColor="@color/button_text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/poppins_semibold"
+            android:elevation="4dp"
+            app:backgroundTint="#9C27B0"/>
+
+    </LinearLayout>
+
+    <!-- Extract Text Button (OCR Mode Only) -->
+    <Button
+        android:id="@+id/btn_extract_text"
+        android:layout_width="wrap_content"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="120dp"
+        android:paddingHorizontal="32dp"
+        android:text="📝 Extract Text"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:fontFamily="@font/poppins_semibold"
+        android:backgroundTint="#00BCD4"
+        android:elevation="8dp"
+        android:visibility="gone" />
+
+    <!-- Loading Indicator -->
+    <ProgressBar
+        android:id="@+id/progress_saving"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminateTint="@color/primary"
+        android:visibility="gone"/>
+
+</FrameLayout>

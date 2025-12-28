@@ -19,6 +19,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.navigation.Navigation;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentSnapshot;
@@ -845,7 +846,13 @@ public class DiscoveryFragment extends Fragment {
             // Add click listener for card with haptic feedback
             holder.itemView.setOnClickListener(v -> {
                 performHapticFeedback(v);
-                // Could navigate to profile here
+                Bundle args = new Bundle();
+                args.putString("userId", u.getUserId());
+                try {
+                    Navigation.findNavController(v).navigate(R.id.userProfileFragment, args);
+                } catch (Exception e) {
+                    Log.e(TAG, "Navigation failed", e);
+                }
             });
         }
 

@@ -8,10 +8,15 @@
     android:background="@color/background_light"
     android:fitsSystemWindows="true">
 
-    <androidx.core.widget.NestedScrollView
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe_refresh_layout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:layout_height="match_parent">
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
@@ -501,7 +506,67 @@
                 android:nestedScrollingEnabled="false"
                 android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/tv_favs_header"
-                app:layout_constraintBottom_toBottomOf="parent" />
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- All Notes Header (Hidden for Private) -->
+            <TextView
+                android:id="@+id/tv_all_notes_header"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Notes"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:fontFamily="@font/poppins_semibold"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/rv_favourite_notes" />
+
+            <!-- All Notes RecyclerView -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_all_notes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="24dp"
+                android:nestedScrollingEnabled="false"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/tv_all_notes_header"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- No Info / Empty State -->
+             <TextView
+                android:id="@+id/tv_no_notes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No notes available"
+                android:textSize="14sp"
+                android:textColor="@color/text_tertiary"
+                android:fontFamily="@font/poppins_regular"
+                android:gravity="center"
+                 android:padding="32dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/tv_all_notes_header"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Pagination Loading -->
+            <ProgressBar
+                android:id="@+id/pb_notes_loading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="32dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/rv_all_notes"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
 
             <!-- Private Account Message -->
             <LinearLayout
@@ -566,6 +631,7 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-    </androidx.core.widget.NestedScrollView>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

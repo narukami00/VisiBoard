@@ -55,11 +55,33 @@ public class SignupActivity extends AppCompatActivity {
         signupBtn = findViewById(R.id.signupBtn);
         signupProgressBar = findViewById(R.id.signupProgressBar);
 
-        profilePic.setOnClickListener(v -> pickImage());
+        setupDecoyBubbles();
 
-        signupBtn.setOnClickListener(v -> registerUser());
+        profilePic.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            pickImage();
+        });
+
+        signupBtn.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            registerUser();
+        });
         
-        findViewById(R.id.goToLogin).setOnClickListener(v -> finish());
+        findViewById(R.id.goToLogin).setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            finish();
+        });
+    }
+
+    private void setupDecoyBubbles() {
+        android.view.View d1 = findViewById(R.id.bubble_decoy_s1);
+        android.view.View d2 = findViewById(R.id.bubble_decoy_s2);
+        
+        android.view.View.OnClickListener hapticOnly = v -> 
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+            
+        if (d1 != null) d1.setOnClickListener(hapticOnly);
+        if (d2 != null) d2.setOnClickListener(hapticOnly);
     }
 
     private void pickImage() {

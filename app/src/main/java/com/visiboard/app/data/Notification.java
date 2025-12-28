@@ -2,7 +2,8 @@ package com.visiboard.app.data;
 
 public class Notification {
     private String id;
-    private String type; // "like", "comment", "follow", "message"
+    private String toUserId;
+    private String type; // "like", "comment", "follow", "message", "admin"
     private String fromUserId;
     private String fromUserName;
     private String fromUserProfilePic;
@@ -36,6 +37,9 @@ public class Notification {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+
+    public String getToUserId() { return toUserId; }
+    public void setToUserId(String toUserId) { this.toUserId = toUserId; }
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }

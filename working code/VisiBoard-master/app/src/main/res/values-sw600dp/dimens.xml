@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dimensions for tablets (7-inch, 600dp+ width) -->
+    
+    <!-- Text sizes - larger for tablets -->
+    <dimen name="text_size_small">14sp</dimen>
+    <dimen name="text_size_body">16sp</dimen>
+    <dimen name="text_size_title">20sp</dimen>
+    <dimen name="text_size_large">24sp</dimen>
+    <dimen name="text_size_xlarge">32sp</dimen>
+    
+    <!-- Spacing - more generous -->
+    <dimen name="spacing_small">12dp</dimen>
+    <dimen name="spacing_medium">20dp</dimen>
+    <dimen name="spacing_large">32dp</dimen>
+    <dimen name="spacing_xlarge">48dp</dimen>
+    
+    <!-- Component sizes -->
+    <dimen name="button_height">56dp</dimen>
+    <dimen name="icon_size_small">28dp</dimen>
+    <dimen name="icon_size_medium">40dp</dimen>
+    <dimen name="icon_size_large">56dp</dimen>
+    <dimen name="fab_size">64dp</dimen>
+    
+    <!-- Map marker sizes -->
+    <dimen name="marker_size">56dp</dimen>
+    <dimen name="marker_text_size">14sp</dimen>
+    
+    <!-- Bottom nav height -->
+    <dimen name="bottom_nav_height">64dp</dimen>
+    
+    <!-- Feed item dimensions -->
+    <dimen name="feed_item_min_height">160dp</dimen>
+    <dimen name="feed_image_max_height">600dp</dimen>
+    
+    <!-- Profile dimensions -->
+    <dimen name="profile_image_size">120dp</dimen>
+    <dimen name="profile_image_large">160dp</dimen>
+    
+    <!-- Dialog dimensions -->
+    <dimen name="dialog_max_width">600dp</dimen>
+</resources>

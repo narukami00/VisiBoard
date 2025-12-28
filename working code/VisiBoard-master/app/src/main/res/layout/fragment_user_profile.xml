@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_light"
+    android:fitsSystemWindows="true">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="40dp">
+
+            <!-- Header Physics Container (Cover with Floating Notes) -->
+            <com.visiboard.app.ui.profile.FloatingPhysicsLayout
+                android:id="@+id/physics_header_container"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:background="@color/color_primary_light"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Pattern Overlay -->
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:src="@drawable/ic_pattern_circle"
+                android:scaleType="centerCrop"
+                android:alpha="0.1"
+                app:tint="#FFFFFF"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" 
+                tools:ignore="ContentDescription" />
+
+            <!-- Top Left: Back Button -->
+            <ImageView
+                android:id="@+id/btn_back"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_arrow_back"
+                android:padding="10dp"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#40000000"
+                app:tint="#FFFFFF"
+                android:layout_margin="16dp"
+                android:elevation="4dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                android:contentDescription="Go Back" />
+
+            <!-- Top Right: 3-dot Menu -->
+            <ImageView
+                android:id="@+id/btn_options_menu"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_more_vert"
+                android:padding="10dp"
+                android:background="@drawable/bg_circle_glass"
+                android:backgroundTint="#40000000"
+                app:tint="#FFFFFF"
+                android:layout_margin="16dp"
+                android:elevation="4dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                android:contentDescription="Options Menu" />
+
+            <!-- Profile Picture (Overlapping Cover) -->
+            <de.hdodenhof.circleimageview.CircleImageView
+                android:id="@+id/iv_profile_pic"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:src="@drawable/ic_profile"
+                app:civ_border_width="4dp"
+                app:civ_border_color="@color/card_background"
+                android:elevation="8dp"
+                app:layout_constraintTop_toBottomOf="@id/physics_header_container"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginTop="-60dp" />
+
+            <!-- User Name -->
+            <TextView
+                android:id="@+id/tv_user_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="User Name"
+                android:textSize="22sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:fontFamily="@font/poppins_semibold"
+                android:layout_marginTop="12dp"
+                app:layout_constraintTop_toBottomOf="@id/iv_profile_pic"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Account Type Badge (Public/Private) -->
+            <TextView
+                android:id="@+id/tv_account_type"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Public Account"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:fontFamily="@font/poppins_regular"
+                android:background="@drawable/bg_capsule_light"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="4dp"
+                android:layout_marginTop="6dp"
+                app:layout_constraintTop_toBottomOf="@id/tv_user_name"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Joined Date -->
+            <TextView
+                android:id="@+id/tv_joined_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="@color/text_tertiary"
+                android:fontFamily="@font/poppins_regular"
+                android:visibility="gone"
+                android:layout_marginTop="4dp"
+                app:layout_constraintTop_toBottomOf="@id/tv_account_type"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Location & Distance Container -->
+            <LinearLayout
+                android:id="@+id/location_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/tv_joined_date"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_my_location"
+                    app:tint="@color/text_tertiary"
+                    android:layout_marginEnd="4dp" />
+
+                <TextView
+                    android:id="@+id/tv_location"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Location"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_tertiary"
+                    android:fontFamily="@font/poppins_regular" />
+
+                <TextView
+                    android:id="@+id/tv_distance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" • 5 km away"
+                    android:textSize="13sp"
+                    android:textColor="@color/primary"
+                    android:fontFamily="@font/poppins_medium"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Bio Section -->
+            <TextView
+                android:id="@+id/tv_bio"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:fontFamily="@font/poppins_regular"
+                android:gravity="center"
+                android:layout_marginTop="12dp"
+                android:layout_marginHorizontal="32dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/location_container"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Follow/Following/Requested Button -->
+            <Button
+                android:id="@+id/btn_follow"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:text="Follow"
+                android:textColor="@color/button_text_primary"
+                android:background="@drawable/btn_primary_selector"
+                android:textAllCaps="false"
+                android:fontFamily="@font/poppins_semibold"
+                android:paddingHorizontal="32dp"
+                android:layout_marginTop="16dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/tv_bio"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Public Details Section (Hidden for Private) -->
+            <LinearLayout
+                android:id="@+id/ll_details_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="32dp"
+                android:layout_marginTop="20dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/btn_follow"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+                
+                <!-- Work -->
+                <LinearLayout
+                    android:id="@+id/row_work"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_work" app:tint="@color/text_tertiary" android:layout_marginEnd="8dp"/>
+                    <TextView android:id="@+id/tv_work" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Works at..." android:textColor="@color/text_primary" android:textSize="13sp"/>
+                </LinearLayout>
+
+                <!-- Education -->
+                <LinearLayout
+                    android:id="@+id/row_education"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_school" app:tint="@color/text_tertiary" android:layout_marginEnd="8dp"/>
+                    <TextView android:id="@+id/tv_education" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Studied at..." android:textColor="@color/text_primary" android:textSize="13sp"/>
+                </LinearLayout>
+
+                <!-- Relationship -->
+                <LinearLayout
+                    android:id="@+id/row_relationship"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_heart" app:tint="@color/text_tertiary" android:layout_marginEnd="8dp"/>
+                    <TextView android:id="@+id/tv_relationship" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Single" android:textColor="@color/text_primary" android:textSize="13sp"/>
+                </LinearLayout>
+
+                <!-- Hometown -->
+                <LinearLayout
+                    android:id="@+id/row_hometown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_home" app:tint="@color/text_tertiary" android:layout_marginEnd="8dp"/>
+                    <TextView android:id="@+id/tv_hometown" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="From..." android:textColor="@color/text_primary" android:textSize="13sp"/>
+                </LinearLayout>
+
+                <!-- Birthday -->
+                <LinearLayout
+                    android:id="@+id/row_birthday"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_cake" app:tint="@color/text_tertiary" android:layout_marginEnd="8dp"/>
+                    <TextView android:id="@+id/tv_birthday" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Birthday..." android:textColor="@color/text_primary" android:textSize="13sp"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Links Section (Hidden for Private) -->
+            <HorizontalScrollView
+                android:id="@+id/sv_links"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingHorizontal="24dp"
+                android:clipToPadding="false"
+                android:layout_marginTop="16dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/ll_details_container">
+                
+                <LinearLayout
+                    android:id="@+id/ll_links_container"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <!-- Dynamic links will be added here -->
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <!-- Stats Row -->
+            <LinearLayout
+                android:id="@+id/stats_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="24dp"
+                android:paddingVertical="24dp"
+                android:baselineAligned="false"
+                app:layout_constraintTop_toBottomOf="@id/sv_links">
+
+                <!-- Notes -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/tv_total_notes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Notes"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="30dp"
+                    android:background="@color/divider"
+                    android:layout_gravity="center_vertical" />
+
+                <!-- Likes -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/tv_total_likes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Likes"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="30dp"
+                    android:background="@color/divider"
+                    android:layout_gravity="center_vertical" />
+
+                <!-- Followers -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/tv_followers_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Followers"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+                
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="30dp"
+                    android:background="@color/divider"
+                    android:layout_gravity="center_vertical" />
+
+                <!-- Following -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/tv_following_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        android:fontFamily="@font/poppins_semibold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Following"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="@font/poppins_regular" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Rank Badge (Icon + Title Only) -->
+            <LinearLayout
+                android:id="@+id/rank_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_rank_badge"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                app:layout_constraintTop_toBottomOf="@id/stats_container"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <ImageView
+                    android:id="@+id/iv_rank_icon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_default_tier"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_rank"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="No Rank"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/primary"
+                    android:fontFamily="@font/poppins_semibold" />
+            </LinearLayout>
+
+            <!-- Favourite Notes Section Header (Hidden for Private) -->
+            <TextView
+                android:id="@+id/tv_favs_header"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Favourite Notes"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:fontFamily="@font/poppins_semibold"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="32dp"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/rank_container" />
+
+            <!-- Favourite Notes RecyclerView (Hidden for Private) -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_favourite_notes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:clipToPadding="false"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingBottom="24dp"
+                android:nestedScrollingEnabled="false"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/tv_favs_header"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- Private Account Message -->
+            <LinearLayout
+                android:id="@+id/ll_private_message"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="48dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/rank_container"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <ImageView
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:src="@drawable/ic_lock"
+                    app:tint="@color/text_hint"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="This Account is Private"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_secondary"
+                    android:fontFamily="@font/poppins_semibold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Follow this account to see their notes and activity"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_tertiary"
+                    android:fontFamily="@font/poppins_regular"
+                    android:gravity="center"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Loading Overlay -->
+            <FrameLayout
+                android:id="@+id/loading_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:background="@color/background_light"
+                android:elevation="10dp"
+                android:visibility="visible"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <ProgressBar
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:indeterminateTint="@color/primary"
+                    android:scaleX="1.5"
+                    android:scaleY="1.5"/>
+            </FrameLayout>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

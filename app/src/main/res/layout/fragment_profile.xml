@@ -639,15 +639,24 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent" />
 
-            <!-- Skeleton Loading View -->
-            <include 
+            <!-- Skeleton Loading View (Wrapped for Elevation) -->
+            <FrameLayout
                 android:id="@+id/skeleton_view"
-                layout="@layout/skeleton_profile"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:background="@color/background_light"
+                android:elevation="20dp"
                 android:visibility="visible"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"/>
+                app:layout_constraintEnd_toEndOf="parent">
+                
+                <include 
+                    layout="@layout/skeleton_profile"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"/>
+            </FrameLayout>
 
             <!-- Loading Overlay (Keep as backup or remove if skeleton is sufficient) -->
             <FrameLayout

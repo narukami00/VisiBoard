@@ -70,4 +70,26 @@ public class UserInfo {
     
     public double getLng() { return lng; }
     public void setLng(double lng) { this.lng = lng; }
+
+    // Admin Fields
+    private boolean banned;
+    private long banExpiryDate;
+    private boolean restricted;
+    private long restrictionExpiryDate;
+    private boolean warned;
+
+    public boolean isBanned() { return banned; }
+    public void setBanned(boolean banned) { this.banned = banned; }
+
+    public long getBanExpiryDate() { return banExpiryDate; }
+    public void setBanExpiryDate(long banExpiryDate) { this.banExpiryDate = banExpiryDate; }
+
+    public boolean isRestricted() { return restricted; }
+    public void setRestricted(boolean restricted) { this.restricted = restricted; }
+
+    public long getRestrictionExpiryDate() { return restrictionExpiryDate; }
+    public void setRestrictionExpiryDate(long restrictionExpiryDate) { this.restrictionExpiryDate = restrictionExpiryDate; }
+
+    public boolean isWarned() { return warned; }
+    public void setWarned(boolean warned) { this.warned = warned; }
 }
