@@ -66,6 +66,8 @@ VisiBoard is a social media platform that blends the physical and digital worlds
 - **Preloading** - Intelligent prefetching eliminates loading states
 - **Smooth Scrolling** - 60fps performance with LRU caching and background processing
 
+### There are more - you just have to discover them yourself!
+
 ## 📱 Screenshots
 
 <div align="center">
@@ -78,11 +80,11 @@ VisiBoard is a social media platform that blends the physical and digital worlds
 
 ### Social & Content
 
-| Create Post | Chat Interface | User Profile |
+| Post Interaction | Chat Interface | User Profile |
 |:---:|:---:|:---:|
-| <img src="screenshots/post1.jpg" width="270" alt="Create Post" /> | <img src="screenshots/chat.png" width="270" alt="Real-time Chat" /> | <img src="screenshots/profile1.jpg" width="270" alt="User Profile" /> |
+| <img src="screenshots/post1.jpg" width="270" alt="Post" /> | <img src="screenshots/chat.png" width="270" alt="Real-time Chat" /> | <img src="screenshots/profile1.jpg" width="270" alt="User Profile" /> |
 
-### Additional Features
+### Additional Highlights
 
 | Map Details | AR Capture | Settings |
 |:---:|:---:|:---:|
