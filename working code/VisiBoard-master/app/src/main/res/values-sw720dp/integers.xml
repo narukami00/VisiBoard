@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Grid columns for large tablets -->
-    <integer name="feed_grid_columns">4</integer>
-    <integer name="gallery_grid_columns">5</integer>
-</resources>
