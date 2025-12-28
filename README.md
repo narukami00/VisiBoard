@@ -6,24 +6,32 @@
 
 ## ✨ Implemented Features
 
-*   **Interactive Map**: Explore geo-tagged notes and stories on a dynamic map interface.
-*   **Discover Feed**: Browse trending and nearby notes in a visually engaging masonry grid layout.
-*   **Create & Capture**: Drop your own notes at your current location to share with the world.
+*   **Interactive Map**: Explore geo-tagged notes and stories on a dynamic map interface with real-time updates.
+*   **Discover Feed**: Browse trending and nearby notes in a visually engaging Pinterest-style masonry grid layout.
+*   **Create & Capture**: Drop your own notes at your current location with text, images, and AR capture mode.
 *   **Social Interaction**: Follow other users, like meaningful content, and participate in comment discussions.
-*   **User Profiles**: customizable profiles displaying user stats and note history.
+*   **User Profiles**: Fully customizable profiles displaying user stats, note history, and achievement tiers.
 *   **Real-time Notifications**: Stay updated with interactions and activities from your network.
+*   **Privacy Features**: Account privacy controls, follow request system, content visibility settings, and block/report functionality.
+*   **Real-time Chatting**: Direct messaging with online status, read receipts, and anonymous messaging options.
+*   **People You May Know**: Discover new connections based on mutual follows, location, and interests.
+*   **Personalization & More**: Dark/light themes, customizable profiles, favorite notes, achievement system, and personalized feed algorithm.
 
 ## 📱 Screenshots
 
 <div align="center">
 
-| Map Exploration | Discover Feed |
-|:---:|:---:|
-| <img src="screenshots/map.jpg" width="300" /> | <img src="screenshots/discover.jpg" width="300" /> |
-
-| User Profile | Notifications | Capture Mode |
+| Map View | Discover Feed | Connect |
 |:---:|:---:|:---:|
-| <img src="screenshots/profile.jpg" width="280" /> | <img src="screenshots/notification.jpg" width="280" /> | <img src="screenshots/capture.jpg" width="280" /> |
+| <img src="screenshots/map.jpg" width="280" /> | <img src="screenshots/discover.jpg" width="280" /> | <img src="screenshots/connect.jpg" width="280" /> |
+
+| Create Post | User Profile | Settings |
+|:---:|:---:|:---:|
+| <img src="screenshots/post.jpg" width="280" /> | <img src="screenshots/profile.jpg" width="280" /> | <img src="screenshots/settings.jpg" width="280" /> |
+
+| Map Details | Capture Mode |
+|:---:|:---:|
+| <img src="screenshots/map2.jpg" width="280" /> | <img src="screenshots/capture.jpg" width="280" /> |
 
 </div>
 
