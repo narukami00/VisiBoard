@@ -181,6 +181,11 @@ public class ImageCache {
         return memoryCache.size();
     }
     
+    public int getCacheSizeKB() {
+        // Return approximate cache size in KB
+        return memoryCache.size() * 50; // Rough estimate: 50KB per image
+    }
+    
     public void shutdown() {
         executor.shutdown();
         clearCache();
@@ -192,5 +197,14 @@ public class ImageCache {
     
     public void trimMemory() {
         memoryCache.trimToSize(memoryCache.size() / 2);
+    }
+    
+    /**
+     * Remove specific image from cache
+     */
+    public void evictImage(String key) {
+        if (key != null) {
+            memoryCache.remove(key);
+        }
     }
 }

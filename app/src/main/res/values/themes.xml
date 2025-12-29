@@ -27,5 +27,15 @@
         <item name="android:windowEnterAnimation">@anim/popup_slide_in</item>
         <item name="android:windowExitAnimation">@anim/popup_slide_out</item>
     </style>
+
+    <!-- Material AlertDialog overlay matching VisiBoard aesthetics -->
+    <style name="ThemeOverlay.VisiBoard.MaterialAlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <!-- Title/body typography alignment with Material3 -->
+        <item name="materialAlertDialogTitleTextStyle">@style/TextAppearance.Material3.TitleMedium</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/TextAppearance.Material3.BodyMedium</item>
+        <!-- Button styles: primary as filled, secondary as text -->
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Material3.Button</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Material3.Button.TextButton</item>
+    </style>
 </resources>
 

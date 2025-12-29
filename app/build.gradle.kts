@@ -79,8 +79,12 @@ dependencies {
 
     // Room
     implementation("androidx.room:room-runtime:2.5.2")
+    implementation("androidx.room:room-ktx:2.5.2")
     implementation(libs.swiperefreshlayout)
     annotationProcessor("androidx.room:room-compiler:2.5.2")
+    
+    // Kotlin annotation processor for Room (if using Kotlin)
+    // kapt("androidx.room:room-compiler:2.5.2")
 
     // WorkManager
     implementation("androidx.work:work-runtime:2.8.1")

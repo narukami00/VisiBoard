@@ -110,7 +110,40 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Use the camera icon to enter AR mode. Point your camera at notes around you to see them floating in augmented reality! You can also capture photos and use OCR to extract text."
+                    android:text="Use the camera icon to enter AR mode. Point your camera at notes around you to see them floating in augmented reality! You can also capture photos, scan QR codes and use OCR to extract text."
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:lineSpacingExtra="4dp"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            android:backgroundTint="@color/card_background"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="👥 Connecting with People"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:layout_marginBottom="8dp"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Visit the Connect tab to discover and view profiles of other users near you, send them messages, and build connections."
                     android:textSize="14sp"
                     android:textColor="@color/text_secondary"
                     android:lineSpacingExtra="4dp"/>
@@ -121,7 +154,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Features"
+            android:text="Key Features"
             android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="@color/primary"
@@ -222,6 +255,39 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="Browse public notes from the community in a Pinterest-style feed. Like notes, share them with friends, and discover new places to explore. The feed is personalized based on who you follow."
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:lineSpacingExtra="4dp"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            android:backgroundTint="@color/card_background"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="💬 Real-time Chat"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:layout_marginBottom="8dp"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Send instant messages to people you follow. Access the Chats tab in the Connect section to start a conversation, manage active chats, and build meaningful connections in real-time."
                     android:textSize="14sp"
                     android:textColor="@color/text_secondary"
                     android:lineSpacingExtra="4dp"/>

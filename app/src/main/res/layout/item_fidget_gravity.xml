@@ -11,6 +11,6 @@
         android:id="@+id/gravity_ball_view"
         android:layout_width="match_parent"
         android:layout_height="200dp"
-        android:background="#222222" />
+        android:background="@color/fidget_gravity_bg" />
 
 </androidx.cardview.widget.CardView>

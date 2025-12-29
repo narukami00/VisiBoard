@@ -60,4 +60,15 @@
     
     <!-- Custom -->
     <color name="time_travel_btn_bg">#F22E2E48</color>
+    
+    <!-- Fidget Widget Colors (Dark Mode) -->
+    <color name="fidget_gravity_bg">#2A2F36</color>
+    <color name="fidget_lava_bg">#252A31</color>
+    <color name="fidget_spinner_bg">#2D3139</color>
+    <color name="fidget_floating_bg">#1E2329</color>
+    <color name="fidget_floating_border">#3A4048</color>
+    <color name="fidget_fluid_bg">#242A32</color>
+    <color name="fidget_strings_bg">#2B3038</color>
+    <color name="fidget_trace_bg">#252A31</color>
+    <color name="fidget_text_secondary">#A0A0A0</color>
 </resources>

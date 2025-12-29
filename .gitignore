@@ -4,6 +4,7 @@ local.properties
 captures/
 build/
 app/build/
+docs/
 google-services.json
 *.keystore
 *.md

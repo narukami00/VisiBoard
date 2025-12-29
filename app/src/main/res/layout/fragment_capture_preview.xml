@@ -103,7 +103,7 @@
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="120dp"
         android:paddingHorizontal="32dp"
-        android:text="📝 Extract Text"
+        android:text="Extract Text"
         android:textColor="@color/white"
         android:textSize="16sp"
         android:textStyle="bold"

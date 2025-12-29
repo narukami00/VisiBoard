@@ -6,7 +6,7 @@
     android:layout_margin="6dp"
     app:cardCornerRadius="12dp"
     app:cardElevation="3dp"
-    app:cardBackgroundColor="#000000">
+    app:cardBackgroundColor="@color/fidget_fluid_bg">
 
     <!-- Small Note-Sized Container (Approx 4:5 ratio or dynamic height to fill gaps) -->
     <androidx.constraintlayout.widget.ConstraintLayout

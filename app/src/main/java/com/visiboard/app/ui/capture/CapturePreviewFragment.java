@@ -28,6 +28,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
@@ -349,18 +350,38 @@ public class CapturePreviewFragment extends Fragment {
     }
 
     private void showShareConfirmation(Uri savedUri) {
-        new android.app.AlertDialog.Builder(requireContext())
-            .setTitle("Image Saved! ✨")
-            .setMessage("The image has been saved to your gallery.\n\nDo you want to share it?")
-            .setCancelable(false)
-            .setPositiveButton("Yes, Share", (dialog, which) -> {
-                shareImage(savedUri);
-            })
-            .setNegativeButton("No", (dialog, which) -> {
-                // Return to capture screen
-                requireActivity().onBackPressed();
-            })
-            .show();
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_confirmation, null);
+        TextView title = dialogView.findViewById(R.id.dialog_title);
+        TextView message = dialogView.findViewById(R.id.dialog_message);
+        Button btnConfirm = dialogView.findViewById(R.id.btn_confirm);
+        Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
+
+        title.setText("Image Saved");
+        message.setText("The image has been saved to your gallery.\n\nDo you want to share it now?");
+        btnConfirm.setText("Share");
+        btnCancel.setText("Done");
+
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .setCancelable(false)
+                .create();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        btnConfirm.setOnClickListener(v -> {
+            dialog.dismiss();
+            shareImage(savedUri);
+        });
+
+        btnCancel.setOnClickListener(v -> {
+            dialog.dismiss();
+            // Return to capture screen
+            requireActivity().onBackPressed();
+        });
+
+        dialog.show();
     }
 
     private void shareImage(Uri uri) {
