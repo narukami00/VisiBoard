@@ -98,7 +98,7 @@ public class ProfileFragment extends Fragment {
         if (getParentFragmentManager() != null) {
             getParentFragmentManager().setFragmentResultListener("details_updated", this, (requestKey, result) -> {
                 refreshData();
-                safeToast("Profile Updated");
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Profile Updated");
             });
             
             getParentFragmentManager().setFragmentResultListener("fav_notes_updated", this, (requestKey, result) -> {
@@ -216,7 +216,7 @@ public class ProfileFragment extends Fragment {
             v.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
             long currentTime = System.currentTimeMillis();
             if (currentTime - lastThemeToggleTime < THEME_TOGGLE_COOLDOWN) {
-                Toast.makeText(getContext(), "Please wait...", Toast.LENGTH_SHORT).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Please wait...");
                 return;
             }
             
@@ -732,7 +732,7 @@ public class ProfileFragment extends Fragment {
                      })
                      .addOnFailureListener(e -> {
                          Log.e("ProfileFragment", "Error loading stats: " + e.getMessage());
-                         safeToast("Failed to load statistics");
+                         if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to load statistics");
                          swipeRefreshLayout.setRefreshing(false);
                          loadingOverlay.setVisibility(View.GONE);
                      });
@@ -775,7 +775,7 @@ public class ProfileFragment extends Fragment {
                 updateProfilePic(base64Image);
             } catch (IOException e) {
                 e.printStackTrace();
-                safeToast("Failed to load image");
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to load image");
             }
         }
     }
@@ -788,9 +788,11 @@ public class ProfileFragment extends Fragment {
         db.collection("users").document(uid).update("profilePic", base64Image)
                 .addOnSuccessListener(unused -> {
                     viewModel.setProfilePicBase64(base64Image);
-                    safeToast("Profile picture updated");
+                    if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Profile picture updated");
                 })
-                .addOnFailureListener(e -> safeToast("Failed to update: " + e.getMessage()));
+                .addOnFailureListener(e -> {
+                    if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to update: " + e.getMessage());
+                });
     }
 
     private void showEditNameDialog() {

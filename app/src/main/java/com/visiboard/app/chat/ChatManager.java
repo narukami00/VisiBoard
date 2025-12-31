@@ -305,6 +305,71 @@ public class ChatManager {
     }
 
     /**
+     * Sends an image message to a chat.
+     */
+    public void sendImageMessage(String chatId, String recipientId, String recipientName,
+                                 String recipientProfilePic, String imageUrl,
+                                 SendMessageCallback callback) {
+        String currentUserId = getCurrentUserId();
+        if (currentUserId == null) {
+            callback.onError("Not logged in");
+            return;
+        }
+
+        long timestamp = System.currentTimeMillis();
+        
+        // Create image message
+        ChatMessage message = new ChatMessage(currentUserId, imageUrl, timestamp, true);
+        
+        // Generate message ID
+        String messageId = database.child("chats").child(chatId).child("messages").push().getKey();
+        if (messageId == null) {
+            callback.onError("Failed to generate message ID");
+            return;
+        }
+        message.setId(messageId);
+
+        String displayText = "📷 Image";
+
+        // Build updates map
+        Map<String, Object> updates = new HashMap<>();
+        
+        updates.put("chats/" + chatId + "/messages/" + messageId, message);
+        
+        Map<String, Object> lastMessage = new HashMap<>();
+        lastMessage.put("text", displayText);
+        lastMessage.put("senderId", currentUserId);
+        lastMessage.put("timestamp", timestamp);
+        lastMessage.put("type", "image");
+        updates.put("chats/" + chatId + "/lastMessage", lastMessage);
+        
+        updates.put("chats/" + chatId + "/participants/" + currentUserId, true);
+        updates.put("chats/" + chatId + "/participants/" + recipientId, true);
+        
+        updates.put("user_chats/" + currentUserId + "/" + chatId + "/recipientId", recipientId);
+        updates.put("user_chats/" + currentUserId + "/" + chatId + "/recipientName", recipientName);
+        updates.put("user_chats/" + currentUserId + "/" + chatId + "/recipientProfilePic", recipientProfilePic);
+        updates.put("user_chats/" + currentUserId + "/" + chatId + "/lastMessage", displayText);
+        updates.put("user_chats/" + currentUserId + "/" + chatId + "/lastMessageTime", timestamp);
+        updates.put("user_chats/" + currentUserId + "/" + chatId + "/lastMessageType", "image");
+        
+        updates.put("user_chats/" + recipientId + "/" + chatId + "/recipientId", currentUserId);
+        updates.put("user_chats/" + recipientId + "/" + chatId + "/lastMessage", displayText);
+        updates.put("user_chats/" + recipientId + "/" + chatId + "/lastMessageTime", timestamp);
+        updates.put("user_chats/" + recipientId + "/" + chatId + "/lastMessageType", "image");
+        
+        database.updateChildren(updates)
+            .addOnSuccessListener(aVoid -> {
+                Log.d(TAG, "Image message sent successfully");
+                callback.onSuccess(message);
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Failed to send image message", e);
+                callback.onError(e.getMessage());
+            });
+    }
+
+    /**
      * Listens for new messages in a chat.
      */
     public ChildEventListener listenForMessages(String chatId, MessageListener listener) {

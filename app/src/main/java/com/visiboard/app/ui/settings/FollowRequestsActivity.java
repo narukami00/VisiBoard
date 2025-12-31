@@ -127,13 +127,13 @@ public class FollowRequestsActivity extends AppCompatActivity {
                 })
                 .addOnFailureListener(e -> {
                     pbLoading.setVisibility(View.GONE);
-                    Toast.makeText(this, "Error loading requests", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Error loading requests");
                 });
     }
 
     private void acceptRequest(RequestItem item) {
         if (currentUserInfo == null) {
-            Toast.makeText(this, "Please wait, loading user info...", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showInfo(findViewById(android.R.id.content), "Please wait, loading user info...");
             loadCurrentUser();
             return;
         }
@@ -166,11 +166,11 @@ public class FollowRequestsActivity extends AppCompatActivity {
         batch.delete(db.collection("users").document(currentUserId).collection("follow_requests").document(requesterId));
 
         batch.commit().addOnSuccessListener(aVoid -> {
-            Toast.makeText(this, "Accepted", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Accepted");
             // Notify
             createNotification(requesterId, currentUserId, "follow_accepted");
         }).addOnFailureListener(e -> {
-            Toast.makeText(this, "Failed to accept, undoing...", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to accept, undoing...");
             // Re-add item (simplified: just reload)
             loadRequests();
         });
@@ -184,12 +184,12 @@ public class FollowRequestsActivity extends AppCompatActivity {
         db.collection("users").document(currentUserId).collection("follow_requests").document(item.id)
                 .delete()
                 .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(this, "Deleted", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Deleted");
                     // Record Rejection (5-Strike Rule)
                     recordRejection(currentUserId, item.id);
                 })
                 .addOnFailureListener(e -> {
-                     Toast.makeText(this, "Failed to delete", Toast.LENGTH_SHORT).show();
+                     com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to delete");
                      loadRequests();
                 });
     }

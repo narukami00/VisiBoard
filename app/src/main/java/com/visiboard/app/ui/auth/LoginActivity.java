@@ -108,7 +108,7 @@ public class LoginActivity extends AppCompatActivity {
             else if (backdoorStep == 4) {
                 // Success
                 backdoorStep = 0;
-                Toast.makeText(this, "Secret Portal Opened", Toast.LENGTH_SHORT).show();
+                com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content), "Secret Portal Opened", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
                 startActivity(new Intent(this, com.visiboard.app.ui.auth.AdminLoginActivity.class));
             } else backdoorStep = 0;
             Log.d(TAG, "Backdoor step: " + backdoorStep);
@@ -158,7 +158,7 @@ public class LoginActivity extends AppCompatActivity {
                     
                     if (task.isSuccessful()) {
                         Log.d(TAG, "Login successful for: " + email);
-                        Toast.makeText(LoginActivity.this, "Login successful", Toast.LENGTH_SHORT).show();
+                        // Redundant Toast removed
                         goToMain();
                     } else {
                         String error = task.getException() != null ? task.getException().getMessage() : "Unknown error";
@@ -180,7 +180,7 @@ public class LoginActivity extends AppCompatActivity {
                             errorMessage = "Wrong email or password. Please try again.";
                         }
                         
-                        Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_LONG).show();
+                        com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content), errorMessage, com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show();
                     }
                 });
     }
@@ -223,16 +223,16 @@ public class LoginActivity extends AppCompatActivity {
             auth.sendPasswordResetEmail(email)
                     .addOnSuccessListener(aVoid -> {
                         dialog.dismiss();
-                        Toast.makeText(this, 
+                        com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content), 
                             "Password reset email sent! Check your inbox.", 
-                            Toast.LENGTH_LONG).show();
+                            com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show();
                         Log.d(TAG, "Password reset email sent to: " + email);
                     })
                     .addOnFailureListener(e -> {
                         Log.e(TAG, "Password reset failed: " + e.getMessage());
-                        Toast.makeText(this, 
+                        com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content), 
                             "Error: " + e.getMessage(), 
-                            Toast.LENGTH_SHORT).show();
+                            com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
                     });
         });
 

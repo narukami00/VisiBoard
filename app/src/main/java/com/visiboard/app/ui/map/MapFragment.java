@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
+import android.app.Activity;
 import android.location.Location;
 import android.location.Geocoder;
 import android.os.Bundle;
@@ -33,6 +34,8 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
@@ -43,6 +46,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -200,6 +204,12 @@ public class MapFragment extends Fragment {
     // Navigation State
     private boolean isNavigatingToNote = false;
     private LatLng navigationDestination;
+    private String pendingTargetNoteId;
+    
+    // Remote Drop
+    private boolean isRemotePinPlaced = false;
+    private LatLng remoteDropCoordinates;
+    private ActivityResultLauncher<Intent> createNoteLauncher;
     private GeoJsonSource navigationRouteSource;
     private View cvNavigationOverlay;
     private TextView tvNavDistance, tvNavTime;
@@ -224,6 +234,22 @@ public class MapFragment extends Fragment {
             "https://maps.geoapify.com/v1/styles/dark-matter-dark-grey/style.json?apiKey=4034ef4942f146d6b43fd4a9871cfdc3";
 
     private static final String MARKER_ICON_ID_USER_LOCATION = "MARKER_ICON_USER_LOCATION";
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        
+        // Initialize Create Note Launcher
+        createNoteLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == Activity.RESULT_OK) {
+                    resetRemoteDropState();
+                    loadSavedNotes(); // Refresh notes on map
+                }
+            }
+        );
+    }
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -294,10 +320,12 @@ public class MapFragment extends Fragment {
             performHapticClick(v);
             toggleHideMyNotes(!isHideMyNotesEnabled);
         });
+        
+        checkPermissions();
 
         fabRefresh.setOnClickListener(v -> {
             performHapticClick(v);
-            Toast.makeText(requireContext(), "Refreshing notes...", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Refreshing notes...");
             // Preserve userLocationSymbol when refreshing
             deleteAllSymbolsExceptUserLocation();
             // Ensure userLocationSymbol is recreated if it was accidentally removed
@@ -327,7 +355,7 @@ public class MapFragment extends Fragment {
                             if (userLocationSymbol != null) {
                                 mapLibreMap.animateCamera(CameraUpdateFactory.newLatLngZoom(userLocationSymbol.getLatLng(), 19.0));
                             } else {
-                                Toast.makeText(requireContext(), "Waiting for location...", Toast.LENGTH_SHORT).show();
+                                if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Waiting for location...");
                             }
                         }
                     });
@@ -361,20 +389,107 @@ public class MapFragment extends Fragment {
             }
         });
 
+        // Initialize Remote Drop Button
+        View btnRemoteDrop = view.findViewById(R.id.btnRemoteDrop);
+        addPressEffect(btnRemoteDrop);
+        
+        btnRemoteDrop.setOnClickListener(v -> {
+            performHapticClick(v);
+            if (isRemotePinPlaced) {
+                resetRemoteDropState();
+            } else {
+                android.view.animation.Animation shake = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.pin_jump);
+                v.startAnimation(shake);
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Hold and drag to place a remote note!");
+            }
+        });
+
+        btnRemoteDrop.setOnLongClickListener(v -> {
+            if (isRemotePinPlaced) return true; // Disable drag if already placed
+            
+            performHapticClick(v);
+            
+            // Create drag shadow
+            View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v) {
+                @Override
+                public void onProvideShadowMetrics(android.graphics.Point outShadowSize, android.graphics.Point outShadowTouchPoint) {
+                    outShadowSize.set(v.getWidth(), v.getHeight());
+                    outShadowTouchPoint.set(v.getWidth() / 2, v.getHeight() / 2);
+                }
+                
+                @Override
+                public void onDrawShadow(Canvas canvas) {
+                    // Draw the icon as shadow
+                    Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_remote_drop);
+                    if (icon != null) {
+                        icon.setBounds(0, 0, v.getWidth(), v.getHeight());
+                        icon.setTint(getResources().getColor(R.color.text_primary));
+                        icon.draw(canvas);
+                    }
+                }
+            };
+            
+            // Hide icon immediately (empty box effect)
+            if (v instanceof androidx.cardview.widget.CardView) {
+                androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) v;
+                if (cv.getChildCount() > 0) cv.getChildAt(0).setVisibility(View.INVISIBLE);
+            }
+            
+            v.startDragAndDrop(null, shadowBuilder, null, 0);
+            return true;
+        });
+        
+        // Handle Drop on Map
+        view.setOnDragListener((v, event) -> {
+            switch (event.getAction()) {
+                case android.view.DragEvent.ACTION_DROP:
+                    if (mapLibreMap != null) {
+                        float x = event.getX();
+                        float y = event.getY(); // Adjust for offset if needed
+                        
+                        // Check if dropped back onto the button (Cancel)
+                        View btn = view.findViewById(R.id.btnRemoteDrop);
+                        android.graphics.Rect hitRect = new android.graphics.Rect();
+                        btn.getHitRect(hitRect);
+                        if (hitRect.contains((int)x, (int)y)) {
+                             // Restore Icon Visibility (Snap Back)
+                             if (btn instanceof androidx.cardview.widget.CardView) {
+                                 androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) btn;
+                                 if (cv.getChildCount() > 0) cv.getChildAt(0).setVisibility(View.VISIBLE);
+                             }
+                             return true; // Cancelled
+                        }
+
+                        // Convert screen point to LatLng
+                        LatLng latLng = mapLibreMap.getProjection().fromScreenLocation(new android.graphics.PointF(x, y));
+                        handleRemoteDrop(latLng);
+                    }
+                    return true;
+                case android.view.DragEvent.ACTION_DRAG_STARTED:
+                    return true;
+            }
+            return false;
+        });
+
         // Floating button to add note
-        View btnAddNote = view.findViewById(R.id.btnAddNote);
+        com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton btnAddNote = view.findViewById(R.id.btnAddNote);
+        this.btnAddNoteRef = btnAddNote; // Save reference
         addPressEffect(btnAddNote);
         btnAddNote.setOnClickListener(v -> {
             performHapticClick(v);
             if (ActivityCompat.checkSelfPermission(requireContext(),
                     Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(requireContext(), "Location permission not granted", Toast.LENGTH_SHORT).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Location permission not granted");
                 return;
             }
 
-            // Launch CreateNoteActivity
-            android.content.Intent intent = new android.content.Intent(requireContext(), com.visiboard.app.ui.create.CreateNoteActivity.class);
-            startActivity(intent);
+            Intent intent = new Intent(requireContext(), com.visiboard.app.ui.create.CreateNoteActivity.class);
+            if (remoteDropCoordinates != null) {
+                 intent.putExtra("isRemote", true);
+                 intent.putExtra("lat", remoteDropCoordinates.getLatitude());
+                 intent.putExtra("lon", remoteDropCoordinates.getLongitude());
+            }
+            createNoteLauncher.launch(intent);
         });
 
 
@@ -382,6 +497,81 @@ public class MapFragment extends Fragment {
 
 
         return view;
+    }
+    
+    private com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton btnAddNoteRef;
+    private LatLng remoteDropLatLng;
+    private Symbol remoteDropSymbol;
+    
+    private void handleRemoteDrop(LatLng latLng) {
+        if (mapLibreMap == null || symbolManager == null) return;
+        
+        isRemotePinPlaced = true;
+        remoteDropCoordinates = latLng;
+
+        // Add Pin at Drop Location
+        SymbolOptions options = new SymbolOptions()
+                .withLatLng(latLng)
+                .withIconImage("remote_drop_pin")
+                .withIconSize(1.5f);
+        symbolManager.create(options);
+        
+        // Update Button UI to 'X' (Cancel)
+        View btn = getView().findViewById(R.id.btnRemoteDrop);
+        if (btn instanceof androidx.cardview.widget.CardView) {
+             androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) btn;
+             if (cv.getChildCount() > 0) {
+                 ImageView iconView = (ImageView) cv.getChildAt(0);
+                 iconView.setImageResource(R.drawable.ic_close); // Show X
+                 iconView.setVisibility(View.VISIBLE);
+             }
+        }
+
+        // Update 'Add Note' Button
+        ExtendedFloatingActionButton btnAddNote = getView().findViewById(R.id.btnAddNote);
+        btnAddNote.setText("Post Remote Note");
+        btnAddNote.setIconResource(R.drawable.ic_remote_drop);
+        btnAddNote.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.accent)));
+        
+        // Show Animation/Feedback
+        // Toast.makeText(requireContext(), "Location set! Tap 'Post Remote Note'", Toast.LENGTH_SHORT).show();
+    }
+    
+    private void resetRemoteDropState() {
+        isRemotePinPlaced = false;
+        remoteDropCoordinates = null;
+        
+        // Remove temporary pin (reload notes which clears temp symbols)
+        renderNotesFromCache(); 
+        
+        // Reset Button UI
+        View btn = getView().findViewById(R.id.btnRemoteDrop);
+        if (btn instanceof androidx.cardview.widget.CardView) {
+             androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) btn;
+             if (cv.getChildCount() > 0) {
+                 ImageView iconView = (ImageView) cv.getChildAt(0);
+                 iconView.setImageResource(R.drawable.ic_remote_drop); // Reset to Pin
+                 iconView.setVisibility(View.VISIBLE);
+                 
+                 // Animate "Return" (Pop in)
+                 ScaleAnimation scaleAnim = new ScaleAnimation(
+                     0f, 1f, 0f, 1f, 
+                     Animation.RELATIVE_TO_SELF, 0.5f, 
+                     Animation.RELATIVE_TO_SELF, 0.5f
+                 );
+                 scaleAnim.setDuration(300);
+                 scaleAnim.setInterpolator(new OvershootInterpolator());
+                 iconView.startAnimation(scaleAnim);
+             }
+        }
+        
+        // Reset Add Note Button
+        ExtendedFloatingActionButton btnAddNote = getView().findViewById(R.id.btnAddNote);
+        btnAddNote.setText("Add Note");
+        btnAddNote.setIconResource(R.drawable.ic_add);
+        btnAddNote.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.primary)));
+        
+        // Toast.makeText(requireContext(), "Remote drop cancelled", Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -432,7 +622,6 @@ public class MapFragment extends Fragment {
         this.pendingOpenWindow = openWindow;
     }
 
-    private String pendingTargetNoteId;
     private boolean pendingOpenWindow;
     private androidx.appcompat.app.AlertDialog currentNoteDialog;
     
@@ -447,7 +636,7 @@ public class MapFragment extends Fragment {
     }
 
     // Add note marker
-    private void addNoteMarker(LatLng position, String fullNote, String shortNote, long timestamp, String docId, String userId, boolean hasImage) {
+    private void addNoteMarker(LatLng position, String fullNote, String shortNote, long timestamp, String docId, String userId, boolean hasImage, boolean isVirtual) {
         if (symbolManager == null || mapLibreMap == null) return;
 
         View noteCardView;
@@ -456,6 +645,8 @@ public class MapFragment extends Fragment {
 
         if (isNewNote) {
              noteCardView = LayoutInflater.from(requireContext()).inflate(R.layout.note_card_glow_layout, null);
+             // Apply Vibrant Gradient Glow
+             applyGradientGlow(noteCardView);
         } else {
              noteCardView = LayoutInflater.from(requireContext()).inflate(R.layout.note_card_layout, null);
         }
@@ -491,6 +682,7 @@ public class MapFragment extends Fragment {
             if (docId != null) data.put("docId", docId);
             if (userId != null) data.put("userId", userId);
             data.put("hasImage", hasImage);
+            data.put("isVirtual", isVirtual);
 
             Gson gson = new Gson();
             JsonElement jsonData = gson.fromJson(data.toString(), JsonElement.class);
@@ -503,19 +695,7 @@ public class MapFragment extends Fragment {
             // Check if this is the pending target note (Share Guard Success)
             if (docId != null && docId.equals(pendingTargetNoteId)) {
                 if (pendingOpenWindow) {
-                    // Need to create a temporary symbol or refetch?
-                    // showCustomInfoWindow requires a Symbol to delete it later.
-                    // But symbolManager.create returns a symbol! 
-                    // Wait, I am ignoring the return value above. 
-                    // I must capture it.
-                    
-                    // Since I can't easily change the structure above without replacing more lines, 
-                    // I will do a quick fetch of the symbol I just created. 
-                    // Actually, symbolManager.getAnnotations() returns LongSparseArray. 
-                    // Maybe just pass null as symbol? If I pass null, delete won't work.
-                    // But the user can just close the window.
-                    
-                    showCustomInfoWindow(fullNote, timestamp, position, null, docId, userId, null, hasImage);
+                    showCustomInfoWindow(fullNote, timestamp, position, null, docId, userId, null, hasImage, isVirtual);
                 }
                 pendingTargetNoteId = null; // Mark as found
                 pendingOpenWindow = false;
@@ -535,7 +715,7 @@ public class MapFragment extends Fragment {
     }
 
     // Show info window with delete, like, and comment
-    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId, String imageBase64, boolean hasImage) {
+    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId, String imageBase64, boolean hasImage, boolean isVirtual) {
         View infoWindow = LayoutInflater.from(requireContext()).inflate(R.layout.custom_info_window, null);
 
         // Find views
@@ -553,6 +733,13 @@ public class MapFragment extends Fragment {
         ImageView btnComment = infoWindow.findViewById(R.id.btn_comment);
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
         android.widget.Button btnGoToNote = infoWindow.findViewById(R.id.btn_go_to_note);
+        ImageView ivRemoteIndicator = infoWindow.findViewById(R.id.iv_remote_indicator);
+
+        if (isVirtual) {
+            ivRemoteIndicator.setVisibility(View.VISIBLE);
+        } else {
+            ivRemoteIndicator.setVisibility(View.GONE);
+        }
         
         // Show Go button if this window was opened from saved notes
         if (pendingTargetNoteId != null && docId != null && docId.equals(pendingTargetNoteId)) {
@@ -571,7 +758,7 @@ public class MapFragment extends Fragment {
                         .zoom(18.0)
                         .build();
                     mapLibreMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 1500);
-                    Toast.makeText(requireContext(), "Navigating to note...", Toast.LENGTH_SHORT).show();
+                    if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Navigating to note...");
                     new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                         isNavigating = false;
                     }, 2000);
@@ -664,7 +851,7 @@ public class MapFragment extends Fragment {
                             else if ("9:16".equals(currentRatio)) nextRatio = "1:1";
                             params.dimensionRatio = nextRatio;
                             noteImage.setLayoutParams(params);
-                            Toast.makeText(requireContext(), "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
+                    // com.visiboard.app.utils.UiHelper.showInfo(requireView(), "Ratio: " + nextRatio);
                         });
                     } catch (Exception e) { e.printStackTrace(); }
                 } else {
@@ -956,7 +1143,7 @@ public class MapFragment extends Fragment {
                                 tvLikeCount.setText(String.valueOf(count + 1));
                             }
                             isProcessingLike[0] = false;
-                            Toast.makeText(requireContext(), "Failed to update like", Toast.LENGTH_SHORT).show();
+                            if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to update like");
                         });
                     }).addOnFailureListener(e -> isProcessingLike[0] = false);
                 });
@@ -1081,7 +1268,7 @@ public class MapFragment extends Fragment {
         actionLike.setOnClickListener(v -> {
             performHapticClick(v);
             if (currentUserId == null) {
-                Toast.makeText(requireContext(), "Please log in to like", Toast.LENGTH_SHORT).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Please log in to like");
                 quickActionsPopup.dismiss();
                 return;
             }
@@ -1104,7 +1291,7 @@ public class MapFragment extends Fragment {
                         }).addOnSuccessListener(aVoid -> {
                             animateLike(ivLike);
                             ivLike.setColorFilter(isLiked ? getResources().getColor(R.color.primary, null) : 0xFFE84545);
-                            Toast.makeText(requireContext(), isLiked ? "Unliked" : "Liked!", Toast.LENGTH_SHORT).show();
+                            if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), isLiked ? "Unliked" : "Liked!");
                         });
                     }
                 });
@@ -1210,7 +1397,7 @@ public class MapFragment extends Fragment {
                 saveNote(position, note, timestamp);
                 dialog.dismiss();
             } else {
-                Toast.makeText(requireContext(), "Note is empty!", Toast.LENGTH_SHORT).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Note is empty!");
             }
         });
 
@@ -1256,11 +1443,11 @@ public class MapFragment extends Fragment {
                                 .add(noteMap)
                                 .addOnSuccessListener(docRef -> {
                                     Log.d("MapFragment", "Note saved: " + docRef.getId());
-                                    Toast.makeText(requireContext(), "Note placed!", Toast.LENGTH_SHORT).show();
+                                    if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note placed!");
                                 })
                                 .addOnFailureListener(e -> {
                                     Log.e("MapFragment", "Error saving note: " + e.getMessage());
-                                    Toast.makeText(requireContext(), "Failed to save note", Toast.LENGTH_SHORT).show();
+                                    if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to save note");
                                 });
                     });
         } else {
@@ -1288,7 +1475,7 @@ public class MapFragment extends Fragment {
 
         // Only allow deletion if user owns the note
         if (!uid.equals(noteOwnerId)) {
-            Toast.makeText(requireContext(), "You can only delete your own notes!", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "You can only delete your own notes!");
             return;
         }
 
@@ -1297,11 +1484,11 @@ public class MapFragment extends Fragment {
                 .delete()
                 .addOnSuccessListener(aVoid -> {
                     Log.d("MapFragment", "Note deleted from Firestore");
-                    Toast.makeText(requireContext(), "Note deleted", Toast.LENGTH_SHORT).show();
+                    if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note deleted");
                 })
                 .addOnFailureListener(e -> {
                     Log.e("MapFragment", "Error deleting note: " + e.getMessage());
-                    Toast.makeText(requireContext(), "Failed to delete note", Toast.LENGTH_SHORT).show();
+                    if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to delete note");
                 });
     }
 
@@ -1320,12 +1507,11 @@ public class MapFragment extends Fragment {
 
             // Reload notes to reflect deletion
             loadSavedNotes();
-
-            Toast.makeText(requireContext(), "Note deleted", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note deleted");
             Log.d(TAG, "Note deleted locally");
         } catch (Exception e) {
             e.printStackTrace();
-            Toast.makeText(requireContext(), "Failed to delete note", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to delete note");
         }
     }
 
@@ -1478,7 +1664,7 @@ public class MapFragment extends Fragment {
                 if (blockedUserIds.contains(userId) || com.visiboard.app.utils.UserCache.getInstance().isBlocked(userId)) {
                     if (pendingTargetNoteId != null && pendingTargetNoteId.equals(doc.getId())) {
                         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> 
-                            Toast.makeText(getContext(), "You blocked this user", Toast.LENGTH_SHORT).show()
+                            { if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "You blocked this user"); }
                         );
                         pendingTargetNoteId = null; 
                     }
@@ -1530,12 +1716,13 @@ public class MapFragment extends Fragment {
 
                 String b64 = doc.getString("imageBase64");
                 boolean hasImage = b64 != null && !b64.isEmpty();
+                boolean isVirtual = doc.getBoolean("isVirtual") != null && doc.getBoolean("isVirtual");
                 LatLng pos = new LatLng(lat, lon);
 
                 // Only add marker if Heatmap is OFF
                 if (!isHeatmapEnabled) {
                     addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                            timestamp, doc.getId(), userId, hasImage);
+                            timestamp, doc.getId(), userId, hasImage, isVirtual);
                 }
             } catch (Exception e) {
                 Log.e("MapFragment", "Error processing note: " + e.getMessage());
@@ -1566,7 +1753,8 @@ public class MapFragment extends Fragment {
                                         long timestamp = jsonObject.get("timestamp").getAsLong();
                                         String userId = jsonObject.has("userId") ? jsonObject.get("userId").getAsString() : null;
                                         boolean hasImage = jsonObject.has("hasImage") && jsonObject.get("hasImage").getAsBoolean();
-                                        showCustomInfoWindow(note, timestamp, notePosition, symbol, docId, userId, null, hasImage);
+                                        boolean isVirtual = jsonObject.has("isVirtual") && jsonObject.get("isVirtual").getAsBoolean();
+                                        showCustomInfoWindow(note, timestamp, notePosition, symbol, docId, userId, null, hasImage, isVirtual);
                                         break;
                                     }
                                 }
@@ -1629,7 +1817,7 @@ public class MapFragment extends Fragment {
                     LatLng pos = new LatLng(obj.getDouble("lat"), obj.getDouble("lon"));
                     String note = obj.getString("note");
                     long timestamp = obj.has("timestamp") ? obj.getLong("timestamp") : 0L;
-                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null, false);
+                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null, false, false);
                 }
             } catch (Exception e) { e.printStackTrace(); }
     }
@@ -1718,8 +1906,9 @@ public class MapFragment extends Fragment {
                 LatLng pos = new LatLng(lat, lon);
 
                 if (!isHeatmapEnabled) {
+                    boolean isVirtual = doc.getBoolean("isVirtual") != null && doc.getBoolean("isVirtual");
                     addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                            timestamp, doc.getId(), userId, hasImage);
+                            timestamp, doc.getId(), userId, hasImage, isVirtual);
                 }
              } catch (Exception e) {
                  e.printStackTrace();
@@ -1873,7 +2062,7 @@ public class MapFragment extends Fragment {
                                 }
                                 
                                 if (blocked) {
-                                    Toast.makeText(requireContext(), "Too many follow requests. Try again later.", Toast.LENGTH_LONG).show();
+                                    if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Too many follow requests. Try again later.");
                                     btn.setText(originalText);
                                     btn.setEnabled(true);
                                 } else {
@@ -1897,7 +2086,7 @@ public class MapFragment extends Fragment {
                                                         btn.setTextColor(getResources().getColor(R.color.button_text_following, null));
                                                         
                                                         createNotification(targetUserId, currentUserId, "follow_request", null, null, (String)null);
-                                                        Toast.makeText(requireContext(), "Request sent", Toast.LENGTH_SHORT).show();
+                                                        if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Request sent");
                                                         btn.setEnabled(true);
                                                     });
                                         });
@@ -1981,8 +2170,7 @@ public class MapFragment extends Fragment {
                                 btn.setEnabled(true);
 
                                 createNotification(targetUserId, currentUserId, "follow", null, null, (String)null);
-
-                                Toast.makeText(requireContext(), "Following " + targetName, Toast.LENGTH_SHORT).show();
+                                if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Following " + targetName);
                             });
                 });
     }
@@ -2028,9 +2216,11 @@ public class MapFragment extends Fragment {
                     btn.setText("Follow");
                     btn.setBackgroundResource(R.drawable.btn_primary_selector);
                     btn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
-                    Toast.makeText(requireContext(), "Request canceled", Toast.LENGTH_SHORT).show();
+                    if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Request canceled");
                 })
-                .addOnFailureListener(e -> Toast.makeText(requireContext(), "Failed to cancel", Toast.LENGTH_SHORT).show());
+                .addOnFailureListener(e -> {
+                     if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to cancel");
+                });
     }
 
     // Unfollow user
@@ -2060,7 +2250,7 @@ public class MapFragment extends Fragment {
         btn.setBackgroundResource(R.drawable.btn_primary_selector);
         btn.setTextColor(getResources().getColor(R.color.button_text_primary, null));
 
-        Toast.makeText(requireContext(), "Unfollowed", Toast.LENGTH_SHORT).show();
+        if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Unfollowed");
     }
 
     // Show user info dialog - now navigates to full page
@@ -2151,7 +2341,7 @@ public class MapFragment extends Fragment {
 
                         batch.commit()
                             .addOnSuccessListener(aVoid -> {
-                                Toast.makeText(getContext(), "User blocked", Toast.LENGTH_SHORT).show();
+                                if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "User blocked");
                                 // Add to local blockedUserIds set for immediate filtering
                                 blockedUserIds.add(targetUserId);
                                 UserCache.getInstance().addBlockedUser(targetUserId);
@@ -2159,7 +2349,7 @@ public class MapFragment extends Fragment {
                                 loadSavedNotes();
                             })
                             .addOnFailureListener(e -> {
-                                Toast.makeText(getContext(), "Failed to block user", Toast.LENGTH_SHORT).show();
+                                if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to block user");
                             });
                     });
             });
@@ -2297,7 +2487,8 @@ public class MapFragment extends Fragment {
                         if (noteText != null && timestamp != null) {
                             Symbol targetSymbol = findSymbolAtLocation(location);
                             boolean hasImage = imageBase64 != null && !imageBase64.isEmpty();
-                            showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId, imageBase64, hasImage);
+                            boolean isVirtual = doc.getBoolean("isVirtual") != null && doc.getBoolean("isVirtual");
+                            showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId, imageBase64, hasImage, isVirtual);
                         }
                     }
                 })
@@ -2488,10 +2679,10 @@ public class MapFragment extends Fragment {
         updateFabState(fabSatellite, isSatelliteEnabled);
 
         if (isSatelliteEnabled) {
-             Toast.makeText(requireContext(), "Satellite Mode On", Toast.LENGTH_SHORT).show();
+             if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Satellite Mode On");
              // Mutual exclusivity removed: Heatmap stays ON if it was ON.
         } else {
-             Toast.makeText(requireContext(), "Satellite Mode Off", Toast.LENGTH_SHORT).show();
+             if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Satellite Mode Off");
         }
 
         // Save current camera position to restore
@@ -2514,6 +2705,15 @@ public class MapFragment extends Fragment {
     private void setupMapStyle(@NonNull Style style, boolean moveCameraToUser) {
         // Add Images
         style.addImage(MARKER_ICON_ID_USER_LOCATION, getBitmapFromVectorDrawable(R.drawable.ic_user_location));
+        
+        // Register Remote Drop Icon
+        Drawable drawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_remote_drop);
+        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.setTint(getResources().getColor(R.color.accent)); // Tint it accent color
+        drawable.draw(canvas);
+        style.addImage("remote_drop_pin", bitmap);
 
         // Re-init SymbolManager for new style
         symbolManager = new SymbolManager(mapView, mapLibreMap, style);
@@ -2543,7 +2743,8 @@ public class MapFragment extends Fragment {
                     String imageBase64 = data.has("imageBase64") ? data.getString("imageBase64") : null;
                     boolean hasImage = data.has("hasImage") && data.getBoolean("hasImage");
 
-                    showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64, hasImage);
+                    boolean isVirtual = data.optBoolean("isVirtual", false);
+                    showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64, hasImage, isVirtual);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -2634,10 +2835,10 @@ public class MapFragment extends Fragment {
         updateFabState(fabFriends, isChecked);
 
         if (isFriendsRadarEnabled) {
-            Toast.makeText(requireContext(), "Friends Radar ON", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Friends Radar ON");
             // Mutual exclusivity removed per user request: "heatmap, hide my note, friends radar all could be turned on at once"
         } else {
-            Toast.makeText(requireContext(), "Friends Radar OFF", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Friends Radar OFF");
         }
 
         updateMapVisualization();
@@ -2651,10 +2852,10 @@ public class MapFragment extends Fragment {
         updateFabState(fabHeatmap, isChecked);
 
         if (isHeatmapEnabled) {
-            Toast.makeText(requireContext(), "Heatmap ON", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Heatmap ON");
             // Mutual exclusivity removed
         } else {
-            Toast.makeText(requireContext(), "Heatmap OFF", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Heatmap OFF");
         }
 
         updateHeatmapVisibility();
@@ -2671,7 +2872,7 @@ public class MapFragment extends Fragment {
         // Update Icon specifically for this one if needed (Open/Closed Eye)
         fabHideMyNotes.setIconResource(isHideMyNotesEnabled ? R.drawable.ic_visibility_off : R.drawable.ic_visibility);
         
-        Toast.makeText(requireContext(), isHideMyNotesEnabled ? "Hidden your notes" : "Showing your notes", Toast.LENGTH_SHORT).show();
+        if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), isHideMyNotesEnabled ? "Hidden your notes" : "Showing your notes");
         
         loadSavedNotes(); // Reload
         if (isFabMenuOpen) toggleFabMenu();
@@ -2969,16 +3170,16 @@ public class MapFragment extends Fragment {
                              }
                              
                              if (nearbyUsers.isEmpty()) {
-                                 Toast.makeText(requireContext(), "No legends within 50km", Toast.LENGTH_SHORT).show();
+                                 if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "No legends within 50km");
                              }
                              adapter.setUsers(nearbyUsers);
                         } else {
-                            Toast.makeText(requireContext(), "Location not available for Nearby", Toast.LENGTH_SHORT).show();
+                            if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Location not available for Nearby");
                             adapter.setUsers(new ArrayList<>()); // Empty if no loc
                         }
                     });
                  } else {
-                     Toast.makeText(requireContext(), "Permission required for Nearby", Toast.LENGTH_SHORT).show();
+                     if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Permission required for Nearby");
                  }
             } else {
                 adapter.setUsers(users);
@@ -2986,11 +3187,11 @@ public class MapFragment extends Fragment {
             }
 
             if (users.isEmpty() && !isLocal) {
-                Toast.makeText(requireContext(), "No legends found", Toast.LENGTH_SHORT).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "No legends found");
             }
         }).addOnFailureListener(e -> {
             pbLoading.setVisibility(View.GONE);
-            Toast.makeText(requireContext(), "Failed to load legends", Toast.LENGTH_SHORT).show();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to load legends");
         });
     }
 
@@ -3072,7 +3273,7 @@ public class MapFragment extends Fragment {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == LOCATION_PERMISSION_REQUEST) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) enableUserLocation(true);
-            else Toast.makeText(requireContext(), "Permission denied.", Toast.LENGTH_SHORT).show();
+            else if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Permission denied.");
         }
     }
 
@@ -3167,7 +3368,7 @@ public class MapFragment extends Fragment {
                     Intent chooser = Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText), "Share via");
                     startActivity(chooser);
                 } else {
-                    Toast.makeText(requireContext(), "No email app found", Toast.LENGTH_SHORT).show();
+                    if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "No email app found");
                 }
             }
         };
@@ -3332,9 +3533,11 @@ public class MapFragment extends Fragment {
 
                                 db.collection("notifications").add(notification);
 
-                                Toast.makeText(requireContext(), "Note shared!", Toast.LENGTH_SHORT).show();
+                                if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note shared!");
                             })
-                            .addOnFailureListener(e -> Toast.makeText(requireContext(), "Failed to share note", Toast.LENGTH_SHORT).show());
+                            .addOnFailureListener(e -> {
+                                if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to share note");
+                            });
                 });
     }
 
@@ -3359,7 +3562,7 @@ public class MapFragment extends Fragment {
                 sendMessage(recipient.getUserId(), messageText, cbAnonymous.isChecked());
                 dialog.dismiss();
             } else {
-                Toast.makeText(requireContext(), "Please enter a message", Toast.LENGTH_SHORT).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Please enter a message");
             }
         });
         btnCancel.setOnClickListener(v -> dialog.dismiss());
@@ -3384,7 +3587,7 @@ public class MapFragment extends Fragment {
 
             db.collection("messages").add(message).addOnSuccessListener(docRef -> {
                 createMessageNotification(toUserId, fromUserId, anonymous ? "Anonymous" : fromUserName, anonymous ? null : fromUserProfilePic, messageText, docRef.getId());
-                Toast.makeText(requireContext(), "Message sent!", Toast.LENGTH_SHORT).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Message sent!");
             });
         });
     }
@@ -3434,7 +3637,7 @@ public class MapFragment extends Fragment {
                         lastRouteFetchLocation = location;
                         fetchRoute(new LatLng(location.getLatitude(), location.getLongitude()), destination);
                     } else {
-                        Toast.makeText(requireContext(), "Waiting for location...", Toast.LENGTH_SHORT).show();
+                        if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), "Waiting for location...");
                     }
                 });
             }
@@ -3480,7 +3683,7 @@ public class MapFragment extends Fragment {
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() ->
-                            Toast.makeText(requireContext(), "Failed to fetch route", Toast.LENGTH_SHORT).show()
+                            com.visiboard.app.utils.UiHelper.showError(getActivity().findViewById(android.R.id.content), "Failed to fetch route")
                     );
                 }
             }
@@ -3559,7 +3762,7 @@ public class MapFragment extends Fragment {
             }});
 
             if (distToDest < 15) { // 15 meters arrival threshold
-                Toast.makeText(requireContext(), "You have arrived!", Toast.LENGTH_LONG).show();
+                if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "You have arrived!");
                 stopNavigation();
                 return;
             }
@@ -3598,7 +3801,7 @@ public class MapFragment extends Fragment {
             // Unsave
             db.collection("users").document(currentUserId).collection("saved_notes").document(noteId).delete()
                     .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(getContext(), "Note removed from saved", Toast.LENGTH_SHORT).show();
+                        if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note removed from saved");
                     });
         } else {
             // Save
@@ -3618,7 +3821,7 @@ public class MapFragment extends Fragment {
 
             db.collection("users").document(currentUserId).collection("saved_notes").document(noteId).set(savedData)
                     .addOnSuccessListener(aVoid -> {
-                        Toast.makeText(getContext(), "Note saved", Toast.LENGTH_SHORT).show();
+                        if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note saved");
                     });
         }
     }
@@ -3634,7 +3837,9 @@ public class MapFragment extends Fragment {
                     boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
                     boolean newHiddenState = !isHidden;
                     db.collection("notes").document(noteId).update("isHidden", newHiddenState)
-                        .addOnSuccessListener(a -> Toast.makeText(getContext(), newHiddenState ? "Note Hidden from Map" : "Note Visible on Map", Toast.LENGTH_SHORT).show());
+                        .addOnSuccessListener(a -> {
+                            if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), newHiddenState ? "Note Hidden from Map" : "Note Visible on Map");
+                        });
                 }
              });
         } else {
@@ -3645,7 +3850,7 @@ public class MapFragment extends Fragment {
 
              db.collection("users").document(currentUserId).collection("hidden_notes_others").document(noteId).set(hiddenData)
                  .addOnSuccessListener(aVoid -> {
-                     Toast.makeText(getContext(), "Note hidden from your view", Toast.LENGTH_SHORT).show();
+                     if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note hidden from your view");
                      // Preserve userLocationSymbol when hiding notes
                      deleteAllSymbolsExceptUserLocation();
                      loadSavedNotes();
@@ -3674,9 +3879,77 @@ public class MapFragment extends Fragment {
         if (dialog != null) dialog.dismiss();
     }
 
+    private void checkPermissions() {
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST);
+        } else {
+            enableUserLocation(true);
+        }
+    }
+
     private void handleToggleComments(String noteId, boolean currentlyDisabled) {
          db.collection("notes").document(noteId)
              .update("commentsDisabled", !currentlyDisabled)
-             .addOnSuccessListener(a -> Toast.makeText(getContext(), !currentlyDisabled ? "Comments Turned Off" : "Comments Turned On", Toast.LENGTH_SHORT).show());
+             .addOnSuccessListener(a -> {
+                 if (getView() != null) com.visiboard.app.utils.UiHelper.showInfo(getView(), !currentlyDisabled ? "Comments Turned Off" : "Comments Turned On");
+             });
+    }
+    
+    // Helper for Gradient Glow (Simulated Blur)
+    private void applyGradientGlow(View view) {
+        if (view == null) return;
+        
+        // Define clean vibrant gradient colors
+        int[] colors = {
+            0xFF8A2BE2, // Blue Violet
+            0xFF00FFFF, // Cyan
+            0xFFFF1493  // Deep Pink
+        };
+        
+        // Layer 1: Outer Faint Glow (Most Transparent, Full Size)
+        android.graphics.drawable.GradientDrawable l1 = new android.graphics.drawable.GradientDrawable();
+        l1.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        l1.setCornerRadius(dpToPx(18));
+        l1.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TL_BR);
+        l1.setColors(colors);
+        l1.setAlpha(40); // Very faint
+        
+        // Layer 2: Middle Glow (Medium Transparent, Slightly Smaller)
+        android.graphics.drawable.GradientDrawable l2 = new android.graphics.drawable.GradientDrawable();
+        l2.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        l2.setCornerRadius(dpToPx(18));
+        l2.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TL_BR);
+        l2.setColors(colors);
+        l2.setAlpha(100); 
+        
+        // Layer 3: Inner Core (Solid, Smallest)
+        android.graphics.drawable.GradientDrawable l3 = new android.graphics.drawable.GradientDrawable();
+        l3.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        l3.setCornerRadius(dpToPx(18));
+        l3.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TL_BR);
+        l3.setColors(colors);
+        l3.setAlpha(255); // Solid
+        
+        // Combine into LayerDrawable
+        android.graphics.drawable.LayerDrawable layerDrawable = new android.graphics.drawable.LayerDrawable(
+            new android.graphics.drawable.Drawable[]{l1, l2, l3}
+        );
+        
+        // Settings insets to simulate "Fading Out"
+        int step = dpToPx(1); // Thinner steps for 4dp border
+        layerDrawable.setLayerInset(0, 0, 0, 0, 0);       // Outer
+        layerDrawable.setLayerInset(1, step, step, step, step);   // Middle
+        layerDrawable.setLayerInset(2, step*3, step*3, step*3, step*3); // Inner (3dp inset)
+        
+        view.setBackground(layerDrawable);
+        
+        // Enforce padding to control border thickness (4dp)
+        int borderThickness = dpToPx(4);
+        view.setPadding(borderThickness, borderThickness, borderThickness, borderThickness);
+    }
+    
+    private int dpToPx(int dp) {
+        return (int) (dp * getResources().getDisplayMetrics().density);
     }
 }

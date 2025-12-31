@@ -111,6 +111,7 @@ public class HiddenNotesActivity extends AppCompatActivity {
                 .addOnFailureListener(e -> {
                     progressLoading.setVisibility(View.GONE);
                     Toast.makeText(this, "Failed to load hidden notes", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to load hidden notes");
                 });
     }
 
@@ -118,7 +119,7 @@ public class HiddenNotesActivity extends AppCompatActivity {
         db.collection("notes").document(note.getId())
                 .update("isHidden", false)
                 .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(this, "Note unhidden", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note unhidden");
                     // Remove from list
                     hiddenNotes.remove(position);
                     adapter.notifyItemRemoved(position);
@@ -129,7 +130,7 @@ public class HiddenNotesActivity extends AppCompatActivity {
                     }
                 })
                 .addOnFailureListener(e -> {
-                    Toast.makeText(this, "Failed to unhide note", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to unhide note");
                 });
     }
 

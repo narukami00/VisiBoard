@@ -38,6 +38,9 @@ public class CreateNoteActivity extends AppCompatActivity {
 
     private String editNoteId;
     private boolean isImageRemoved = false;
+    private boolean isRemote = false;
+    private double remoteLat;
+    private double remoteLon;
 
     private EditText etNoteContent;
     private CardView cardImagePreview;
@@ -109,6 +112,18 @@ public class CreateNoteActivity extends AppCompatActivity {
         String[] items = new String[]{"Public", "Followers", "Private"};
         android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items);
         spinnerVisibility.setAdapter(adapter);
+
+        // Check for Remote Mode
+        if (getIntent().getBooleanExtra("isRemote", false)) {
+            isRemote = true;
+            remoteLat = getIntent().getDoubleExtra("lat", 0.0);
+            remoteLon = getIntent().getDoubleExtra("lon", 0.0);
+            
+            android.widget.TextView tvTitle = findViewById(R.id.tv_create_note_title); 
+            if (tvTitle != null) tvTitle.setText("Post Remote Note");
+            // btnPost.setText("Post Remote Note"); // Reverted per user request
+            // Toast.makeText(this, "Creating Remote Note", Toast.LENGTH_SHORT).show();
+        }
 
         // Check for passed image URI (from Camera)
         if (getIntent().hasExtra("image_uri")) {
@@ -227,12 +242,12 @@ public class CreateNoteActivity extends AppCompatActivity {
         boolean isRotated = currentRotation % 360 != 0;
         
         if (content.isEmpty() && selectedImageUri == null && !hasExistingImage) {
-            Toast.makeText(this, "Please add some text or an image", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showWarning(findViewById(android.R.id.content), "Please add some text or an image");
             return;
         }
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Location permission required to post note", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showWarning(findViewById(android.R.id.content), "Location permission required to post note");
             return;
         }
 
@@ -253,18 +268,32 @@ public class CreateNoteActivity extends AppCompatActivity {
             }
         } else {
             // Create Flow
-            fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
-                if (location != null) {
-                    if (selectedImageUri != null) {
-                        processImageAndSaveNote(content, location);
-                    } else {
-                        saveNoteToFirestore(content, location, null, 0, 0);
-                    }
+            if (isRemote) {
+                // Use remote location
+                android.location.Location location = new android.location.Location("remote");
+                location.setLatitude(remoteLat);
+                location.setLongitude(remoteLon);
+                
+                if (selectedImageUri != null) {
+                    processImageAndSaveNote(content, location);
                 } else {
-                    setLoading(false);
-                    Toast.makeText(this, "Could not get current location", Toast.LENGTH_SHORT).show();
+                    saveNoteToFirestore(content, location, null, 0, 0);
                 }
-            });
+            } else {
+                // Use GPS
+                fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                    if (location != null) {
+                        if (selectedImageUri != null) {
+                            processImageAndSaveNote(content, location);
+                        } else {
+                            saveNoteToFirestore(content, location, null, 0, 0);
+                        }
+                    } else {
+                        setLoading(false);
+                        com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Could not get current location");
+                    }
+                });
+            }
         }
     }
 
@@ -284,7 +313,7 @@ public class CreateNoteActivity extends AppCompatActivity {
                 if (bitmap == null) {
                     runOnUiThread(() -> {
                         setLoading(false);
-                        Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show();
+                        com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to load image");
                     });
                     return;
                 }
@@ -317,7 +346,7 @@ public class CreateNoteActivity extends AppCompatActivity {
                 if (base64Image.length() > 1000000) {
                      runOnUiThread(() -> {
                         setLoading(false);
-                        Toast.makeText(this, "Image too large. Please choose a smaller image.", Toast.LENGTH_SHORT).show();
+                        com.visiboard.app.utils.UiHelper.showWarning(findViewById(android.R.id.content), "Image too large. Please choose a smaller image.");
                     });
                     return;
                 }
@@ -328,7 +357,7 @@ public class CreateNoteActivity extends AppCompatActivity {
                 e.printStackTrace();
                 runOnUiThread(() -> {
                     setLoading(false);
-                    Toast.makeText(this, "Error processing image: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Error processing image: " + e.getMessage());
                 });
             }
         }).start();
@@ -365,12 +394,12 @@ public class CreateNoteActivity extends AppCompatActivity {
 
             db.collection("notes").document(editNoteId).update(updates)
                 .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(this, "Note updated!", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note updated!");
                     finish();
                 })
                 .addOnFailureListener(e -> {
                     setLoading(false);
-                    Toast.makeText(this, "Failed to update note: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to update note: " + e.getMessage());
                 });
                 
         } else {
@@ -403,6 +432,10 @@ public class CreateNoteActivity extends AppCompatActivity {
                 noteMap.put("visibility", spinnerVisibility.getSelectedItem().toString().toLowerCase());
                 noteMap.put("allowComments", true); // Default: comments enabled
                 
+                if (isRemote) {
+                    noteMap.put("isVirtual", true);
+                }
+                
                 if (imageBase64 != null) {
                     noteMap.put("imageBase64", imageBase64);
                     noteMap.put("imageWidth", width);
@@ -411,16 +444,17 @@ public class CreateNoteActivity extends AppCompatActivity {
     
                 db.collection("notes").add(noteMap)
                         .addOnSuccessListener(docRef -> {
-                            Toast.makeText(this, "Note posted!", Toast.LENGTH_SHORT).show();
+                            com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note posted successfully!");
+                            setResult(RESULT_OK);
                             finish();
                         })
                         .addOnFailureListener(e -> {
                             setLoading(false);
-                            Toast.makeText(this, "Failed to post note: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to post note: " + e.getMessage());
                         });
             }).addOnFailureListener(e -> {
                 setLoading(false);
-                Toast.makeText(this, "Failed to fetch user profile: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to fetch user profile: " + e.getMessage());
             });
         }
     }
@@ -470,7 +504,7 @@ public class CreateNoteActivity extends AppCompatActivity {
                 }
             })
             .addOnFailureListener(e -> {
-                Toast.makeText(this, "Failed to load note details", Toast.LENGTH_SHORT).show();
+                com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to load note details");
             });
     }
     

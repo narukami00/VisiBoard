@@ -458,7 +458,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                                  android.content.ClipboardManager clipboard = (android.content.ClipboardManager) requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
                                  android.content.ClipData clip = android.content.ClipData.newPlainText("Scanned Text", block.getText());
                                  clipboard.setPrimaryClip(clip);
-                                 Toast.makeText(requireContext(), "Text copied!", Toast.LENGTH_SHORT).show();
+                                 com.google.android.material.snackbar.Snackbar.make(arOverlay, "Text copied!", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
                                  v.performClick();
                                  return true;
                              }
@@ -486,11 +486,11 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private void toggleFlashlight() {
         requireActivity().runOnUiThread(() -> {
             if (camera == null) {
-                 Toast.makeText(requireContext(), "Camera not ready", Toast.LENGTH_SHORT).show();
+                 com.google.android.material.snackbar.Snackbar.make(arOverlay, "Camera not ready", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
                  return;
             }
             if (!camera.getCameraInfo().hasFlashUnit()) {
-                Toast.makeText(requireContext(), "Flash not available", Toast.LENGTH_SHORT).show();
+                com.google.android.material.snackbar.Snackbar.make(arOverlay, "Flash not available", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
                 return;
             }
             
@@ -502,7 +502,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
             ivMenuFlash.setImageResource(isFlashEnabled ? R.drawable.ic_flash_on : R.drawable.ic_flash_off);
             ivMenuFlash.setColorFilter(isFlashEnabled ? ContextCompat.getColor(requireContext(), R.color.primary) : ContextCompat.getColor(requireContext(), R.color.text_light));
             
-            Toast.makeText(requireContext(), isFlashEnabled ? "Flash On" : "Flash Off", Toast.LENGTH_SHORT).show();
+            // Visual feedback is sufficient (icon change)
         });
     }
 
@@ -520,7 +520,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                 if (tvMenuSteps != null) tvMenuSteps.setText(isStepsVisible ? "Hide Steps" : "Show Steps");
                 if (ivMenuSteps != null) ivMenuSteps.setColorFilter(isStepsVisible ? ContextCompat.getColor(requireContext(), R.color.primary) : ContextCompat.getColor(requireContext(), R.color.text_light));
             }
-            Toast.makeText(requireContext(), isStepsVisible ? "Steps Visible" : "Steps Hidden", Toast.LENGTH_SHORT).show();
+            // Visual feedback is sufficient (panel appears/disappears)
         });
     }
 
@@ -534,7 +534,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         }
         
         ivMenuQr.setColorFilter(isQrEnabled ? ContextCompat.getColor(requireContext(), R.color.primary) : ContextCompat.getColor(requireContext(), R.color.text_light));
-        Toast.makeText(requireContext(), isQrEnabled ? "QR Scanner On" : "QR Scanner Off", Toast.LENGTH_SHORT).show();
+        // Visual feedback is sufficient (overlay/icon change)
         
         // Auto-hide AR notes when entering QR mode
         if (isQrEnabled && isArVisible) {
@@ -552,7 +552,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         }
 
         ivMenuOcr.setColorFilter(isOcrEnabled ? ContextCompat.getColor(requireContext(), R.color.primary) : ContextCompat.getColor(requireContext(), R.color.text_light));
-        Toast.makeText(requireContext(), isOcrEnabled ? "Text Scanner On - Take a photo to extract text" : "Text Scanner Off", Toast.LENGTH_SHORT).show();
+        // Hint shown in status indicator below, no toast needed unless error
         
          // Auto-hide AR notes when entering OCR mode and show hint
         if (isOcrEnabled && isArVisible) {
@@ -608,7 +608,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
             }
             
             tvMenuFilter.setText("Filter: " + modeName);
-            Toast.makeText(requireContext(), "Filter: " + modeName, Toast.LENGTH_SHORT).show();
+            // Toast removed - visual feedback from screen tint is sufficient
             ivMenuFilter.setColorFilter(filterMode > 0 ? ContextCompat.getColor(requireContext(), R.color.primary) : ContextCompat.getColor(requireContext(), R.color.text_light));
         });
     }
@@ -740,7 +740,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
             }
             saveBitmapAndNavigate(finalBitmap);
         } else {
-            Toast.makeText(requireContext(), "Failed to capture camera view", Toast.LENGTH_SHORT).show();
+            com.google.android.material.snackbar.Snackbar.make(arOverlay, "Failed to capture camera view", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
         }
     }
 

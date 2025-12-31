@@ -13,6 +13,7 @@ public class ChatMessage {
     private String voiceBase64; // Base64 encoded audio for voice messages
     private int voiceDuration; // Duration in seconds for voice messages
     private boolean read;
+    private String imageUrl; // URL of the image from ImgBB
 
     // Required empty constructor for Firebase
     public ChatMessage() {}
@@ -33,6 +34,16 @@ public class ChatMessage {
         this.timestamp = timestamp;
         this.type = "voice";
         this.text = "🎤 Voice message";
+        this.read = false;
+    }
+
+    // Image message constructor
+    public ChatMessage(String senderId, String imageUrl, long timestamp, boolean isImage) {
+        this.senderId = senderId;
+        this.imageUrl = imageUrl;
+        this.timestamp = timestamp;
+        this.type = "image";
+        this.text = "📷 Image";
         this.read = false;
     }
 
@@ -64,6 +75,14 @@ public class ChatMessage {
     public boolean isVoice() {
         return "voice".equals(type);
     }
+    
+    public boolean isImage() {
+        return "image".equals(type);
+    }
+
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+
     // Reply fields
     private String replyToId;
     private String replyToName;

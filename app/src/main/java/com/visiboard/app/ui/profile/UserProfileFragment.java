@@ -33,6 +33,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 import com.visiboard.app.R;
 import com.visiboard.app.data.NearbyNote;
+import com.visiboard.app.utils.UiHelper;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -134,7 +135,7 @@ public class UserProfileFragment extends Fragment {
         if (targetUserId != null) {
             loadUserData();
         } else {
-            Toast.makeText(requireContext(), "User not found", Toast.LENGTH_SHORT).show();
+            UiHelper.showError(requireView(), "User not found");
             navigateBack();
         }
     }
@@ -297,7 +298,7 @@ public class UserProfileFragment extends Fragment {
             })
             .addOnFailureListener(e -> {
                 Log.e(TAG, "Error loading user", e);
-                Toast.makeText(requireContext(), "Failed to load profile", Toast.LENGTH_SHORT).show();
+                UiHelper.showError(requireView(), "Failed to load profile");
                 hideLoading();
             });
     }
@@ -590,11 +591,11 @@ public class UserProfileFragment extends Fragment {
                             isRequested = true;
                             updateFollowButton();
                             createNotification("follow_request");
-                            Toast.makeText(requireContext(), "Request sent", Toast.LENGTH_SHORT).show();
+                            UiHelper.showSuccess(requireView(), "Request sent");
                         })
                         .addOnFailureListener(e -> {
                             btnFollow.setEnabled(true);
-                            Toast.makeText(requireContext(), "Failed to send request", Toast.LENGTH_SHORT).show();
+                            UiHelper.showError(requireView(), "Failed to send request");
                         });
                 });
         } else {
@@ -651,7 +652,7 @@ public class UserProfileFragment extends Fragment {
                         } catch (Exception e) {}
                         
                         createNotification("follow");
-                        Toast.makeText(requireContext(), "Following " + targetName, Toast.LENGTH_SHORT).show();
+                        UiHelper.showSuccess(requireView(), "Following " + targetName);
                     });
             });
     }
@@ -692,7 +693,7 @@ public class UserProfileFragment extends Fragment {
             tvFollowersCount.setText(String.valueOf(Math.max(0, count - 1)));
         } catch (Exception e) {}
         
-        Toast.makeText(requireContext(), "Unfollowed", Toast.LENGTH_SHORT).show();
+        UiHelper.showSuccess(requireView(), "Unfollowed");
         
         // Reload to update privacy-based visibility
         if (isPrivateAccount) {
@@ -709,11 +710,11 @@ public class UserProfileFragment extends Fragment {
             .addOnSuccessListener(aVoid -> {
                 isRequested = false;
                 updateFollowButton();
-                Toast.makeText(requireContext(), "Request cancelled", Toast.LENGTH_SHORT).show();
+                UiHelper.showSuccess(requireView(), "Request cancelled");
             })
             .addOnFailureListener(e -> {
                 btnFollow.setEnabled(true);
-                Toast.makeText(requireContext(), "Failed to cancel", Toast.LENGTH_SHORT).show();
+                UiHelper.showError(requireView(), "Failed to cancel");
             });
     }
 
@@ -1207,16 +1208,13 @@ public class UserProfileFragment extends Fragment {
             
             linkBtn.addView(tv);
             
+            String linkUrl = url; // Capture for lambda
             linkBtn.setOnClickListener(v -> {
                 try {
-                    String finalUrl = url;
-                    if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
-                        finalUrl = "https://" + finalUrl;
-                    }
-                    android.content.Intent browserIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(finalUrl));
+                    android.content.Intent browserIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(linkUrl));
                     startActivity(browserIntent);
                 } catch (Exception e) {
-                    Toast.makeText(requireContext(), "Invalid URL", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(getView(), "Could not open link");
                 }
             });
             

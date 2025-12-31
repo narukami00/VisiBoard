@@ -96,10 +96,10 @@ public class ReportBottomSheetFragment extends BottomSheetDialogFragment {
         String reporterId = FirebaseAuth.getInstance().getUid();
 
         if (reporterId == null) {
-            Toast.makeText(getContext(), "You must be logged in to report.", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showError(getDialog().getWindow().getDecorView(), "You must be logged in to report.");
+            dismiss();
             return;
         }
-
         Report report = new Report(reporterId, targetId, targetDetails, type, category, description, lat, lng);
 
         btnSubmit.setEnabled(false);
@@ -107,11 +107,13 @@ public class ReportBottomSheetFragment extends BottomSheetDialogFragment {
 
         repository.submitReport(report)
                 .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(getContext(), "Report submitted. Thank you.", Toast.LENGTH_SHORT).show();
+                    if (getContext() != null)
+                        com.visiboard.app.utils.UiHelper.showSuccess(getActivity().findViewById(android.R.id.content), "Report submitted. Thank you.");
                     dismiss();
                 })
                 .addOnFailureListener(e -> {
-                    Toast.makeText(getContext(), "Failed to submit report.", Toast.LENGTH_SHORT).show();
+                    if (getContext() != null)
+                        com.visiboard.app.utils.UiHelper.showError(getActivity().findViewById(android.R.id.content), "Failed to submit report.");
                     btnSubmit.setEnabled(true);
                     btnSubmit.setText("Submit Report");
                 });

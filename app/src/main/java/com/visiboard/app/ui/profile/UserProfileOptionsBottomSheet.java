@@ -145,10 +145,11 @@ public class UserProfileOptionsBottomSheet extends BottomSheetDialogFragment {
 
                         batch.commit()
                             .addOnSuccessListener(aVoid -> {
-                                Toast.makeText(getContext(), "User blocked", Toast.LENGTH_SHORT).show();
-                                // Navigate back
-                                if (getActivity() != null) {
-                                    getActivity().onBackPressed();
+                                if (getContext() != null) {
+                                    com.visiboard.app.utils.UiHelper.showSuccess(getActivity().findViewById(android.R.id.content), "User blocked");
+                                    // Close profile page too? for now just dismiss sheet
+                                    dismiss();
+                                    // Maybe notify parent fragment to close
                                 }
                             })
                             .addOnFailureListener(e -> {

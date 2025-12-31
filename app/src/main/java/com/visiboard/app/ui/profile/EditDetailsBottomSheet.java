@@ -85,15 +85,15 @@ public class EditDetailsBottomSheet extends BottomSheetDialogFragment {
         db.collection("users").document(auth.getCurrentUser().getUid())
                 .update(updates)
                 .addOnSuccessListener(aVoid -> {
+                    Bundle result = new Bundle();
+                    result.putBoolean("updated", true);
+                    getParentFragmentManager().setFragmentResult("details_updated", result);
                     dismiss();
-                    if (getParentFragmentManager() != null) {
-                        getParentFragmentManager().setFragmentResult("details_updated", new Bundle());
-                    }
                 })
                 .addOnFailureListener(e -> {
                     btnSave.setEnabled(true);
                     btnSave.setText("Save Details");
-                    Toast.makeText(getContext(), "Failed to save: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(getDialog().getWindow().getDecorView(), "Failed to save: " + e.getMessage());
                 });
     }
 }

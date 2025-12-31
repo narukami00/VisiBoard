@@ -92,12 +92,10 @@ public class SelectFavouritesBottomSheet extends BottomSheetDialogFragment {
                     adapter.notifyDataSetChanged();
                 })
                 .addOnFailureListener(e -> {
-                     if (getContext() != null) 
-                         Toast.makeText(getContext(), "Error loading notes", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(getActivity().findViewById(android.R.id.content), "Error loading notes");
                 });
         }).addOnFailureListener(e -> {
-             if (getContext() != null)
-                 Toast.makeText(getContext(), "Error user data", Toast.LENGTH_SHORT).show();
+             com.visiboard.app.utils.UiHelper.showError(getActivity().findViewById(android.R.id.content), "Error user data");
         });
     }
     
@@ -107,13 +105,13 @@ public class SelectFavouritesBottomSheet extends BottomSheetDialogFragment {
         
         db.collection("users").document(auth.getCurrentUser().getUid())
             .update("favouriteNotes", list)
-            .addOnSuccessListener(a -> {
+            .addOnSuccessListener(aVoid -> {
                 Bundle result = new Bundle();
                 result.putBoolean("refresh_favs", true);
                 getParentFragmentManager().setFragmentResult("fav_notes_updated", result);
                 dismiss();
             })
-            .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to save", Toast.LENGTH_SHORT).show());
+            .addOnFailureListener(e -> com.visiboard.app.utils.UiHelper.showError(getActivity().findViewById(android.R.id.content), "Failed to save"));
     }
 
     private class SelectorAdapter extends RecyclerView.Adapter<SelectorAdapter.Holder> {
@@ -158,7 +156,7 @@ public class SelectFavouritesBottomSheet extends BottomSheetDialogFragment {
                     selectedIds.remove(id);
                 } else {
                     if (selectedIds.size() >= 3) {
-                        Toast.makeText(getContext(), "Max 3 notes allowed", Toast.LENGTH_SHORT).show();
+                        com.visiboard.app.utils.UiHelper.showWarning(getActivity().findViewById(android.R.id.content), "Max 3 notes allowed");
                         return;
                     }
                     selectedIds.add(id);

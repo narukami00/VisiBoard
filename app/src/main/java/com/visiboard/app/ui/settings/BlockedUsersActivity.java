@@ -25,6 +25,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.visiboard.app.R;
+import com.visiboard.app.utils.UserCache;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -105,7 +106,7 @@ public class BlockedUsersActivity extends AppCompatActivity {
                 })
                 .addOnFailureListener(e -> {
                     pbLoading.setVisibility(View.GONE);
-                    Toast.makeText(this, "Failed to load blocked users", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to load blocked users");
                 });
     }
 
@@ -121,10 +122,11 @@ public class BlockedUsersActivity extends AppCompatActivity {
                     if (blockedUsers.isEmpty()) {
                         layoutEmptyState.setVisibility(View.VISIBLE);
                     }
-                    Toast.makeText(this, "Unblocked " + (user.name != null ? user.name : "user"), Toast.LENGTH_SHORT).show();
+                    UserCache.getInstance().removeBlockedUser(user.userId);
+                    com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Unblocked " + (user.name != null ? user.name : "user"));
                 })
                 .addOnFailureListener(e -> {
-                    Toast.makeText(this, "Failed to unblock", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to unblock");
                 });
     }
 

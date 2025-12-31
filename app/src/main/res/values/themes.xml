@@ -37,5 +37,14 @@
         <item name="buttonBarPositiveButtonStyle">@style/Widget.Material3.Button</item>
         <item name="buttonBarNegativeButtonStyle">@style/Widget.Material3.Button.TextButton</item>
     </style>
+
+    <!-- Fullscreen theme for image viewer -->
+    <style name="Theme.VisiBoard.FullScreen" parent="Theme.VisiBoard">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+    </style>
 </resources>
 

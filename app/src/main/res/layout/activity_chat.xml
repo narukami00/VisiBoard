@@ -88,7 +88,8 @@
             android:layout_weight="1"
             android:clipToPadding="false"
             android:padding="8dp"
-            android:scrollbars="vertical" />
+            android:scrollbars="vertical"
+            android:background="@drawable/chat_bg" />
 
         <!-- Empty State -->
         <LinearLayout
@@ -203,6 +204,16 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
+
+            <ImageButton
+                android:id="@+id/btn_attach"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:src="@drawable/ic_attach_file"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/text_secondary"
+                android:contentDescription="Attach Image"
+                android:layout_marginEnd="4dp"/>
 
             <ImageButton
                 android:id="@+id/btn_voice"

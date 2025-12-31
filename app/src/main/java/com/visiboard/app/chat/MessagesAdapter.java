@@ -37,6 +37,8 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     private static final int TYPE_TEXT_RECEIVED = 2;
     private static final int TYPE_VOICE_SENT = 3;
     private static final int TYPE_VOICE_RECEIVED = 4;
+    private static final int TYPE_IMAGE_SENT = 5;
+    private static final int TYPE_IMAGE_RECEIVED = 6;
 
     private final List<ChatMessage> messages = new ArrayList<>();
     private final String currentUserId;
@@ -58,10 +60,11 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     public int getItemViewType(int position) {
         ChatMessage message = messages.get(position);
         boolean isSent = message.getSenderId().equals(currentUserId);
-        boolean isVoice = message.isVoice();
         
-        if (isVoice) {
+        if (message.isVoice()) {
             return isSent ? TYPE_VOICE_SENT : TYPE_VOICE_RECEIVED;
+        } else if (message.isImage()) {
+            return isSent ? TYPE_IMAGE_SENT : TYPE_IMAGE_RECEIVED;
         } else {
             return isSent ? TYPE_TEXT_SENT : TYPE_TEXT_RECEIVED;
         }
@@ -85,6 +88,12 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             case TYPE_VOICE_RECEIVED:
                 return new VoiceMessageViewHolder(
                     inflater.inflate(R.layout.item_voice_received, parent, false));
+            case TYPE_IMAGE_SENT:
+                return new ImageMessageViewHolder(
+                    inflater.inflate(R.layout.item_image_sent, parent, false));
+            case TYPE_IMAGE_RECEIVED:
+                return new ImageMessageViewHolder(
+                    inflater.inflate(R.layout.item_image_received, parent, false));
             default:
                 return new TextMessageViewHolder(
                     inflater.inflate(R.layout.item_message_sent, parent, false));
@@ -99,6 +108,8 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             ((TextMessageViewHolder) holder).bind(message);
         } else if (holder instanceof VoiceMessageViewHolder) {
             ((VoiceMessageViewHolder) holder).bind(message, position);
+        } else if (holder instanceof ImageMessageViewHolder) {
+            ((ImageMessageViewHolder) holder).bind(message);
         }
     }
 
@@ -318,6 +329,42 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                         }
                     });
                 }
+            });
+        }
+    }
+
+    // --- Image Message ViewHolder ---
+    class ImageMessageViewHolder extends RecyclerView.ViewHolder {
+        private final ImageView ivImage;
+        private final TextView tvTime;
+
+        ImageMessageViewHolder(@NonNull View itemView) {
+            super(itemView);
+            ivImage = itemView.findViewById(R.id.iv_image);
+            tvTime = itemView.findViewById(R.id.tv_time);
+        }
+
+        void bind(ChatMessage message) {
+            tvTime.setText(formatMessageTime(message.getTimestamp()));
+            
+            // Load image using existing ImageCache or Glide (implied usage in ImageCache)
+            // But ImageCache expects a user directory structure for "base64" usually, 
+            // Here we have a URL. We should use Glide directly or check if ImageCache supports URLs.
+            // Looking at previous files, ImageCache seems to handle "chat_userID" and base64.
+            // Since we added Glide to build.gradle, we can use it here.
+            
+            com.bumptech.glide.Glide.with(itemView.getContext())
+                .load(message.getImageUrl())
+                .placeholder(R.drawable.placeholder_image) // Expecting a placeholder
+                .error(R.drawable.ic_error_outline)  // Expecting an error drawable
+                .into(ivImage);
+                
+            ivImage.setOnClickListener(v -> {
+                android.content.Intent intent = new android.content.Intent(itemView.getContext(), 
+                    com.visiboard.app.ui.common.ImageViewerActivity.class);
+                intent.putExtra(com.visiboard.app.ui.common.ImageViewerActivity.EXTRA_IMAGE_URL, 
+                    message.getImageUrl());
+                itemView.getContext().startActivity(intent);
             });
         }
     }

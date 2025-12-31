@@ -58,6 +58,9 @@
         <activity android:name=".chat.ChatActivity" 
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize"/>
+        <activity android:name=".ui.common.ImageViewerActivity"
+            android:theme="@style/Theme.VisiBoard.FullScreen"
+            android:screenOrientation="portrait"/>
         <!-- FileProvider for sharing images -->
         <provider
             android:name="androidx.core.content.FileProvider"

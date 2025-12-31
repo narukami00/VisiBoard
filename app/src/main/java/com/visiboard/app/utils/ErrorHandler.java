@@ -12,7 +12,18 @@ public class ErrorHandler {
      */
     public static void showError(Context context, String message) {
         if (context != null) {
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+            // Try to find a view to show Snackbar, if context is Activity
+            if (context instanceof android.app.Activity) {
+                android.view.View view = ((android.app.Activity) context).findViewById(android.R.id.content);
+                if (view != null) {
+                    com.visiboard.app.utils.UiHelper.showError(view, message);
+                    return;
+                }
+            }
+            // Fallback for non-UI contexts or if View not found (though less likely for ErrorHandler called from UI)
+            // Log it instead of crashing or showing Toast?
+            // For now, let's just log error
+            android.util.Log.e("ErrorHandler", message);
         }
     }
     

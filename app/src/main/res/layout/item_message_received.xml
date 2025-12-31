@@ -14,7 +14,7 @@
         android:layout_height="wrap_content"
         android:maxWidth="280dp"
         app:cardCornerRadius="16dp"
-        app:cardElevation="1dp"
+        app:cardElevation="0dp"
         app:cardBackgroundColor="@color/card_background"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">

@@ -28,7 +28,25 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.recyclerview.widget.ItemTouchHelper; // Added import
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import android.net.Uri;
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.FileOutputStream;
+import com.visiboard.app.data.ImgBBService;
+import com.visiboard.app.data.ImgBBResponse;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.ChildEventListener;
@@ -57,6 +75,7 @@ public class ChatActivity extends AppCompatActivity {
     private EditText etMessage;
     private ImageButton btnSend;
     private ImageButton btnVoice;
+    private ImageButton btnAttach; // New field
     private ImageButton btnBack;
     private CircleImageView ivRecipientAvatar;
     private TextView tvRecipientName;
@@ -112,7 +131,7 @@ public class ChatActivity extends AppCompatActivity {
         recipientName = getIntent().getStringExtra(EXTRA_RECIPIENT_NAME);
         
         if (recipientId == null) {
-            Toast.makeText(this, "Error: No recipient specified", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Error: No recipient specified");
             finish();
             return;
         }
@@ -121,7 +140,7 @@ public class ChatActivity extends AppCompatActivity {
             ? FirebaseAuth.getInstance().getCurrentUser().getUid() : null;
         
         if (currentUserId == null) {
-            Toast.makeText(this, "Error: Not logged in", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Error: Not logged in");
             finish();
             return;
         }
@@ -138,14 +157,116 @@ public class ChatActivity extends AppCompatActivity {
         loadCurrentUserInfo();
         checkIfFirstChat();
         checkBlockedStatus();
+        checkBlockedStatus();
         setupSwipeToReply();
+        setupImagePicker();
     }
+    
+    private ActivityResultLauncher<String> imagePickerLauncher;
+    
+    private void setupImagePicker() {
+        imagePickerLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+            if (uri != null) {
+                uploadImage(uri);
+            }
+        });
+    }
+
+    private void pickImage() {
+        imagePickerLauncher.launch("image/*");
+    }
+
+    private void uploadImage(Uri uri) {
+        // Show loading
+        com.visiboard.app.utils.UiHelper.showInfo(findViewById(android.R.id.content), "Uploading image...");
+
+        try {
+            // Create temp file
+            File file = createTempFileFromUri(uri);
+            if (file == null) {
+                 com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to process image");
+                 return;
+            }
+
+            // Create RequestBody
+            RequestBody requestFile = RequestBody.create(MediaType.parse("image/*"), file);
+            MultipartBody.Part bBody = MultipartBody.Part.createFormData("image", file.getName(), requestFile);
+
+            // Create Service
+            Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl("https://api.imgbb.com/")
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+                
+            ImgBBService service = retrofit.create(ImgBBService.class);
+            
+            // Call API
+            String apiKey = "d313408672c8e76389a86662195d862b"; // User provided key
+            service.uploadImage(apiKey, bBody).enqueue(new Callback<ImgBBResponse>() {
+                @Override
+                public void onResponse(Call<ImgBBResponse> call, Response<ImgBBResponse> response) {
+                    if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
+                        String imageUrl = response.body().getData().getUrl();
+                        sendImageMessage(imageUrl);
+                    } else {
+                        com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Upload failed: " + response.code());
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<ImgBBResponse> call, Throwable t) {
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Upload error: " + t.getMessage());
+                }
+            });
+
+        } catch (Exception e) {
+             com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Error: " + e.getMessage());
+        }
+    }
+    
+    private void sendImageMessage(String imageUrl) {
+        chatManager.sendImageMessage(chatId, recipientId, recipientName, recipientProfilePic, imageUrl,
+            new ChatManager.SendMessageCallback() {
+                @Override
+                public void onSuccess(ChatMessage message) {
+                    runOnUiThread(() -> {
+                        isFirstChat = false;
+                        Log.d(TAG, "Image message sent");
+                    });
+                }
+                @Override
+                public void onError(String error) {
+                     runOnUiThread(() -> 
+                        com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to send image: " + error));
+                }
+            });
+    }
+
+    private File createTempFileFromUri(Uri uri) throws java.io.IOException {
+        InputStream inputStream = getContentResolver().openInputStream(uri);
+        if (inputStream == null) return null;
+        
+        File file = new File(getCacheDir(), "temp_image_" + System.currentTimeMillis() + ".jpg");
+        OutputStream outputStream = new FileOutputStream(file);
+        
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, bytesRead);
+        }
+        
+        outputStream.close();
+        inputStream.close();
+        return file;
+    }
+
 
     private void initViews() {
         rvMessages = findViewById(R.id.rv_messages);
         etMessage = findViewById(R.id.et_message);
         btnSend = findViewById(R.id.btn_send);
         btnVoice = findViewById(R.id.btn_voice);
+        btnAttach = findViewById(R.id.btn_attach); // Init
         btnBack = findViewById(R.id.btn_back);
         ivRecipientAvatar = findViewById(R.id.iv_recipient_avatar);
         tvRecipientName = findViewById(R.id.tv_recipient_name);
@@ -209,6 +330,7 @@ public class ChatActivity extends AppCompatActivity {
     private void setupClickListeners() {
         btnBack.setOnClickListener(v -> finish());
         btnSend.setOnClickListener(v -> sendMessage());
+        btnAttach.setOnClickListener(v -> pickImage());
 
         etMessage.addTextChangedListener(new TextWatcher() {
             @Override
@@ -319,7 +441,7 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onRecordingComplete(String base64Audio, int durationSeconds) {
                 if (durationSeconds < 1) {
-                    Toast.makeText(ChatActivity.this, "Voice message too short", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showWarning(findViewById(android.R.id.content), "Voice message too short");
                     return;
                 }
                 sendVoiceMessage(base64Audio, durationSeconds);
@@ -328,13 +450,13 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onRecordingCanceled() {
                 runOnUiThread(() -> 
-                    Toast.makeText(ChatActivity.this, "Recording cancelled", Toast.LENGTH_SHORT).show());
+                    com.visiboard.app.utils.UiHelper.showInfo(findViewById(android.R.id.content), "Recording cancelled"));
             }
 
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> 
-                    Toast.makeText(ChatActivity.this, error, Toast.LENGTH_SHORT).show());
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), error));
             }
         });
     }
@@ -384,9 +506,9 @@ public class ChatActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == RECORD_AUDIO_PERMISSION_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Permission granted. Tap and hold to record.", Toast.LENGTH_SHORT).show();
+                com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Permission granted. Tap and hold to record.");
             } else {
-                Toast.makeText(this, "Permission denied to record audio", Toast.LENGTH_SHORT).show();
+                com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Permission denied to record audio");
             }
         }
     }
@@ -539,14 +661,14 @@ public class ChatActivity extends AppCompatActivity {
         
         // 1. Check if I blocked them
         if (com.visiboard.app.utils.UserCache.getInstance().isBlocked(recipientId)) {
-            Toast.makeText(this, "You blocked this user", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showWarning(findViewById(android.R.id.content), "You blocked this user");
             return;
         }
 
         // 2. Check if they blocked me (Simulator)
         if (isBlockedByRecipient) {
             // Fake Network Error
-            Toast.makeText(this, "Network error: Failed to send", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Network error: Failed to send");
             // In a real app, you might show a red "!" icon next to the message
             return;
         }
@@ -565,7 +687,7 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> {
-                    Toast.makeText(ChatActivity.this, "Failed to send: " + error, Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to send: " + error);
                     // Don't restore text to avoid duplicate sends if retried, or handle better
                 });
             }
@@ -636,7 +758,7 @@ public class ChatActivity extends AppCompatActivity {
                 @Override
                 public void onError(String error) {
                     runOnUiThread(() -> 
-                        Toast.makeText(ChatActivity.this, "Failed to send voice: " + error, Toast.LENGTH_SHORT).show());
+                        com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to send voice: " + error));
                 }
             });
     }

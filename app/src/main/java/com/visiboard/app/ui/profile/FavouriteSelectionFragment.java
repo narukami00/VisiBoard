@@ -83,12 +83,12 @@ public class FavouriteSelectionFragment extends Fragment {
                         });
                         adapter.setNotes(docs);
                     } else {
-                        Toast.makeText(getContext(), "No notes found to select from.", Toast.LENGTH_SHORT).show();
+                        com.visiboard.app.utils.UiHelper.showInfo(requireView(), "No notes found to select from.");
                     }
                 })
                 .addOnFailureListener(e -> {
-                     if (getContext() != null) 
-                         Toast.makeText(getContext(), "Error loading notes: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                     if (getView() != null)
+                         com.visiboard.app.utils.UiHelper.showError(requireView(), "Error loading notes: " + e.getMessage());
                 });
         });
     }
@@ -98,7 +98,7 @@ public class FavouriteSelectionFragment extends Fragment {
         
         List<String> selectedIds = adapter.getSelectedIds();
         if (selectedIds.size() > 3) {
-             Toast.makeText(getContext(), "Max 3 notes allowed", Toast.LENGTH_SHORT).show();
+             com.visiboard.app.utils.UiHelper.showWarning(requireView(), "Max 3 notes allowed");
              return;
         }
 
@@ -112,6 +112,6 @@ public class FavouriteSelectionFragment extends Fragment {
                 getParentFragmentManager().setFragmentResult("fav_notes_updated", result);
                 Navigation.findNavController(requireView()).popBackStack();
             })
-            .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to save", Toast.LENGTH_SHORT).show());
+            .addOnFailureListener(e -> com.visiboard.app.utils.UiHelper.showError(requireView(), "Failed to save"));
     }
 }

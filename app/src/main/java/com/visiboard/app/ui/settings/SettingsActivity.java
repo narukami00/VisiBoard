@@ -139,10 +139,10 @@ public class SettingsActivity extends AppCompatActivity {
         db.collection("users").document(userId)
                 .update("isGhostMode", isGhostMode)
                 .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(this, isGhostMode ? "Ghost Mode enabled" : "Ghost Mode disabled", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), isGhostMode ? "Ghost Mode enabled" : "Ghost Mode disabled");
                 })
                 .addOnFailureListener(e -> {
-                    Toast.makeText(this, "Failed to update Ghost Mode", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to update Ghost Mode");
                     // Revert switch
                     switchGhostMode.setOnCheckedChangeListener(null);
                     switchGhostMode.setChecked(!isGhostMode); 
@@ -167,7 +167,7 @@ public class SettingsActivity extends AppCompatActivity {
                     updateUserNotesPrivacy(userId, isPrivate);
                 })
                 .addOnFailureListener(e -> {
-                    Toast.makeText(this, "Failed to update setting", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to update setting");
                     // Revert switch
                     switchPrivateAccount.setOnCheckedChangeListener(null);
                     switchPrivateAccount.setChecked(!isPrivate); 
@@ -197,7 +197,7 @@ public class SettingsActivity extends AppCompatActivity {
                     // Commit remaining
                     if (count > 0) {
                         batch.commit().addOnSuccessListener(aVoid -> 
-                            Toast.makeText(this, "Privacy settings applied to existing notes", Toast.LENGTH_SHORT).show()
+                            com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Privacy settings applied to existing notes")
                         );
                     }
                 });

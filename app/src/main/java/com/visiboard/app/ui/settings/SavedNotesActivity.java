@@ -26,6 +26,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.visiboard.app.MainActivity;
 import com.visiboard.app.R;
 import com.visiboard.app.utils.ImageCache;
+import com.visiboard.app.utils.UiHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -89,7 +90,7 @@ public class SavedNotesActivity extends AppCompatActivity {
                 })
                 .addOnFailureListener(e -> {
                     pbLoading.setVisibility(View.GONE);
-                    Toast.makeText(this, "Failed to load saved notes", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to load saved notes");
                 });
     }
 
@@ -104,10 +105,10 @@ public class SavedNotesActivity extends AppCompatActivity {
                     if (savedNoteDocs.isEmpty()) {
                         layoutEmptyState.setVisibility(View.VISIBLE);
                     }
-                    Toast.makeText(this, "Removed from saved", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Removed from saved");
                 })
                 .addOnFailureListener(e -> {
-                    Toast.makeText(this, "Failed to remove", Toast.LENGTH_SHORT).show();
+                    UiHelper.showError(findViewById(android.R.id.content), "Failed to remove");
                 });
     }
 
@@ -161,7 +162,7 @@ public class SavedNotesActivity extends AppCompatActivity {
                     intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     startActivity(intent);
                 } else {
-                    Toast.makeText(SavedNotesActivity.this, "Location data missing", Toast.LENGTH_SHORT).show();
+                 com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Location data missing");
                 }
             });
         }

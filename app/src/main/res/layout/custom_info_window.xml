@@ -66,6 +66,17 @@
 
                 </LinearLayout>
 
+                <!-- Remote Indicator -->
+                <ImageView
+                    android:id="@+id/iv_remote_indicator"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_remote_drop"
+                    app:tint="@color/accent"
+                    android:layout_marginStart="8dp"
+                    android:visibility="gone"
+                    android:contentDescription="Remote Note" />
+
                 <!-- Follow Button (shown only for other users) -->
                 <Button
                     android:id="@+id/btn_follow_owner"

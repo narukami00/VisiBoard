@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     doubleBackToExitPressedOnce = true;
-                    android.widget.Toast.makeText(MainActivity.this, "Press back again to exit", android.widget.Toast.LENGTH_SHORT).show();
+                    com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content), "Press back again to exit", com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
 
                     new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> doubleBackToExitPressedOnce = false, 2000);
                 } else {

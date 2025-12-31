@@ -96,9 +96,13 @@ public class NetworkManager {
                     retryAction.run();
                 }
             } else {
-                android.widget.Toast.makeText(activity, 
-                    "Still no internet connection", 
-                    android.widget.Toast.LENGTH_SHORT).show();
+                // Use UiHelper if view is available, else log (or ignore if background)
+                 // Finding a suitable view from activity
+                 android.view.View rootView = activity.findViewById(android.R.id.content);
+                 if (rootView != null) {
+                     // In this context, network is not available, so isConnected is false.
+                     com.visiboard.app.utils.UiHelper.showInfo(rootView, "Network Disconnected");
+                 }
             }
         });
 
