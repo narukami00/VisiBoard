@@ -114,6 +114,9 @@ public class LeaderboardFragment extends Fragment {
                     UserInfo user = doc.toObject(UserInfo.class);
                     if (user != null) {
                         user.setUserId(doc.getId());
+                        if (com.visiboard.app.utils.UserCache.getInstance().isBlocked(doc.getId())) {
+                            continue;
+                        }
                         Long totalLikes = doc.getLong("totalLikes");
                         user.setTotalLikes(totalLikes != null ? totalLikes.intValue() : 0);
                         users.add(user);

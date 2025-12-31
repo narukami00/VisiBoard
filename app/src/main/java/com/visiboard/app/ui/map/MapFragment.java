@@ -57,6 +57,13 @@ import com.visiboard.app.data.Comment;
 import com.facebook.shimmer.ShimmerFrameLayout;
 import com.visiboard.app.data.UserInfo;
 import com.visiboard.app.ui.map.LegendAdapter;
+import com.visiboard.app.utils.UserCache;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 import java.text.SimpleDateFormat;
 
@@ -346,6 +353,7 @@ public class MapFragment extends Fragment {
                 
                 // Load non-map dependent data once
                 loadFollowingList(); 
+                loadBlockedUsers();
                 loadLegends(); 
 
                 // Set initial style
@@ -1365,6 +1373,9 @@ public class MapFragment extends Fragment {
                     for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot) {
                         blockedUserIds.add(doc.getId());
                     }
+                    // Update UserCache
+                    UserCache.getInstance().setBlockedUsers(blockedUserIds);
+                    
                     // Now proceed to listen for notes
                     setupNotesListener();
                 })
@@ -1375,154 +1386,211 @@ public class MapFragment extends Fragment {
     }
 
     private void setupNotesListener() {
-            // Add real-time listener to load ALL notes from the global notes collection
-            notesListener = db.collection("notes")
-                    .addSnapshotListener((querySnapshot, error) -> {
-                        if (error != null) {
-                            Log.e("MapFragment", "Error loading notes: " + error.getMessage());
-                            return;
-                        }
+        // Add real-time listener to load ALL notes from the global notes collection
+        notesListener = db.collection("notes")
+                .addSnapshotListener((querySnapshot, error) -> {
+                    if (error != null) {
+                        Log.e("MapFragment", "Error loading notes: " + error.getMessage());
+                        return;
+                    }
 
-                        if (querySnapshot != null) {
-                            cachedNotesSnapshot = querySnapshot.getDocuments(); // Update Cache
+                    if (querySnapshot != null) {
+                        cachedNotesSnapshot = querySnapshot.getDocuments(); // Update Cache
 
-                            // Clear existing note markers (keep user location marker)
-                            if (symbolManager != null) {
-                                deleteAllSymbolsExceptUserLocation();
-                            }
-
-                            java.util.List<Feature> heatmapFeatures = new java.util.ArrayList<>();
-
-                            // Add all notes
-                            for (var doc : querySnapshot) {
-                                try {
-                                    double lat = doc.getDouble("lat");
-                                    double lon = doc.getDouble("lon");
-                                    String userId = doc.getString("userId");
-
-                                    // Visibility Filter
-                                    String visibility = doc.getString("visibility");
-                                    if (visibility == null) visibility = "public";
-                                    boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
-                                    boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
-
-                                    // Filter Hidden Notes (Hidden from everyone including owner on Map)
-                                    if (isHidden) continue;
-
-                                    if (userId.equals(auth.getCurrentUser().getUid())) {
-                                         if (isHideMyNotesEnabled) continue;
-                                    }
-
-                                    // Filter notes hidden by THIS user (Hide for Me)
-                                    if (hiddenNoteOtherIds.contains(doc.getId())) continue;
-
-                                    // Filter notes from blocked users
-                                    if (blockedUserIds.contains(userId)) continue;
-
-                                    if (!userId.equals(auth.getCurrentUser().getUid())) {
-                                        // 1. Strict Private Note (Only Me)
-                                        if ("private".equals(visibility)) continue;
-
-                                        // 2. Owner Privacy / Followers Only Check
-                                        // If owner is private OR note is followers-only, you must be following
-                                        boolean isRestricted = isOwnerPrivate || "followers".equals(visibility);
-                                        if (isRestricted && !followingIds.contains(userId)) {
-                                            continue;
-                                        }
-                                    }
-
-                                    // Friends Radar Filter
-                                    if (isFriendsRadarEnabled) {
-                                        String currentUserId = auth.getCurrentUser().getUid();
-                                        if (!userId.equals(currentUserId) && !followingIds.contains(userId)) {
-                                            continue;
-                                        }
-                                    }
-
-                                    // Heatmap Data
-                                    heatmapFeatures.add(Feature.fromGeometry(Point.fromLngLat(lon, lat)));
-
-                                    // Try "note" first, fallback to "text" for backward compatibility
-                                    String note = doc.getString("note");
-                                    if (note == null) note = doc.getString("text");
-                                    long timestamp = doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0L;
-
-                                    // Time Travel Filter
-                                    if (timeFilterDuration > 0) {
-                                        if (System.currentTimeMillis() - timestamp > timeFilterDuration) {
-                                            continue;
-                                        }
-                                    }
-
-                                    String b64 = doc.getString("imageBase64");
-                                    boolean hasImage = b64 != null && !b64.isEmpty();
-                                    LatLng pos = new LatLng(lat, lon);
-
-                                    // Only add marker if Heatmap is OFF (or maybe both?)
-                                    // Plan said "Pins disappear", which updateHeatmapVisibility handles by clearing symbols.
-                                    // But here we are re-adding them.
-                                    // So we should check validity.
-                                    // Only add marker if Heatmap is OFF
-                                    if (!isHeatmapEnabled) {
-                                        addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                                                timestamp, doc.getId(), userId, hasImage);
-                                    }
-                                } catch (Exception e) {
-                                    Log.e("MapFragment", "Error processing note: " + e.getMessage());
+                        // Identify users we need to check privacy for
+                        Set<String> usersToCheck = new HashSet<>();
+                        for (DocumentSnapshot doc : querySnapshot) {
+                            String userId = doc.getString("userId");
+                            if (userId != null && !userId.equals(auth.getCurrentUser().getUid()) && !followingIds.contains(userId)) {
+                                // If not in cache, we need to fetch
+                                if (UserCache.getInstance().get(userId) == null) {
+                                    usersToCheck.add(userId);
                                 }
                             }
-                            
-                            // Check if pending target note needs to be opened
-                            if (pendingTargetNoteId != null && pendingOpenWindow) {
-                                String finalPendingId = pendingTargetNoteId;
-                                boolean finalPendingOpen = pendingOpenWindow;
+                        }
+
+                        if (usersToCheck.isEmpty()) {
+                            processAndRenderNotes(querySnapshot);
+                        } else {
+                            // Fetch missing users
+                            List<Task<DocumentSnapshot>> tasks = new ArrayList<>();
+                            for (String uid : usersToCheck) {
+                                tasks.add(db.collection("users").document(uid).get());
+                            }
+
+                            Tasks.whenAllSuccess(tasks).addOnSuccessListener(results -> {
+                                if (!isAdded()) return; // Prevent crash if fragment detached
                                 
-                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                                    // Find and open the note
-                                    if (symbolManager != null && finalPendingId != null) {
-                                        androidx.collection.LongSparseArray<Symbol> annotations = symbolManager.getAnnotations();
-                                        for (int i = 0; i < annotations.size(); i++) {
-                                            Symbol symbol = annotations.valueAt(i);
-                                            try {
-                                                JsonElement dataElement = symbol.getData();
-                                                if (dataElement != null && dataElement.isJsonObject()) {
-                                                    com.google.gson.JsonObject jsonObject = dataElement.getAsJsonObject();
-                                                    if (jsonObject.has("docId")) {
-                                                        String docId = jsonObject.get("docId").getAsString();
-                                                        if (docId != null && docId.equals(finalPendingId)) {
-                                                            // Found the note, open info window
-                                                            LatLng notePosition = symbol.getLatLng();
-                                                            String note = jsonObject.get("note").getAsString();
-                                                            long timestamp = jsonObject.get("timestamp").getAsLong();
-                                                            String userId = jsonObject.has("userId") ? jsonObject.get("userId").getAsString() : null;
-                                                            boolean hasImage = jsonObject.has("hasImage") && jsonObject.get("hasImage").getAsBoolean();
-                                                            showCustomInfoWindow(note, timestamp, notePosition, symbol, docId, userId, null, hasImage);
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            } catch (Exception e) {
-                                                // Skip
-                                            }
+                                // Update cache
+                                for (Object result : results) {
+                                    DocumentSnapshot userDoc = (DocumentSnapshot) result;
+                                    if (userDoc.exists()) {
+                                        UserInfo userInfo = userDoc.toObject(UserInfo.class);
+                                        // Manually set ID if not set by fetching
+                                        if (userInfo != null) { 
+                                            userInfo.setUserId(userDoc.getId());
+                                            UserCache.getInstance().put(userDoc.getId(), userInfo);
                                         }
                                     }
-                                    pendingTargetNoteId = null;
-                                    pendingOpenWindow = false;
-                                }, 500);
-                            }
+                                }
+                                processAndRenderNotes(querySnapshot);
+                            }).addOnFailureListener(e -> {
+                                Log.e("MapFragment", "Failed to batch fetch users", e);
+                                if (isAdded()) processAndRenderNotes(querySnapshot);
+                            });
+                        }
+                    }
+                });
+    }
 
-                            // Update Heatmap Source
-                            if (mapLibreMap != null && mapLibreMap.getStyle() != null) {
-                                GeoJsonSource source = mapLibreMap.getStyle().getSourceAs(HEATMAP_SOURCE_ID);
-                                if (source != null) {
-                                    source.setGeoJson(FeatureCollection.fromFeatures(heatmapFeatures));
+    private void processAndRenderNotes(com.google.firebase.firestore.QuerySnapshot querySnapshot) {
+        // Clear existing note markers (keep user location marker)
+        if (symbolManager != null) {
+            deleteAllSymbolsExceptUserLocation();
+        }
+
+        java.util.List<Feature> heatmapFeatures = new java.util.ArrayList<>();
+
+        // Add all notes
+        for (DocumentSnapshot doc : querySnapshot) {
+            try {
+                double lat = doc.getDouble("lat");
+                double lon = doc.getDouble("lon");
+                String userId = doc.getString("userId");
+
+                // Visibility Filter
+                String visibility = doc.getString("visibility");
+                if (visibility == null) visibility = "public";
+                boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
+                boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+
+                // Filter Hidden Notes (Hidden from everyone including owner on Map)
+                if (isHidden) continue;
+
+                if (userId.equals(auth.getCurrentUser().getUid())) {
+                    if (isHideMyNotesEnabled) continue;
+                }
+
+                // Filter notes hidden by THIS user (Hide for Me)
+                if (hiddenNoteOtherIds.contains(doc.getId())) continue;
+
+                // Filter notes from blocked users
+                if (blockedUserIds.contains(userId) || com.visiboard.app.utils.UserCache.getInstance().isBlocked(userId)) {
+                    if (pendingTargetNoteId != null && pendingTargetNoteId.equals(doc.getId())) {
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> 
+                            Toast.makeText(getContext(), "You blocked this user", Toast.LENGTH_SHORT).show()
+                        );
+                        pendingTargetNoteId = null; 
+                    }
+                    continue;
+                }
+
+                if (!userId.equals(auth.getCurrentUser().getUid())) {
+                    // 1. Strict Private Note (Only Me)
+                    if ("private".equals(visibility)) continue;
+
+                    // 2. Owner Privacy Check (Using Cache Source of Truth)
+                    boolean isUserPrivate = false;
+                    UserInfo ownerInfo = UserCache.getInstance().get(userId);
+                    if (ownerInfo != null) {
+                        isUserPrivate = ownerInfo.isPrivate();
+                    } else {
+                        // Fallback to note's denormalized field if cache missing
+                        isUserPrivate = isOwnerPrivate;
+                    }
+
+                    boolean isRestricted = isUserPrivate || "followers".equals(visibility);
+                    if (isRestricted && !followingIds.contains(userId)) {
+                        continue;
+                    }
+                }
+
+                // Friends Radar Filter
+                if (isFriendsRadarEnabled) {
+                    String currentUserId = auth.getCurrentUser().getUid();
+                    if (!userId.equals(currentUserId) && !followingIds.contains(userId)) {
+                        continue;
+                    }
+                }
+
+                // Heatmap Data
+                heatmapFeatures.add(Feature.fromGeometry(Point.fromLngLat(lon, lat)));
+
+                // Try "note" first, fallback to "text" for backward compatibility
+                String note = doc.getString("note");
+                if (note == null) note = doc.getString("text");
+                long timestamp = doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0L;
+
+                // Time Travel Filter
+                if (timeFilterDuration > 0) {
+                    if (System.currentTimeMillis() - timestamp > timeFilterDuration) {
+                        continue;
+                    }
+                }
+
+                String b64 = doc.getString("imageBase64");
+                boolean hasImage = b64 != null && !b64.isEmpty();
+                LatLng pos = new LatLng(lat, lon);
+
+                // Only add marker if Heatmap is OFF
+                if (!isHeatmapEnabled) {
+                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
+                            timestamp, doc.getId(), userId, hasImage);
+                }
+            } catch (Exception e) {
+                Log.e("MapFragment", "Error processing note: " + e.getMessage());
+            }
+        }
+
+        // Check if pending target note needs to be opened
+        if (pendingTargetNoteId != null && pendingOpenWindow) {
+            String finalPendingId = pendingTargetNoteId;
+            boolean finalPendingOpen = pendingOpenWindow;
+
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                // Find and open the note
+                if (symbolManager != null && finalPendingId != null) {
+                    androidx.collection.LongSparseArray<Symbol> annotations = symbolManager.getAnnotations();
+                    for (int i = 0; i < annotations.size(); i++) {
+                        Symbol symbol = annotations.valueAt(i);
+                        try {
+                            JsonElement dataElement = symbol.getData();
+                            if (dataElement != null && dataElement.isJsonObject()) {
+                                com.google.gson.JsonObject jsonObject = dataElement.getAsJsonObject();
+                                if (jsonObject.has("docId")) {
+                                    String docId = jsonObject.get("docId").getAsString();
+                                    if (docId != null && docId.equals(finalPendingId)) {
+                                        // Found the note, open info window
+                                        LatLng notePosition = symbol.getLatLng();
+                                        String note = jsonObject.get("note").getAsString();
+                                        long timestamp = jsonObject.get("timestamp").getAsLong();
+                                        String userId = jsonObject.has("userId") ? jsonObject.get("userId").getAsString() : null;
+                                        boolean hasImage = jsonObject.has("hasImage") && jsonObject.get("hasImage").getAsBoolean();
+                                        showCustomInfoWindow(note, timestamp, notePosition, symbol, docId, userId, null, hasImage);
+                                        break;
+                                    }
                                 }
                             }
-                            
-                            // Ensure userLocationSymbol is still present after notes are loaded
-                            ensureUserLocationMarkerExists();
+                        } catch (Exception e) {
+                            // Skip
                         }
-                    });
+                    }
+                }
+                pendingTargetNoteId = null;
+                pendingOpenWindow = false;
+            }, 500);
+        }
+
+        // Update Heatmap Source
+        if (mapLibreMap != null && mapLibreMap.getStyle() != null) {
+            GeoJsonSource source = mapLibreMap.getStyle().getSourceAs(HEATMAP_SOURCE_ID);
+            if (source != null) {
+                source.setGeoJson(FeatureCollection.fromFeatures(heatmapFeatures));
+            }
+        }
+
+        // Ensure userLocationSymbol is still present after notes are loaded
+        ensureUserLocationMarkerExists();
     }
     
     // Helper method to ensure userLocationSymbol exists
@@ -2086,6 +2154,7 @@ public class MapFragment extends Fragment {
                                 Toast.makeText(getContext(), "User blocked", Toast.LENGTH_SHORT).show();
                                 // Add to local blockedUserIds set for immediate filtering
                                 blockedUserIds.add(targetUserId);
+                                UserCache.getInstance().addBlockedUser(targetUserId);
                                 // Refresh map to remove blocked user's notes
                                 loadSavedNotes();
                             })
@@ -2722,6 +2791,20 @@ public class MapFragment extends Fragment {
     // Legend & Data Logic
     // ==========================================
 
+    private void loadBlockedUsers() {
+        if (auth.getCurrentUser() == null) return;
+        db.collection("users").document(auth.getCurrentUser().getUid())
+                .collection("blocked_users").get()
+                .addOnSuccessListener(querySnapshot -> {
+                    blockedUserIds.clear();
+                    for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                        blockedUserIds.add(doc.getId());
+                        com.visiboard.app.utils.UserCache.getInstance().addBlockedUser(doc.getId());
+                    }
+                    updateMapVisualization();
+                });
+    }
+
     private void loadFollowingList() {
         if (auth.getCurrentUser() == null) return;
         db.collection("users").document(auth.getCurrentUser().getUid())
@@ -2913,18 +2996,41 @@ public class MapFragment extends Fragment {
 
     private void updateUserLocationInFirestore(LatLng latLng) {
         if (auth.getCurrentUser() == null) return;
-        
-        // Save Lat/Lng for Leaderboard
+        String uid = auth.getCurrentUser().getUid();
+
+        // 1. Check Cache for Ghost Mode
+        UserInfo cachedUser = UserCache.getInstance().get(uid);
+        if (cachedUser != null) {
+            if (cachedUser.isGhostMode()) {
+                // Ghost Mode Enabled: Do NOT update location
+                return;
+            } else {
+                performLocationUpdate(uid, latLng);
+            }
+        } else {
+            // 2. Fallback: Fetch from Firestore if not in cache (Safety check)
+            db.collection("users").document(uid).get().addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    Boolean isGhostRaw = doc.getBoolean("isGhostMode");
+                    boolean isGhost = isGhostRaw != null && isGhostRaw;
+                    
+                    if (isGhost) {
+                        return; // Do nothing
+                    } else {
+                        performLocationUpdate(uid, latLng);
+                    }
+                }
+            });
+        }
+    }
+
+    private void performLocationUpdate(String uid, LatLng latLng) {
         Map<String, Object> updates = new HashMap<>();
         updates.put("lastLat", latLng.getLatitude());
         updates.put("lastLng", latLng.getLongitude());
         
-        // Also update address text if we want, using Geocoder? 
-        // User complained about "local leaderboard crashed... map couldnt give a specific name".
-        // Let's keep existing logic or improve it safely.
         try {
             Geocoder geocoder = new Geocoder(requireContext(), java.util.Locale.getDefault());
-            // Async geocoding recommended but simple call here for now
              List<android.location.Address> addresses = geocoder.getFromLocation(latLng.getLatitude(), latLng.getLongitude(), 1);
              if (addresses != null && !addresses.isEmpty()) {
                  String locality = addresses.get(0).getLocality();
@@ -2933,11 +3039,10 @@ public class MapFragment extends Fragment {
                  updates.put("lastKnownLocation", locality);
              }
         } catch (Exception e) {
-            // updates.put("lastKnownLocation", "Unknown"); // Don't overwrite if fail
+            // Ignore geocoder errors
         }
 
-        db.collection("users").document(auth.getCurrentUser().getUid())
-                .update(updates);
+        db.collection("users").document(uid).update(updates);
     }
 
     // Heatmap Config

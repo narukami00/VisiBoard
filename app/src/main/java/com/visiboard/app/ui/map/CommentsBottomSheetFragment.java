@@ -183,12 +183,16 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
                         android.util.Log.d("CommentsSheet", "Found " + value.size() + " comments");
                         if (!value.isEmpty()) {
                             List<Comment> comments = new ArrayList<>();
-                            for (var doc : value) {
-                                Comment comment = doc.toObject(Comment.class);
-                                android.util.Log.d("CommentsSheet", "Comment: " + comment.text + " by " + comment.userName);
-                                comments.add(comment);
-                            }
-                            adapter.setComments(comments);
+                                for (var doc : value) {
+                                    Comment comment = doc.toObject(Comment.class);
+                                    // Filter Blocked Users
+                                    if (comment != null && com.visiboard.app.utils.UserCache.getInstance().isBlocked(comment.userId)) {
+                                        continue;
+                                    }
+                                    android.util.Log.d("CommentsSheet", "Comment: " + comment.text + " by " + comment.userName);
+                                    comments.add(comment);
+                                }
+                                adapter.setComments(comments);
                             tvNoComments.setVisibility(View.GONE);
                             lvComments.setVisibility(View.VISIBLE);
                             // Scroll to bottom

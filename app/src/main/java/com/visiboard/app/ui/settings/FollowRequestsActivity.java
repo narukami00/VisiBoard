@@ -36,6 +36,9 @@ public class FollowRequestsActivity extends AppCompatActivity {
     private FirebaseFirestore db;
     private RequestsAdapter adapter;
 
+    private UserInfo currentUserInfo;
+    private List<String> blockedUserIds = new ArrayList<>();
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -57,7 +60,21 @@ public class FollowRequestsActivity extends AppCompatActivity {
         adapter = new RequestsAdapter();
         rvRequests.setAdapter(adapter);
 
+        loadCurrentUser();
         loadRequests();
+    }
+
+    private void loadCurrentUser() {
+        if (auth.getCurrentUser() != null) {
+            // Check cache first
+            UserInfo cached = com.visiboard.app.utils.UserCache.getInstance().get(auth.getCurrentUser().getUid());
+            if (cached != null) {
+                currentUserInfo = cached;
+            } else {
+                db.collection("users").document(auth.getCurrentUser().getUid()).get()
+                    .addOnSuccessListener(doc -> currentUserInfo = doc.toObject(UserInfo.class));
+            }
+        }
     }
 
     private void loadRequests() {
@@ -65,6 +82,22 @@ public class FollowRequestsActivity extends AppCompatActivity {
         pbLoading.setVisibility(View.VISIBLE);
         tvNoData.setVisibility(View.GONE);
 
+        // Load blocked users first
+        db.collection("users").document(userId).collection("blocked_users").get()
+            .addOnSuccessListener(blockedSnap -> {
+                blockedUserIds.clear();
+                for (DocumentSnapshot d : blockedSnap) blockedUserIds.add(d.getId());
+                
+                // Then load requests
+                fetchFollowRequests(userId);
+            })
+            .addOnFailureListener(e -> {
+                // Determine if we should fail open or closed. Let's fail open (load requests)
+                fetchFollowRequests(userId);
+            });
+    }
+
+    private void fetchFollowRequests(String userId) {
         db.collection("users").document(userId).collection("follow_requests")
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
@@ -75,12 +108,21 @@ public class FollowRequestsActivity extends AppCompatActivity {
                     } else {
                         for (DocumentSnapshot doc : queryDocumentSnapshots) {
                             String requesterId = doc.getId();
+                            
+                            // Filter blocked users
+                            if (blockedUserIds.contains(requesterId)) continue;
+                            
                             String name = doc.getString("requesterName");
                             String pic = doc.getString("requesterProfilePic");
                             long timestamp = doc.getLong("timestamp") != null ? doc.getLong("timestamp") : 0L;
                             items.add(new RequestItem(requesterId, name, pic, timestamp));
                         }
-                        adapter.setItems(items);
+                        
+                        if (items.isEmpty()) {
+                            tvNoData.setVisibility(View.VISIBLE);
+                        } else {
+                            adapter.setItems(items);
+                        }
                     }
                 })
                 .addOnFailureListener(e -> {
@@ -90,64 +132,65 @@ public class FollowRequestsActivity extends AppCompatActivity {
     }
 
     private void acceptRequest(RequestItem item) {
+        if (currentUserInfo == null) {
+            Toast.makeText(this, "Please wait, loading user info...", Toast.LENGTH_SHORT).show();
+            loadCurrentUser();
+            return;
+        }
+
+        // Optimistic UI Update
+        adapter.removeItem(item);
+
         String currentUserId = auth.getCurrentUser().getUid();
         String requesterId = item.id;
 
-        // 1. Add to my followers
-        // 2. Add to their following
-        // 3. Remove from requests
-        // 4. Notify them
+        com.google.firebase.firestore.WriteBatch batch = db.batch();
+        
+        // Add to my followers
+        java.util.Map<String, Object> followerData = new java.util.HashMap<>();
+        followerData.put("timestamp", System.currentTimeMillis());
+        followerData.put("followerName", item.name);
+        followerData.put("followerProfilePic", item.pic);
+        batch.set(db.collection("users").document(currentUserId).collection("followers").document(requesterId), followerData);
+        batch.update(db.collection("users").document(currentUserId), "followersCount", com.google.firebase.firestore.FieldValue.increment(1));
 
-        // We can do this atomically or sequentially. 
-        // Logic similar to MapFragment.followUser but reversed perspective.
+        // Add to their following
+        java.util.Map<String, Object> followingData = new java.util.HashMap<>();
+        followingData.put("timestamp", System.currentTimeMillis());
+        followingData.put("followedName", currentUserInfo.getName());
+        followingData.put("followedProfilePic", currentUserInfo.getProfilePic());
+        batch.set(db.collection("users").document(requesterId).collection("following").document(currentUserId), followingData);
+        batch.update(db.collection("users").document(requesterId), "followingCount", com.google.firebase.firestore.FieldValue.increment(1));
 
-        // Get my info for the "following" entry
-        db.collection("users").document(currentUserId).get().addOnSuccessListener(myDoc -> {
-             String myName = myDoc.getString("name");
-             String myPic = myDoc.getString("profilePic");
-             
-             // Setup Batch
-             com.google.firebase.firestore.WriteBatch batch = db.batch();
-             
-             // Add to my followers
-             java.util.Map<String, Object> followerData = new java.util.HashMap<>();
-             followerData.put("timestamp", System.currentTimeMillis());
-             followerData.put("followerName", item.name);
-             followerData.put("followerProfilePic", item.pic);
-             batch.set(db.collection("users").document(currentUserId).collection("followers").document(requesterId), followerData);
-             batch.update(db.collection("users").document(currentUserId), "followersCount", com.google.firebase.firestore.FieldValue.increment(1));
+        // Remove Request
+        batch.delete(db.collection("users").document(currentUserId).collection("follow_requests").document(requesterId));
 
-             // Add to their following
-             java.util.Map<String, Object> followingData = new java.util.HashMap<>();
-             followingData.put("timestamp", System.currentTimeMillis());
-             followingData.put("followedName", myName);
-             followingData.put("followedProfilePic", myPic);
-             batch.set(db.collection("users").document(requesterId).collection("following").document(currentUserId), followingData);
-             batch.update(db.collection("users").document(requesterId), "followingCount", com.google.firebase.firestore.FieldValue.increment(1));
-
-             // Remove Request
-             batch.delete(db.collection("users").document(currentUserId).collection("follow_requests").document(requesterId));
-
-             batch.commit().addOnSuccessListener(aVoid -> {
-                 Toast.makeText(this, "Accepted", Toast.LENGTH_SHORT).show();
-                 adapter.removeItem(item);
-                 
-                 // Notify
-                 createNotification(requesterId, currentUserId, "follow_accepted");
-             }).addOnFailureListener(e -> Toast.makeText(this, "Failed", Toast.LENGTH_SHORT).show());
+        batch.commit().addOnSuccessListener(aVoid -> {
+            Toast.makeText(this, "Accepted", Toast.LENGTH_SHORT).show();
+            // Notify
+            createNotification(requesterId, currentUserId, "follow_accepted");
+        }).addOnFailureListener(e -> {
+            Toast.makeText(this, "Failed to accept, undoing...", Toast.LENGTH_SHORT).show();
+            // Re-add item (simplified: just reload)
+            loadRequests();
         });
     }
 
     private void deleteRequest(RequestItem item) {
+        // Optimistic UI
+        adapter.removeItem(item);
+        
         String currentUserId = auth.getCurrentUser().getUid();
         db.collection("users").document(currentUserId).collection("follow_requests").document(item.id)
                 .delete()
                 .addOnSuccessListener(aVoid -> {
                     Toast.makeText(this, "Deleted", Toast.LENGTH_SHORT).show();
-                    adapter.removeItem(item);
-                    
                     // Record Rejection (5-Strike Rule)
                     recordRejection(currentUserId, item.id);
+                })
+                .addOnFailureListener(e -> {
+                     Toast.makeText(this, "Failed to delete", Toast.LENGTH_SHORT).show();
+                     loadRequests();
                 });
     }
 
@@ -171,22 +214,18 @@ public class FollowRequestsActivity extends AppCompatActivity {
     }
 
     private void createNotification(String toUserId, String fromUserId, String type) {
-        // ... simplified reuse or copy logic
-         db.collection("users").document(fromUserId).get().addOnSuccessListener(doc -> {
-             String name = doc.getString("name");
-             String pic = doc.getString("profilePic");
-             
-             java.util.Map<String, Object> notif = new java.util.HashMap<>();
-             notif.put("type", type);
-             notif.put("fromUserId", fromUserId);
-             notif.put("fromUserName", name);
-             notif.put("fromUserProfilePic", pic);
-             notif.put("toUserId", toUserId);
-             notif.put("timestamp", System.currentTimeMillis());
-             notif.put("read", false);
-             
-             db.collection("notifications").add(notif);
-         });
+         if (currentUserInfo == null) return;
+         
+         java.util.Map<String, Object> notif = new java.util.HashMap<>();
+         notif.put("type", type);
+         notif.put("fromUserId", fromUserId);
+         notif.put("fromUserName", currentUserInfo.getName());
+         notif.put("fromUserProfilePic", currentUserInfo.getProfilePic());
+         notif.put("toUserId", toUserId);
+         notif.put("timestamp", System.currentTimeMillis());
+         notif.put("read", false);
+         
+         db.collection("notifications").add(notif);
     }
 
     // --- Inner Classes ---

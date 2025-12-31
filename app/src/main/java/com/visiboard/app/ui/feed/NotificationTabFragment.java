@@ -190,6 +190,7 @@ public class NotificationTabFragment extends Fragment {
         notificationListener = db.collection("notifications")
             .whereEqualTo("toUserId", uid)
             .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(50) // Limit to 50 recent notifications for performance
             .addSnapshotListener((snapshots, e) -> {
                 // Critical safety check: Don't process if fragment is destroyed or detached
                 if (!isAdded() || getContext() == null || swipeRefresh == null) {

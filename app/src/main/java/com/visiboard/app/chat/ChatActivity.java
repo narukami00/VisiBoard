@@ -137,6 +137,7 @@ public class ChatActivity extends AppCompatActivity {
         loadRecipientInfo();
         loadCurrentUserInfo();
         checkIfFirstChat();
+        checkBlockedStatus();
         setupSwipeToReply();
     }
 
@@ -509,9 +510,46 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    private boolean isBlockedByRecipient = false;
+
+    private void checkBlockedStatus() {
+        // Check if I blocked them (UI logic)
+        if (com.visiboard.app.utils.UserCache.getInstance().isBlocked(recipientId)) {
+            // I blocked them. 
+            // Optional: Update UI to show "You blocked this user"
+        }
+
+        // Check if they blocked me
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(recipientId)
+            .collection("blocked_users")
+            .document(currentUserId)
+            .get()
+            .addOnSuccessListener(doc -> {
+                if (doc.exists()) {
+                    isBlockedByRecipient = true;
+                }
+            });
+    }
+
     private void sendMessage() {
         String text = etMessage.getText().toString().trim();
         if (text.isEmpty()) return;
+        
+        // 1. Check if I blocked them
+        if (com.visiboard.app.utils.UserCache.getInstance().isBlocked(recipientId)) {
+            Toast.makeText(this, "You blocked this user", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 2. Check if they blocked me (Simulator)
+        if (isBlockedByRecipient) {
+            // Fake Network Error
+            Toast.makeText(this, "Network error: Failed to send", Toast.LENGTH_SHORT).show();
+            // In a real app, you might show a red "!" icon next to the message
+            return;
+        }
 
         etMessage.setText("");
 

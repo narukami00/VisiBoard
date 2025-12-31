@@ -8,6 +8,6 @@ docs/
 google-services.json
 *.keystore
 *.md
+/visiboard_pc
 !README.md
-visiboard_pc/
 com/visiboard/app/utils/AdminCredentials.java

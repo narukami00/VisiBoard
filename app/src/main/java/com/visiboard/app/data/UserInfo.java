@@ -1,5 +1,7 @@
 package com.visiboard.app.data;
 
+import com.google.firebase.firestore.PropertyName;
+
 public class UserInfo {
     private String userId;
     private String name;
@@ -58,8 +60,17 @@ public class UserInfo {
     
     // Privacy
     private boolean isPrivate;
+    @PropertyName("isPrivate")
     public boolean isPrivate() { return isPrivate; }
+    @PropertyName("isPrivate")
     public void setPrivate(boolean isPrivate) { this.isPrivate = isPrivate; }
+    
+    // Ghost Mode
+    private boolean isGhostMode;
+    @PropertyName("isGhostMode")
+    public boolean isGhostMode() { return isGhostMode; }
+    @PropertyName("isGhostMode")
+    public void setGhostMode(boolean isGhostMode) { this.isGhostMode = isGhostMode; }
     
     // Coordinates for Distance Calculation
     private double lat;

@@ -51,6 +51,7 @@ public class DiscoveryFragment extends Fragment {
     
     private boolean isGridMode = false;
     private Set<String> followingIds = new HashSet<>();
+    private Set<String> blockedIds = new HashSet<>();
     private List<DiscoveryItem> discoveryItems = new ArrayList<>(); 
     private boolean isSearching = false;
     
@@ -162,7 +163,18 @@ public class DiscoveryFragment extends Fragment {
                     followingIds.add(doc.getId());
                 }
                 
-                fetchDiscoveryUsers();
+                // Fetch Blocked Users
+                db.collection("users").document(currentUserId).collection("blocked_users").get()
+                    .addOnSuccessListener(blockedSnap -> {
+                        blockedIds.clear();
+                        for (DocumentSnapshot doc : blockedSnap) {
+                            blockedIds.add(doc.getId());
+                            // Also update cache just in case
+                            com.visiboard.app.utils.UserCache.getInstance().addBlockedUser(doc.getId());
+                        }
+                        fetchDiscoveryUsers();
+                    })
+                    .addOnFailureListener(e -> fetchDiscoveryUsers());
             })
             .addOnFailureListener(e -> {
                  pbLoading.setVisibility(View.GONE);
@@ -179,7 +191,7 @@ public class DiscoveryFragment extends Fragment {
             .addOnSuccessListener(popularSnap -> {
                 List<UserInfo> popularUsers = new ArrayList<>();
                 for (DocumentSnapshot doc : popularSnap) {
-                    if (!followingIds.contains(doc.getId())) {
+                    if (!followingIds.contains(doc.getId()) && !blockedIds.contains(doc.getId())) {
                         UserInfo u = doc.toObject(UserInfo.class);
                         if (u != null) {
                             u.setUserId(doc.getId());
@@ -231,6 +243,9 @@ public class DiscoveryFragment extends Fragment {
                 List<DiscoveryItem> results = new ArrayList<>();
                 results.add(new DiscoveryItem("Search Results"));
                 for (DocumentSnapshot doc : snap) {
+                     // Filter blocked
+                     if (blockedIds.contains(doc.getId())) continue;
+                     
                      UserInfo u = doc.toObject(UserInfo.class);
                      if (u != null) {
                          u.setUserId(doc.getId());

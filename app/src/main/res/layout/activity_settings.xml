@@ -4,13 +4,13 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:attr/colorBackground">
+    android:background="@color/background_light">
 
     <!-- App Bar -->
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?android:attr/colorBackground"
+        android:background="@color/background_light"
         app:elevation="0dp">
 
         <androidx.appcompat.widget.Toolbar
@@ -55,7 +55,7 @@
                 android:layout_marginHorizontal="12dp"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="2dp"
-                app:cardBackgroundColor="?attr/colorSurface">
+                app:cardBackgroundColor="@color/card_background">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -264,7 +264,7 @@
                 android:layout_marginHorizontal="12dp"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="2dp"
-                app:cardBackgroundColor="?attr/colorSurface">
+                app:cardBackgroundColor="@color/card_background">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -394,7 +394,7 @@
                 android:layout_marginHorizontal="12dp"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="2dp"
-                app:cardBackgroundColor="?attr/colorSurface">
+                app:cardBackgroundColor="@color/card_background">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -496,7 +496,7 @@
                 android:layout_marginHorizontal="12dp"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="2dp"
-                app:cardBackgroundColor="?attr/colorSurface">
+                app:cardBackgroundColor="@color/card_background">
 
                 <LinearLayout
                     android:id="@+id/btn_logout"

@@ -89,8 +89,26 @@ public class ChatsFragment extends Fragment {
 
         setupSearch();
         setupSwipeRefresh();
-        loadActiveChats();
-        loadFollowing();
+        setupSwipeRefresh();
+        loadBlockedUsers(); // Load blocked users first
+    }
+
+    private void loadBlockedUsers() {
+        if (currentUserId == null) return;
+        db.collection("users").document(currentUserId).collection("blocked_users").get()
+            .addOnSuccessListener(snap -> {
+                if (!isAdded()) return;
+                for (DocumentSnapshot doc : snap) {
+                    com.visiboard.app.utils.UserCache.getInstance().addBlockedUser(doc.getId());
+                }
+                loadActiveChats();
+                loadFollowing();
+            })
+            .addOnFailureListener(e -> {
+                // If fail, still load regular chats
+                loadActiveChats();
+                loadFollowing();
+            });
     }
 
     private void initViews(View view) {
@@ -194,8 +212,11 @@ public class ChatsFragment extends Fragment {
                     // Filter out invalid chats or "Null User"
                     String name = chat.getRecipientName();
                     if (name != null && !name.isEmpty() && !name.equalsIgnoreCase("null")) {
-                         allActiveChats.add(chat);
-                         activeChatUserIds.add(chat.getRecipientId());
+                         // Filter blocked users
+                         if (!com.visiboard.app.utils.UserCache.getInstance().isBlocked(chat.getRecipientId())) {
+                             allActiveChats.add(chat);
+                             activeChatUserIds.add(chat.getRecipientId());
+                         }
                     }
                 }
             }
@@ -227,7 +248,10 @@ public class ChatsFragment extends Fragment {
                     user.userId = doc.getId();
                     user.name = doc.getString("followedName");
                     user.profilePic = doc.getString("followedProfilePic");
-                    allFollowing.add(user);
+                    
+                    if (!com.visiboard.app.utils.UserCache.getInstance().isBlocked(user.userId)) {
+                        allFollowing.add(user);
+                    }
                 }
                 
                 filterFollowingList();

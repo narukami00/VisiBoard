@@ -50,6 +50,12 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.Timestamp;
 import com.visiboard.app.R;
+import com.visiboard.app.data.UserInfo;
+import com.visiboard.app.utils.UserCache;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
+import java.util.HashSet;
+import java.util.Set;
 
 import java.io.File;
 
@@ -1060,102 +1066,45 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         db.collection("notes")
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
-                    List<ARNote> newNotes = new ArrayList<>();
-
+                    // Pre-fetch Users for Privacy Check
+                    Set<String> usersToCheck = new HashSet<>();
                     for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
                         try {
                             String noteUserId = doc.getString("userId");
-                            String visibility = doc.getString("visibility");
-                            if (visibility == null) visibility = "public";
-
-                            // Privacy Filter
-                            boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
-                            boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
-
-                            // Filter Hidden Notes
-                            if (isHidden) continue;
-
-                            if (!noteUserId.equals(userId)) {
-                                if ("private".equals(visibility)) continue;
-                                
-                                boolean isRestricted = isOwnerPrivate || "followers".equals(visibility);
-                                if (isRestricted && !followingIds.contains(noteUserId)) {
-                                    continue;
+                            if (noteUserId != null && !noteUserId.equals(userId) && !followingIds.contains(noteUserId)) {
+                                if (UserCache.getInstance().get(noteUserId) == null) {
+                                    usersToCheck.add(noteUserId);
                                 }
                             }
-
-                            GeoPoint location = doc.getGeoPoint("location");
-                            if (location == null) {
-                                Double lat = doc.getDouble("lat");
-                                Double lon = doc.getDouble("lon");
-                                if (lat != null && lon != null) {
-                                    location = new GeoPoint(lat, lon);
-                                }
-                            }
-
-                            if (location != null) {
-                                double distance = calculateDistance(
-                                        virtualLocation.getLatitude(),
-                                        virtualLocation.getLongitude(),
-                                        location.getLatitude(),
-                                        location.getLongitude()
-                                );
-
-                                if (distance <= currentRadiusMeters) {
-                                    ARNote arNote = new ARNote();
-                                    arNote.id = doc.getId();
-                                    arNote.text = doc.getString("text");
-                                    if (arNote.text == null) arNote.text = doc.getString("note");
-                                    arNote.latitude = location.getLatitude();
-                                    arNote.longitude = location.getLongitude();
-                                    arNote.distance = distance;
-                                    arNote.userId = noteUserId;
-                                    arNote.userName = "User"; // Default
-                                    Long ts = doc.getLong("timestamp");
-                                    arNote.timestamp = (ts != null) ? ts : System.currentTimeMillis();
-
-                                    arNote.bearing = calculateBearing(
-                                            virtualLocation.getLatitude(),
-                                            virtualLocation.getLongitude(),
-                                            location.getLatitude(),
-                                            location.getLongitude()
-                                    );
-
-                                    newNotes.add(arNote);
-                                }
-                            }
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error parsing note", e);
-                        }
+                        } catch (Exception e) {}
                     }
 
-                    // Sort by distance descending (Far -> Near) so closer notes are drawn last (on top)
-                    Collections.sort(newNotes, (n1, n2) -> Double.compare(n2.distance, n1.distance));
-
-                    nearbyNotes.clear();
-                    nearbyNotes.addAll(newNotes);
-
-                    progressLoading.setVisibility(View.GONE);
-                    updateARView();
-
-                    // Fetch user info for all notes
-                    for (ARNote note : nearbyNotes) {
-                        if (note.userId != null && !note.userId.isEmpty()) {
-                            db.collection("users").document(note.userId).get()
-                                    .addOnSuccessListener(userDoc -> {
-                                        if (userDoc.exists()) {
-                                            note.userName = userDoc.getString("name");
-                                            note.userProfilePic = userDoc.getString("profilePic");
-                                            if (note.userName == null) note.userName = "User";
-
-                                            // Update view if it exists
-                                            View view = arOverlay.findViewWithTag(note.id);
-                                            if (view != null) {
-                                                updateNoteViewData(view, note);
-                                            }
-                                        }
-                                    });
+                    if (usersToCheck.isEmpty()) {
+                        processAndRenderARNotes(querySnapshot);
+                    } else {
+                        List<Task<DocumentSnapshot>> tasks = new ArrayList<>();
+                        for (String uid : usersToCheck) {
+                            tasks.add(db.collection("users").document(uid).get());
                         }
+
+                        Tasks.whenAllSuccess(tasks).addOnSuccessListener(results -> {
+                            if (!isAdded()) return;
+                            
+                            for (Object result : results) {
+                                DocumentSnapshot userDoc = (DocumentSnapshot) result;
+                                if (userDoc.exists()) {
+                                    UserInfo userInfo = userDoc.toObject(UserInfo.class);
+                                    if (userInfo != null) {
+                                        userInfo.setUserId(userDoc.getId());
+                                        UserCache.getInstance().put(userDoc.getId(), userInfo);
+                                    }
+                                }
+                            }
+                            processAndRenderARNotes(querySnapshot);
+                        }).addOnFailureListener(e -> {
+                            Log.e(TAG, "Failed to fetch users", e);
+                            if (isAdded()) processAndRenderARNotes(querySnapshot);
+                        });
                     }
 
                 }).addOnFailureListener(e -> {
@@ -1163,6 +1112,141 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                     progressLoading.setVisibility(View.GONE);
                     tvNotesCount.setText("Error loading notes");
                 });
+    }
+
+    private void processAndRenderARNotes(com.google.firebase.firestore.QuerySnapshot querySnapshot) {
+        String userId = auth.getCurrentUser().getUid();
+        List<ARNote> newNotes = new ArrayList<>();
+
+        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+            try {
+                String noteUserId = doc.getString("userId");
+                String visibility = doc.getString("visibility");
+                if (visibility == null) visibility = "public";
+
+                // Privacy Filter
+                boolean isOwnerPrivate = doc.getBoolean("isOwnerPrivate") != null && doc.getBoolean("isOwnerPrivate");
+                boolean isHidden = doc.getBoolean("isHidden") != null && doc.getBoolean("isHidden");
+
+                // Filter Hidden Notes
+                if (isHidden) continue;
+
+                if (!noteUserId.equals(userId)) {
+                    // 1. Strict Private Note (Only Me)
+                    if ("private".equals(visibility)) continue;
+
+                    // 2. Owner Privacy Check (Using Cache Source of Truth)
+                    boolean isUserPrivate = false;
+                    UserInfo ownerInfo = UserCache.getInstance().get(noteUserId);
+                    if (ownerInfo != null) {
+                        isUserPrivate = ownerInfo.isPrivate();
+                    } else {
+                        // Fallback to note's denormalized field if cache missing
+                        isUserPrivate = isOwnerPrivate;
+                    }
+
+                    boolean isRestricted = isUserPrivate || "followers".equals(visibility);
+                    if (isRestricted && !followingIds.contains(noteUserId)) {
+                        continue;
+                    }
+                    
+                    // Filter Blocked Users
+                    if (UserCache.getInstance().isBlocked(noteUserId)) {
+                        continue;
+                    }
+                }
+
+                GeoPoint location = doc.getGeoPoint("location");
+                if (location == null) {
+                    Double lat = doc.getDouble("lat");
+                    Double lon = doc.getDouble("lon");
+                    if (lat != null && lon != null) {
+                        location = new GeoPoint(lat, lon);
+                    }
+                }
+
+                if (location != null) {
+                    double distance = calculateDistance(
+                            virtualLocation.getLatitude(),
+                            virtualLocation.getLongitude(),
+                            location.getLatitude(),
+                            location.getLongitude()
+                    );
+
+                    if (distance <= currentRadiusMeters) {
+                        ARNote arNote = new ARNote();
+                        arNote.id = doc.getId();
+                        arNote.text = doc.getString("text");
+                        if (arNote.text == null) arNote.text = doc.getString("note");
+                        arNote.latitude = location.getLatitude();
+                        arNote.longitude = location.getLongitude();
+                        arNote.distance = distance;
+                        arNote.userId = noteUserId;
+                        arNote.userName = "User"; // Default
+                        Long ts = doc.getLong("timestamp");
+                        arNote.timestamp = (ts != null) ? ts : System.currentTimeMillis();
+
+                        arNote.bearing = calculateBearing(
+                                virtualLocation.getLatitude(),
+                                virtualLocation.getLongitude(),
+                                location.getLatitude(),
+                                location.getLongitude()
+                        );
+
+                        newNotes.add(arNote);
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error parsing note", e);
+            }
+        }
+
+        // Sort by distance descending (Far -> Near) so closer notes are drawn last (on top)
+        Collections.sort(newNotes, (n1, n2) -> Double.compare(n2.distance, n1.distance));
+
+        nearbyNotes.clear();
+        nearbyNotes.addAll(newNotes);
+
+        progressLoading.setVisibility(View.GONE);
+        updateARView();
+
+        // Fetch user info for all notes
+        for (ARNote note : nearbyNotes) {
+            if (note.userId != null && !note.userId.isEmpty()) {
+                UserInfo cachedUser = UserCache.getInstance().get(note.userId);
+                if (cachedUser != null) {
+                    note.userName = cachedUser.getName();
+                    note.userProfilePic = cachedUser.getProfilePic();
+                    if (note.userName == null) note.userName = "User";
+                    // Update view if it exists
+                    View view = arOverlay.findViewWithTag(note.id);
+                    if (view != null) {
+                        updateNoteViewData(view, note);
+                    }
+                } else {
+                    db.collection("users").document(note.userId).get()
+                            .addOnSuccessListener(userDoc -> {
+                                if (userDoc.exists()) {
+                                    UserInfo userInfo = userDoc.toObject(UserInfo.class);
+                                    if (userInfo != null) {
+                                        userInfo.setUserId(userDoc.getId());
+                                        UserCache.getInstance().put(userDoc.getId(), userInfo);
+                                        
+                                        note.userName = userInfo.getName();
+                                        note.userProfilePic = userInfo.getProfilePic();
+                                        if (note.userName == null) note.userName = "User";
+
+                                        // Update view if it exists
+                                        View view = arOverlay.findViewWithTag(note.id);
+                                        if (view != null) {
+                                            updateNoteViewData(view, note);
+                                        }
+                                    }
+                                }
+                            });
+                }
+            }
+        }
     }
 
     private void updateARView() {

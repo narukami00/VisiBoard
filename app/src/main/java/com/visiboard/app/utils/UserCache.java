@@ -112,4 +112,24 @@ public class UserCache {
         // Trim to 50% capacity on memory pressure
         memoryCache.trimToSize(memoryCache.size() / 2);
     }
+
+    // --- Blocked Users Management ---
+    private final java.util.Set<String> blockedUserIds = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    public void setBlockedUsers(java.util.Set<String> ids) {
+        blockedUserIds.clear();
+        if (ids != null) blockedUserIds.addAll(ids);
+    }
+    
+    public void addBlockedUser(String userId) {
+        if (userId != null) blockedUserIds.add(userId);
+    }
+    
+    public void removeBlockedUser(String userId) {
+        if (userId != null) blockedUserIds.remove(userId);
+    }
+    
+    public boolean isBlocked(String userId) {
+        return userId != null && blockedUserIds.contains(userId);
+    }
 }
