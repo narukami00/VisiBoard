@@ -7,7 +7,6 @@
     android:orientation="horizontal"
     android:padding="8dp"
     android:background="@drawable/bg_quick_actions"
-    android:elevation="8dp"
     android:gravity="center">
 
     <!-- Like Button -->
@@ -24,8 +23,7 @@
             android:id="@+id/iv_like"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:src="@drawable/ic_heart"
-            app:tint="@color/primary" />
+            android:src="@drawable/ic_heart_outline" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -50,7 +48,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:src="@drawable/ic_share"
-            app:tint="@color/secondary" />
+            app:tint="@color/text_primary" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -75,7 +73,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:src="@drawable/ic_navigation"
-            app:tint="#4CAF50" />
+            app:tint="@color/primary" />
 
         <TextView
             android:layout_width="wrap_content"

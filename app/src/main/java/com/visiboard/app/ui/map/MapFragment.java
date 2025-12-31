@@ -1241,8 +1241,13 @@ public class MapFragment extends Fragment {
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true);
         
-        quickActionsPopup.setElevation(12f);
+        quickActionsPopup.setElevation(0f);
         quickActionsPopup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        
+        // Measure popup dimensions before showing
+        popupView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int popupHeight = popupView.getMeasuredHeight();
+        int popupWidth = popupView.getMeasuredWidth();
         
         View actionLike = popupView.findViewById(R.id.action_like);
         View actionShare = popupView.findViewById(R.id.action_share);
@@ -1256,7 +1261,7 @@ public class MapFragment extends Fragment {
                 if (doc.exists()) {
                     java.util.List<String> likedBy = (java.util.List<String>) doc.get("likedBy");
                     boolean isLiked = likedBy != null && likedBy.contains(currentUserId);
-                    ivLike.setColorFilter(isLiked ? 0xFFE84545 : getResources().getColor(R.color.primary, null));
+                    ivLike.setImageResource(isLiked ? R.drawable.ic_heart : R.drawable.ic_heart_outline);
                 }
             });
         }
@@ -1279,18 +1284,21 @@ public class MapFragment extends Fragment {
                     if (doc.exists()) {
                         java.util.List<String> likedBy = (java.util.List<String>) doc.get("likedBy");
                         boolean isLiked = likedBy != null && likedBy.contains(currentUserId);
+                        boolean willLike = !isLiked;
                         
                         db.runTransaction(transaction -> {
                             com.google.firebase.firestore.DocumentReference noteRef = db.collection("notes").document(docId);
                             if (isLiked) {
                                 transaction.update(noteRef, "likedBy", com.google.firebase.firestore.FieldValue.arrayRemove(currentUserId));
+                                transaction.update(noteRef, "likeCount", com.google.firebase.firestore.FieldValue.increment(-1));
                             } else {
                                 transaction.update(noteRef, "likedBy", com.google.firebase.firestore.FieldValue.arrayUnion(currentUserId));
+                                transaction.update(noteRef, "likeCount", com.google.firebase.firestore.FieldValue.increment(1));
                             }
                             return null;
                         }).addOnSuccessListener(aVoid -> {
                             animateLike(ivLike);
-                            ivLike.setColorFilter(isLiked ? getResources().getColor(R.color.primary, null) : 0xFFE84545);
+                            ivLike.setImageResource(willLike ? R.drawable.ic_heart : R.drawable.ic_heart_outline);
                             if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), isLiked ? "Unliked" : "Liked!");
                         });
                     }
@@ -1321,10 +1329,27 @@ public class MapFragment extends Fragment {
             startNavigation(position);
         });
         
-        // Show popup at screen center (approximate)
-        android.graphics.Point screenCenter = new android.graphics.Point();
-        requireActivity().getWindowManager().getDefaultDisplay().getSize(screenCenter);
-        quickActionsPopup.showAtLocation(mapView, android.view.Gravity.CENTER, 0, 0);
+        // Convert LatLng to screen coordinates
+        android.graphics.PointF screenPoint = mapLibreMap.getProjection().toScreenLocation(position);
+        
+        // Get screen dimensions
+        android.graphics.Point screenSize = new android.graphics.Point();
+        requireActivity().getWindowManager().getDefaultDisplay().getSize(screenSize);
+        
+        // Calculate offset to show popup slightly above the tap point
+        int offsetY = -popupHeight - 50; // Show popup above the marker with 50px extra spacing
+        
+        // Calculate x position centered on the tap point
+        int x = (int) screenPoint.x - (popupWidth / 2);
+        int y = (int) screenPoint.y + offsetY;
+        
+        // Ensure popup stays within screen bounds
+        if (x < 0) x = 10; // Left edge padding
+        if (x + popupWidth > screenSize.x) x = screenSize.x - popupWidth - 10; // Right edge padding
+        if (y < 0) y = (int) screenPoint.y + 50; // If can't fit above, show below marker
+        
+        // Show popup at the calculated location
+        quickActionsPopup.showAtLocation(mapView, android.view.Gravity.NO_GRAVITY, x, y);
     }
     
     // Helper to add subtle press effect (scale down on touch)
