@@ -651,7 +651,7 @@ public class ChatActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (isTyping) {
                     tvStatus.setText("Typing...");
-                    tvStatus.setTextColor(ContextCompat.getColor(this, R.color.primary));
+                    tvStatus.setTextColor(0xFFFFFFFF); // White color for visibility
                 } else {
                     updateOnlineStatusUI(); // Revert to online/offline status
                 }
@@ -701,7 +701,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void startListeningForMessages() {
-        chatManager.markChatAsRead(chatId);
+        chatManager.markMessagesAsRead(chatId, currentUserId);
 
         messagesListener = chatManager.listenForMessages(chatId, new ChatManager.MessageListener() {
             @Override
@@ -712,7 +712,7 @@ public class ChatActivity extends AppCompatActivity {
                     updateEmptyState();
                     
                     if (!message.getSenderId().equals(currentUserId)) {
-                        chatManager.markChatAsRead(chatId);
+                        chatManager.markMessagesAsRead(chatId, currentUserId);
                     }
                 });
             }

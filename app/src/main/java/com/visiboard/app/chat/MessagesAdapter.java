@@ -353,15 +353,33 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     class ImageMessageViewHolder extends RecyclerView.ViewHolder {
         private final ImageView ivImage;
         private final TextView tvTime;
+        private final ImageView ivReadStatus;
 
         ImageMessageViewHolder(@NonNull View itemView) {
             super(itemView);
             ivImage = itemView.findViewById(R.id.iv_image);
             tvTime = itemView.findViewById(R.id.tv_time);
+            ivReadStatus = itemView.findViewById(R.id.iv_read_status);
         }
 
         void bind(ChatMessage message) {
             tvTime.setText(formatMessageTime(message.getTimestamp()));
+            
+            // Show read status for sent messages
+            if (ivReadStatus != null && message.getSenderId() != null && message.getSenderId().equals(currentUserId)) {
+                ivReadStatus.setVisibility(View.VISIBLE);
+                if (message.isRead()) {
+                    // Double check - message has been read
+                    ivReadStatus.setImageResource(R.drawable.ic_check_double);
+                    ivReadStatus.setColorFilter(itemView.getContext().getResources().getColor(R.color.accent, null));
+                } else {
+                    // Single check - message sent but not read
+                    ivReadStatus.setImageResource(R.drawable.ic_check);
+                    ivReadStatus.setColorFilter(0xAAFFFFFF); // Light white
+                }
+            } else if (ivReadStatus != null) {
+                ivReadStatus.setVisibility(View.GONE);
+            }
             
             // Load image using existing ImageCache or Glide (implied usage in ImageCache)
             // But ImageCache expects a user directory structure for "base64" usually, 
