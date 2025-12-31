@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <!-- Quick action to open camera/capture -->
+    <shortcut
+        android:shortcutId="capture"
+        android:enabled="true"
+        android:icon="@drawable/ic_capture"
+        android:shortcutShortLabel="@string/shortcut_capture_short"
+        android:shortcutLongLabel="@string/shortcut_capture_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.visiboard.app"
+            android:targetClass="com.visiboard.app.MainActivity">
+            <extra android:name="navigate_to" android:value="capture" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    
+    <!-- Quick action to create a new note -->
+    <shortcut
+        android:shortcutId="create_note"
+        android:enabled="true"
+        android:icon="@drawable/ic_heart"
+        android:shortcutShortLabel="@string/shortcut_create_note_short"
+        android:shortcutLongLabel="@string/shortcut_create_note_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.visiboard.app"
+            android:targetClass="com.visiboard.app.ui.create.CreateNoteActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    
+    <!-- Quick action to open chats -->
+    <shortcut
+        android:shortcutId="chats"
+        android:enabled="true"
+        android:icon="@drawable/ic_send"
+        android:shortcutShortLabel="@string/shortcut_chats_short"
+        android:shortcutLongLabel="@string/shortcut_chats_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.visiboard.app"
+            android:targetClass="com.visiboard.app.MainActivity">
+            <extra android:name="navigate_to" android:value="chats" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    
+</shortcuts>

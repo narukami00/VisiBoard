@@ -205,6 +205,22 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             tvMessage.setText(message.getText());
             tvTime.setText(formatMessageTime(message.getTimestamp()));
             
+            // Show read status for sent messages
+            if (ivReadStatus != null && message.getSenderId() != null && message.getSenderId().equals(currentUserId)) {
+                ivReadStatus.setVisibility(View.VISIBLE);
+                if (message.isRead()) {
+                    // Double check - message has been read
+                    ivReadStatus.setImageResource(R.drawable.ic_check_double);
+                    ivReadStatus.setColorFilter(itemView.getContext().getResources().getColor(R.color.accent, null));
+                } else {
+                    // Single check - message sent but not read
+                    ivReadStatus.setImageResource(R.drawable.ic_check);
+                    ivReadStatus.setColorFilter(0xAAFFFFFF); // Light white
+                }
+            } else if (ivReadStatus != null) {
+                ivReadStatus.setVisibility(View.GONE);
+            }
+            
             if (message.getReplyToId() != null && message.getReplyToName() != null && message.getReplyToText() != null) {
                 layoutReply.setVisibility(View.VISIBLE);
                 tvReplyName.setText(message.getReplyToName());
@@ -224,7 +240,7 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             ClipData clip = ClipData.newPlainText("Message", text);
             clipboard.setPrimaryClip(clip);
             itemView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-            Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show();
+            com.visiboard.app.utils.UiHelper.showInfo(itemView, "Message copied");
         }
     }
 
@@ -258,7 +274,7 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             
             btnPlay.setOnClickListener(v -> {
                 if (voiceHelper == null) {
-                    Toast.makeText(v.getContext(), "Voice playback unavailable", Toast.LENGTH_SHORT).show();
+                    com.visiboard.app.utils.UiHelper.showWarning(itemView, "Voice playback unavailable");
                     return;
                 }
                 
@@ -279,7 +295,7 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                     // Start playback
                     String voiceBase64 = message.getVoiceBase64();
                     if (voiceBase64 == null || voiceBase64.isEmpty()) {
-                        Toast.makeText(v.getContext(), "Voice data not available", Toast.LENGTH_SHORT).show();
+                        com.visiboard.app.utils.UiHelper.showWarning(itemView, "Voice data not available");
                         return;
                     }
                     
@@ -324,7 +340,7 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                         public void onError(String error) {
                             isPlaying = false;
                             btnPlay.setImageResource(R.drawable.ic_play);
-                            Toast.makeText(itemView.getContext(), error, Toast.LENGTH_SHORT).show();
+                            com.visiboard.app.utils.UiHelper.showError(itemView, error);
                             currentlyPlayingPosition = -1;
                         }
                     });

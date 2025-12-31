@@ -1,4 +1,12 @@
 <resources>
     <string name="app_name">VisiBoard</string>
     <string name="profile_image">Profile Image</string>
+    
+    <!-- App Shortcuts -->
+    <string name="shortcut_capture_short">Camera</string>
+    <string name="shortcut_capture_long">Open Camera</string>
+    <string name="shortcut_create_note_short">New Note</string>
+    <string name="shortcut_create_note_long">Create a New Note</string>
+    <string name="shortcut_chats_short">Chats</string>
+    <string name="shortcut_chats_long">Open Chats</string>
 </resources>

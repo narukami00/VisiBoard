@@ -196,6 +196,24 @@ public class MainActivity extends AppCompatActivity {
             intent.removeExtra("navigate_to_lat");
             intent.removeExtra("navigate_to_lng");
             intent.removeExtra("open_note_window");
+        } else if (intent != null && "capture".equals(intent.getStringExtra("navigate_to"))) {
+            // From App Shortcut: Open Camera/Capture
+            Log.d("MainActivity", "Shortcut navigation to capture");
+            try {
+                navController.navigate(R.id.captureFragment);
+            } catch (Exception e) {
+                Log.e("MainActivity", "Navigation to capture error", e);
+            }
+            intent.removeExtra("navigate_to");
+        } else if (intent != null && "chats".equals(intent.getStringExtra("navigate_to"))) {
+            // From App Shortcut: Open Chats/Connect
+            Log.d("MainActivity", "Shortcut navigation to chats");
+            try {
+                navController.navigate(R.id.connectFragment);
+            } catch (Exception e) {
+                Log.e("MainActivity", "Navigation to chats error", e);
+            }
+            intent.removeExtra("navigate_to");
         } else {
             Log.d("MainActivity", "No navigation extras in intent");
         }

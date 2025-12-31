@@ -37,6 +37,7 @@ import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.FileOutputStream;
@@ -76,6 +77,7 @@ public class ChatActivity extends AppCompatActivity {
     private ImageButton btnSend;
     private ImageButton btnVoice;
     private ImageButton btnAttach; // New field
+    private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipeRefresh;
     private ImageButton btnBack;
     private CircleImageView ivRecipientAvatar;
     private TextView tvRecipientName;
@@ -181,8 +183,8 @@ public class ChatActivity extends AppCompatActivity {
         com.visiboard.app.utils.UiHelper.showInfo(findViewById(android.R.id.content), "Uploading image...");
 
         try {
-            // Create temp file
-            File file = createTempFileFromUri(uri);
+            // Create compressed temp file
+            File file = createCompressedImageFile(uri);
             if (file == null) {
                  com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to process image");
                  return;
@@ -221,6 +223,71 @@ public class ChatActivity extends AppCompatActivity {
 
         } catch (Exception e) {
              com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Creates a compressed image file from URI to reduce upload size and bandwidth.
+     * Targets ~800KB max compressed size.
+     */
+    private File createCompressedImageFile(Uri uri) {
+        try {
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            if (inputStream == null) return null;
+            
+            // Decode with inJustDecodeBounds first to get size
+            android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            android.graphics.BitmapFactory.decodeStream(inputStream, null, options);
+            inputStream.close();
+            
+            // Calculate sample size to reduce memory usage
+            int sampleSize = 1;
+            int maxDimension = 1200; // Max width or height
+            if (options.outWidth > maxDimension || options.outHeight > maxDimension) {
+                int halfWidth = options.outWidth / 2;
+                int halfHeight = options.outHeight / 2;
+                while ((halfWidth / sampleSize) >= maxDimension && (halfHeight / sampleSize) >= maxDimension) {
+                    sampleSize *= 2;
+                }
+            }
+            
+            // Decode with sample size
+            options.inJustDecodeBounds = false;
+            options.inSampleSize = sampleSize;
+            inputStream = getContentResolver().openInputStream(uri);
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(inputStream, null, options);
+            inputStream.close();
+            
+            if (bitmap == null) return null;
+            
+            // Scale down if still too large
+            int width = bitmap.getWidth();
+            int height = bitmap.getHeight();
+            if (width > maxDimension || height > maxDimension) {
+                float scale = Math.min((float) maxDimension / width, (float) maxDimension / height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+                bitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, width, height, true);
+            }
+            
+            // Write to temp file with compression
+            File file = new File(getCacheDir(), "chat_img_" + System.currentTimeMillis() + ".jpg");
+            FileOutputStream fos = new FileOutputStream(file);
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, fos); // 75% quality
+            fos.close();
+            
+            Log.d(TAG, "Compressed image: " + file.length() / 1024 + "KB");
+            return file;
+        } catch (Exception e) {
+            Log.e(TAG, "Image compression failed", e);
+            // Fallback to original method
+            try {
+                return createTempFileFromUri(uri);
+            } catch (IOException ioException) {
+                Log.e(TAG, "Fallback also failed", ioException);
+                return null;
+            }
         }
     }
     
@@ -267,9 +334,11 @@ public class ChatActivity extends AppCompatActivity {
         btnSend = findViewById(R.id.btn_send);
         btnVoice = findViewById(R.id.btn_voice);
         btnAttach = findViewById(R.id.btn_attach); // Init
+        swipeRefresh = findViewById(R.id.swipe_refresh);
         btnBack = findViewById(R.id.btn_back);
         ivRecipientAvatar = findViewById(R.id.iv_recipient_avatar);
         tvRecipientName = findViewById(R.id.tv_recipient_name);
+        tvStatus = findViewById(R.id.tv_status);
         llEmptyState = findViewById(R.id.ll_empty_state);
         tvEmptyTitle = findViewById(R.id.tv_empty_title);
         
@@ -293,6 +362,29 @@ public class ChatActivity extends AppCompatActivity {
         tvStatus = findViewById(R.id.tv_status);
         if (tvStatus != null) {
             tvStatus.setText("Offline");
+        }
+        
+        // Setup pull-to-refresh
+        setupPullToRefresh();
+    }
+    
+    private void setupPullToRefresh() {
+        if (swipeRefresh != null) {
+            swipeRefresh.setColorSchemeResources(R.color.primary, R.color.secondary);
+            swipeRefresh.setOnRefreshListener(() -> {
+                // Reload messages
+                if (chatManager != null && chatId != null && messagesListener != null) {
+                    chatManager.removeMessagesListener(chatId, messagesListener);
+                    adapter.clearMessages();
+                    startListeningForMessages();
+                }
+                // Stop refreshing after a short delay
+                new android.os.Handler(getMainLooper()).postDelayed(() -> {
+                    if (swipeRefresh != null) {
+                        swipeRefresh.setRefreshing(false);
+                    }
+                }, 1500);
+            });
         }
     }
 
@@ -769,6 +861,33 @@ public class ChatActivity extends AppCompatActivity {
         if (messagesListener == null && chatId != null) {
             startListeningForMessages();
         }
+        
+        // Mark messages as read when chat is opened/resumed
+        if (chatId != null && currentUserId != null) {
+            chatManager.markMessagesAsRead(chatId, currentUserId);
+        }
+        
+        // Start listening for recipient typing
+        setupTypingListener();
+    }
+    
+    private void setupTypingListener() {
+        if (recipientId == null || chatId == null) return;
+        
+        chatManager.listenForTyping(chatId, recipientId, isTyping -> {
+            runOnUiThread(() -> {
+                if (tvStatus != null) {
+                    if (isTyping) {
+                        tvStatus.setText("typing...");
+                        tvStatus.setTextColor(getResources().getColor(R.color.accent, null));
+                    } else {
+                        // Restore to online/offline status
+                        tvStatus.setText(isRecipientOnline ? "Online" : "Tap to view profile");
+                        tvStatus.setTextColor(0xCCFFFFFF);
+                    }
+                }
+            });
+        });
     }
 
     @Override
@@ -782,6 +901,11 @@ public class ChatActivity extends AppCompatActivity {
         // Stop playback
         if (voiceHelper.isPlaying()) {
             voiceHelper.stopPlayback();
+        }
+        
+        // Clear typing status when leaving chat
+        if (chatId != null) {
+            chatManager.setTypingStatus(chatId, currentUserId, false);
         }
     }
 

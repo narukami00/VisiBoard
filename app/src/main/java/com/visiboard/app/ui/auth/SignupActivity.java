@@ -11,7 +11,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -19,6 +18,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.visiboard.app.MainActivity;
 import com.visiboard.app.R;
+import com.visiboard.app.utils.UiHelper;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -106,7 +106,7 @@ public class SignupActivity extends AppCompatActivity {
 
             } catch (IOException e) {
                 e.printStackTrace();
-                Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show();
+                UiHelper.showError(findViewById(android.R.id.content), "Failed to load image");
             }
         }
     }
@@ -119,7 +119,7 @@ public class SignupActivity extends AppCompatActivity {
 
         // Validation
         if (TextUtils.isEmpty(name) || TextUtils.isEmpty(email) || TextUtils.isEmpty(pass) || TextUtils.isEmpty(confirmPass)) {
-            Toast.makeText(this, "Fill all fields", Toast.LENGTH_SHORT).show();
+            UiHelper.showWarning(findViewById(android.R.id.content), "Fill all fields");
             return;
         }
 
@@ -163,14 +163,14 @@ public class SignupActivity extends AppCompatActivity {
                                 .addOnSuccessListener(unused -> {
                                     signupProgressBar.setVisibility(android.view.View.GONE);
                                     signupBtn.setEnabled(true);
-                                    Toast.makeText(this, "Account created!", Toast.LENGTH_SHORT).show();
+                                    UiHelper.showSuccess(findViewById(android.R.id.content), "Account created!");
                                     startActivity(new Intent(this, MainActivity.class));
                                     finish();
                                 })
                                 .addOnFailureListener(e -> {
                                         signupProgressBar.setVisibility(android.view.View.GONE);
                                         signupBtn.setEnabled(true);
-                                        Toast.makeText(this, "Firestore error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                        UiHelper.showError(findViewById(android.R.id.content), "Firestore error: " + e.getMessage());
                                 });
                     } else {
                         signupProgressBar.setVisibility(android.view.View.GONE);
@@ -191,7 +191,7 @@ public class SignupActivity extends AppCompatActivity {
                             errorMessage = "Signup failed: " + error;
                         }
                         
-                        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show();
+                        UiHelper.showError(findViewById(android.R.id.content), errorMessage);
                     }
                 });
     }

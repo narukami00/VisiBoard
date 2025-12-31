@@ -2512,11 +2512,11 @@ public class MapFragment extends Fragment {
     }
 
     // Lifecycle
-    @Override public void onStart() { super.onStart(); mapView.onStart(); }
+    @Override public void onStart() { super.onStart(); if (mapView != null) mapView.onStart(); }
     @Override
     public void onResume() {
         super.onResume();
-        mapView.onResume();
+        if (mapView != null) mapView.onResume();
         // Restart location updates for accuracy
         startLocationUpdates();
         
@@ -2533,12 +2533,12 @@ public class MapFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
-        mapView.onPause();
+        if (mapView != null) mapView.onPause();
         // Stop location updates to save battery
         stopLocationUpdates();
     }
-    @Override public void onStop() { super.onStop(); mapView.onStop(); }
-    @Override public void onLowMemory() { super.onLowMemory(); mapView.onLowMemory(); }
+    @Override public void onStop() { super.onStop(); if (mapView != null) mapView.onStop(); }
+    @Override public void onLowMemory() { super.onLowMemory(); if (mapView != null) mapView.onLowMemory(); }
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -2569,7 +2569,12 @@ public class MapFragment extends Fragment {
         if (notesListener != null) notesListener.remove();
         if (mapView != null) mapView.onDestroy();
     }
-    @Override public void onSaveInstanceState(@NonNull Bundle outState) { super.onSaveInstanceState(outState); mapView.onSaveInstanceState(outState);     }
+    @Override public void onSaveInstanceState(@NonNull Bundle outState) { 
+        super.onSaveInstanceState(outState); 
+        if (mapView != null) {
+            mapView.onSaveInstanceState(outState);
+        }
+    }
 
     // ==========================================
     // FAB & Feature Logic

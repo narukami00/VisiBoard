@@ -602,4 +602,37 @@ public class ChatManager {
     public interface PresenceListener {
         void onPresenceChanged(boolean isOnline, long lastSeenTimestamp);
     }
+    
+    // ===== READ RECEIPTS =====
+    
+    /**
+     * Marks all messages in a chat as read by updating the user_chats unread count to 0.
+     * Also updates individual message 'read' status for sender to see.
+     */
+    public void markMessagesAsRead(String chatId, String currentUserId) {
+        if (chatId == null || currentUserId == null) return;
+        
+        // Reset unread count
+        database.child("user_chats").child(currentUserId).child(chatId).child("unreadCount").setValue(0);
+        
+        // Mark individual messages as read
+        database.child("chats").child(chatId).child("messages")
+            .orderByChild("read").equalTo(false)
+            .addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override
+                public void onDataChange(@NonNull DataSnapshot snapshot) {
+                    for (DataSnapshot msgSnapshot : snapshot.getChildren()) {
+                        String senderId = msgSnapshot.child("senderId").getValue(String.class);
+                        // Only mark messages from the OTHER user as read
+                        if (senderId != null && !senderId.equals(currentUserId)) {
+                            msgSnapshot.getRef().child("read").setValue(true);
+                        }
+                    }
+                }
+
+                @Override
+                public void onCancelled(@NonNull DatabaseError error) {
+                }
+            });
+    }
 }
