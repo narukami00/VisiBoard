@@ -39,12 +39,35 @@ public class AdminLoginActivity extends AppCompatActivity {
             return;
         }
 
-        if (id.equals(AdminCredentials.ADMIN_ID) && pass.equals(AdminCredentials.ADMIN_PASS)) {
-            Toast.makeText(this, "Access Granted", Toast.LENGTH_SHORT).show();
-            startActivity(new Intent(this, AdminDashboardActivity.class));
-            finish();
-        } else {
-            Toast.makeText(this, "Access Denied", Toast.LENGTH_SHORT).show();
-        }
+        // Disable button while validating
+        loginBtn.setEnabled(false);
+        loginBtn.setText("Verifying...");
+
+        AdminCredentials.validateCredentials(id, pass, new AdminCredentials.ValidationCallback() {
+            @Override
+            public void onResult(boolean isValid) {
+                runOnUiThread(() -> {
+                    loginBtn.setEnabled(true);
+                    loginBtn.setText("Login");
+                    
+                    if (isValid) {
+                        Toast.makeText(AdminLoginActivity.this, "Access Granted", Toast.LENGTH_SHORT).show();
+                        startActivity(new Intent(AdminLoginActivity.this, AdminDashboardActivity.class));
+                        finish();
+                    } else {
+                        Toast.makeText(AdminLoginActivity.this, "Access Denied", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                runOnUiThread(() -> {
+                    loginBtn.setEnabled(true);
+                    loginBtn.setText("Login");
+                    Toast.makeText(AdminLoginActivity.this, error, Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
     }
 }

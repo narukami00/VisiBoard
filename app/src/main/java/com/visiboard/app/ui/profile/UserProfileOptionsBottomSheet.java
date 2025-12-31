@@ -77,7 +77,8 @@ public class UserProfileOptionsBottomSheet extends BottomSheetDialogFragment {
 
     private void showBlockConfirmation() {
         dismiss();
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(),
+                R.style.ThemeOverlay_VisiBoard_MaterialAlertDialog)
             .setTitle("Block " + userName + "?")
             .setMessage("They won't be notified. You can unblock them anytime from Settings.")
             .setPositiveButton("Block", (d, w) -> blockUser())
