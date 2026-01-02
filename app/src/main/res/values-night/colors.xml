@@ -1,5 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Reaction Colors (Dark Mode) -->
+    <color name="reaction_popup_background">#1E272E</color>
+    <color name="reaction_popup_stroke">#33FFFFFF</color>
+    <color name="reaction_chip_background">#2C3A47</color>
+    <color name="reaction_chip_stroke">#40FFFFFF</color>
+    <color name="reaction_chip_selected_bg">#3300B894</color>
+    <color name="reaction_chip_selected_stroke">#00B894</color>
+    
+    <!-- Copy Button Colors (Dark Mode) -->
+    <color name="copy_button_bg">#33FFFFFF</color>
+    <color name="copy_button_stroke">#55FFFFFF</color>
+    <color name="copy_button_icon">#FFFFFF</color>
+    
+    <color name="reaction_popup_divider">#30FFFFFF</color>
+    
     <!-- Dark Theme Colors -->
     
     <!-- Primary Colors -->

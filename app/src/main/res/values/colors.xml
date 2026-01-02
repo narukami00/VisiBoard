@@ -71,4 +71,19 @@
     <color name="fidget_strings_bg">#F8F9FA</color>
     <color name="fidget_trace_bg">#F5F6FA</color>
     <color name="fidget_text_secondary">#757575</color>
+    
+    <!-- Reaction Colors -->
+    <color name="reaction_popup_background">#FFFFFF</color>
+    <color name="reaction_popup_stroke">#E1E8ED</color>
+    <color name="reaction_chip_background">#F5F6FA</color>
+    <color name="reaction_chip_stroke">#E1E8ED</color>
+    <color name="reaction_chip_selected_bg">#3300B894</color>
+    <color name="reaction_chip_selected_stroke">#00B894</color>
+    
+    <!-- Copy Button Colors -->
+    <color name="copy_button_bg">#33000000</color>
+    <color name="copy_button_stroke">#33000000</color>
+    <color name="copy_button_icon">#333333</color>
+    
+    <color name="reaction_popup_divider">#20000000</color>
 </resources>

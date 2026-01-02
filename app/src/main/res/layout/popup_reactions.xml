@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="@drawable/bg_reaction_popup"
+    android:padding="8dp"
+    android:gravity="center_vertical"
+    android:elevation="8dp">
+
+    <TextView
+        android:id="@+id/tv_reaction_haha"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="😂"
+        android:textSize="24sp"
+        android:gravity="center"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <TextView
+        android:id="@+id/tv_reaction_love"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="❤️"
+        android:textSize="24sp"
+        android:gravity="center"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <TextView
+        android:id="@+id/tv_reaction_wow"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="😮"
+        android:textSize="24sp"
+        android:gravity="center"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <TextView
+        android:id="@+id/tv_reaction_sad"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="😢"
+        android:textSize="24sp"
+        android:gravity="center"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <TextView
+        android:id="@+id/tv_reaction_angry"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="😡"
+        android:textSize="24sp"
+        android:gravity="center"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <View
+        android:id="@+id/divider_copy"
+        android:layout_width="1dp"
+        android:layout_height="24dp"
+        android:background="@color/reaction_popup_divider"
+        android:layout_marginHorizontal="8dp"/>
+
+    <ImageView
+        android:id="@+id/btn_copy"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:src="@drawable/ic_copy"
+        android:padding="6dp"
+        android:background="@drawable/bg_circle_glass"
+        android:tint="@color/copy_button_icon"/>
+
+</LinearLayout>

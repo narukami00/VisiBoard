@@ -635,4 +635,24 @@ public class ChatManager {
                 }
             });
     }
+
+    public void addReaction(String chatId, String messageId, String userId, String reaction, SendMessageCallback callback) {
+        database.child("chats").child(chatId).child("messages").child(messageId).child("reactions").child(userId).setValue(reaction)
+            .addOnSuccessListener(aVoid -> {
+                if(callback != null) callback.onSuccess(null);
+            })
+            .addOnFailureListener(e -> {
+                if(callback != null) callback.onError(e.getMessage());
+            });
+    }
+    
+    public void removeReaction(String chatId, String messageId, String userId, SendMessageCallback callback) {
+        database.child("chats").child(chatId).child("messages").child(messageId).child("reactions").child(userId).removeValue()
+            .addOnSuccessListener(aVoid -> {
+                 if(callback != null) callback.onSuccess(null);
+            })
+            .addOnFailureListener(e -> {
+                 if(callback != null) callback.onError(e.getMessage());
+            });
+    }
 }

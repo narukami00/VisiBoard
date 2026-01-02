@@ -100,4 +100,22 @@ public class ChatMessage {
 
     public String getReplyToType() { return replyToType; }
     public void setReplyToType(String replyToType) { this.replyToType = replyToType; }
+
+    // Reactions
+    // Map of userId -> reactionType (e.g., "haha", "love")
+    private java.util.Map<String, String> reactions = new java.util.HashMap<>();
+
+    public java.util.Map<String, String> getReactions() { return reactions; }
+    public void setReactions(java.util.Map<String, String> reactions) { this.reactions = reactions; }
+    
+    public void addReaction(String userId, String reaction) {
+        if (this.reactions == null) this.reactions = new java.util.HashMap<>();
+        this.reactions.put(userId, reaction);
+    }
+    
+    public void removeReaction(String userId) {
+        if (this.reactions != null) {
+            this.reactions.remove(userId);
+        }
+    }
 }

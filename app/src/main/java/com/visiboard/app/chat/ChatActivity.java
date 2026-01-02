@@ -411,7 +411,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerView() {
-        adapter = new MessagesAdapter(currentUserId);
+        adapter = new MessagesAdapter(currentUserId, chatId);
         adapter.setVoiceHelper(voiceHelper); // Pass helper to adapter
         LinearLayoutManager layoutManager = new LinearLayoutManager(this);
         layoutManager.setStackFromEnd(true);
