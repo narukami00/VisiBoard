@@ -46,7 +46,7 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
     public PinterestFeedAdapter(OnNoteClickListener listener) {
         this.listener = listener;
     }
-    
+
     public void setLoading(boolean loading) {
         if (this.isLoading != loading) {
             this.isLoading = loading;
@@ -80,21 +80,21 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             return VIEW_TYPE_LOADING;
         }
         NearbyNote note = notes.get(position);
-        if (note.getId() != null && note.getId().startsWith("fidget")) { 
-             String id = note.getId();
-             if (id.contains("spinner")) return VIEW_TYPE_FIDGET_SPINNER;
-             // Switch removed
-             if (id.contains("gravity")) return VIEW_TYPE_FIDGET_GRAVITY;
-             if (id.contains("lava")) return VIEW_TYPE_FIDGET_LAVA;
-             if (id.contains("trace")) return VIEW_TYPE_FIDGET_TRACE;
-             // Strings removed
-             if (id.contains("fluid")) return VIEW_TYPE_FIDGET_FLUID;
-             return VIEW_TYPE_FIDGET_BUBBLE; // Default
+        if (note.getId() != null && note.getId().startsWith("fidget")) {
+            String id = note.getId();
+            if (id.contains("spinner")) return VIEW_TYPE_FIDGET_SPINNER;
+            // Switch removed
+            if (id.contains("gravity")) return VIEW_TYPE_FIDGET_GRAVITY;
+            if (id.contains("lava")) return VIEW_TYPE_FIDGET_LAVA;
+            if (id.contains("trace")) return VIEW_TYPE_FIDGET_TRACE;
+            // Strings removed
+            if (id.contains("fluid")) return VIEW_TYPE_FIDGET_FLUID;
+            return VIEW_TYPE_FIDGET_BUBBLE; // Default
         }
         // Check for image: either has imageBase64 data OR has valid dimensions (indicating image note)
-        boolean hasImage = (note.getImageBase64() != null && !note.getImageBase64().isEmpty()) 
-                        || (note.getImageWidth() > 0 && note.getImageHeight() > 0)
-                        || (note.getLocalImagePath() != null && !note.getLocalImagePath().isEmpty());
+        boolean hasImage = (note.getImageBase64() != null && !note.getImageBase64().isEmpty())
+                || (note.getImageWidth() > 0 && note.getImageHeight() > 0)
+                || (note.getLocalImagePath() != null && !note.getLocalImagePath().isEmpty());
         return hasImage ? VIEW_TYPE_IMAGE : VIEW_TYPE_TEXT;
     }
 
@@ -108,19 +108,19 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_box, parent, false);
             return new FidgetBubbleViewHolder(view);
         } else if (viewType == VIEW_TYPE_FIDGET_SPINNER) {
-             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_spinner, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_spinner, parent, false);
             return new FidgetSpinnerViewHolder(view);
         } else if (viewType == VIEW_TYPE_FIDGET_FLUID) {
-             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_fluid, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_fluid, parent, false);
             return new SimpleFidgetViewHolder(view);
         } else if (viewType == VIEW_TYPE_FIDGET_GRAVITY) {
-             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_gravity, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_gravity, parent, false);
             return new FidgetGravityViewHolder(view);
         } else if (viewType == VIEW_TYPE_FIDGET_LAVA) {
-             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_lava, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_lava, parent, false);
             return new SimpleFidgetViewHolder(view);
         } else if (viewType == VIEW_TYPE_FIDGET_TRACE) {
-             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_trace, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_fidget_trace, parent, false);
             return new SimpleFidgetViewHolder(view);
         } else if (viewType == VIEW_TYPE_TEXT) {
             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_pinterest_text, parent, false);
@@ -140,39 +140,39 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             }
             return;
         }
-        
+
         // Fidgets don't need data binding usually, self contained logic in ViewHolder
         if (holder instanceof ImageNoteViewHolder) {
             ((ImageNoteViewHolder) holder).bind(notes.get(position));
         } else if (holder instanceof TextNoteViewHolder) {
             ((TextNoteViewHolder) holder).bind(notes.get(position));
         }
-        
+
         // Staggered Layout Logic
         ViewGroup.LayoutParams layoutParams = holder.itemView.getLayoutParams();
         if (layoutParams instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager.LayoutParams) {
             boolean isFullSpan = false;
             int type = getItemViewType(position);
-            
+
             // Randomize Fidgets Theme when binding
             if (type >= 10) {
-                 if (type == VIEW_TYPE_FIDGET_GRAVITY) {
-                     isFullSpan = true;
-                     if (holder instanceof FidgetGravityViewHolder) {
+                if (type == VIEW_TYPE_FIDGET_GRAVITY) {
+                    isFullSpan = true;
+                    if (holder instanceof FidgetGravityViewHolder) {
                         ((FidgetGravityViewHolder)holder).randomize();
-                     }
-                 } else if (holder instanceof SimpleFidgetViewHolder) {
-                     ((SimpleFidgetViewHolder)holder).randomize(type);
-                 } else if (holder instanceof FidgetBubbleViewHolder) {
-                     ((FidgetBubbleViewHolder)holder).randomize();
-                 }
+                    }
+                } else if (holder instanceof SimpleFidgetViewHolder) {
+                    ((SimpleFidgetViewHolder)holder).randomize(type);
+                } else if (holder instanceof FidgetBubbleViewHolder) {
+                    ((FidgetBubbleViewHolder)holder).randomize();
+                }
             } else if (type == VIEW_TYPE_IMAGE) {
                 // Wide images
                 NearbyNote n = notes.get(position);
                 float ar = (float) n.getImageWidth() / (float) n.getImageHeight();
                 if (ar > 1.2f) isFullSpan = true;
             }
-            
+
             ((androidx.recyclerview.widget.StaggeredGridLayoutManager.LayoutParams) layoutParams).setFullSpan(isFullSpan);
         }
     }
@@ -186,13 +186,13 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
         this.notes = notes;
         notifyDataSetChanged();
     }
-    
+
     public void addNotes(List<NearbyNote> newNotes) {
         int startPos = this.notes.size();
         this.notes.addAll(newNotes);
         notifyItemRangeInserted(startPos, newNotes.size());
     }
-    
+
     public void clear() {
         this.notes.clear();
         notifyDataSetChanged();
@@ -203,10 +203,10 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             super(itemView);
         }
     }
-    
+
     class FidgetBubbleViewHolder extends RecyclerView.ViewHolder {
         com.visiboard.app.ui.feed.widgets.FloatingBubblesView bubblesView;
-        
+
         FidgetBubbleViewHolder(View itemView) {
             super(itemView);
             View v = itemView.findViewById(R.id.floating_bubbles_view);
@@ -214,92 +214,92 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
                 bubblesView = (com.visiboard.app.ui.feed.widgets.FloatingBubblesView) v;
             }
         }
-        
+
         void randomize() {
             int[] bgs = {0xFFEEEEEE, 0xFFE3F2FD, 0xFFF3E5F5, 0xFFE0F2F1};
-             if (itemView instanceof androidx.cardview.widget.CardView) {
-                 ((androidx.cardview.widget.CardView)itemView).setCardBackgroundColor(bgs[(int)(Math.random() * bgs.length)]);
-             }
+            if (itemView instanceof androidx.cardview.widget.CardView) {
+                ((androidx.cardview.widget.CardView)itemView).setCardBackgroundColor(bgs[(int)(Math.random() * bgs.length)]);
+            }
         }
     }
-    
+
     class FidgetSpinnerViewHolder extends RecyclerView.ViewHolder {
         ImageView spinner;
         float currentVelocity = 0;
         android.animation.ObjectAnimator spinAnim;
-        
+
         FidgetSpinnerViewHolder(View itemView) {
             super(itemView);
             spinner = itemView.findViewById(R.id.iv_fidget_spinner);
             itemView.setOnClickListener(v -> spin());
             spinner.setOnClickListener(v -> spin());
         }
-        
+
         void spin() {
-             if (spinAnim != null && spinAnim.isRunning()) spinAnim.cancel();
-             
-             // Add momentum
-             float start = spinner.getRotation();
-             float end = start + (360f * 5f) + (float)(Math.random() * 720f); 
-             
-             spinAnim = android.animation.ObjectAnimator.ofFloat(spinner, "rotation", start, end);
-             spinAnim.setDuration(2000);
-             spinAnim.setInterpolator(new android.view.animation.DecelerateInterpolator(1.5f));
-             spinAnim.start();
-             itemView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            if (spinAnim != null && spinAnim.isRunning()) spinAnim.cancel();
+
+            // Add momentum
+            float start = spinner.getRotation();
+            float end = start + (360f * 5f) + (float)(Math.random() * 720f);
+
+            spinAnim = android.animation.ObjectAnimator.ofFloat(spinner, "rotation", start, end);
+            spinAnim.setDuration(2000);
+            spinAnim.setInterpolator(new android.view.animation.DecelerateInterpolator(1.5f));
+            spinAnim.start();
+            itemView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
         }
     }
-    
+
     // Switch VH removed
-    
+
     class FidgetGravityViewHolder extends RecyclerView.ViewHolder {
         com.visiboard.app.ui.feed.widgets.GravityBallView gravityView;
-        FidgetGravityViewHolder(View itemView) { 
-            super(itemView); 
+        FidgetGravityViewHolder(View itemView) {
+            super(itemView);
             // We need to find the view. The layout likely has it with an ID or it's the root content in a wrapper
             // Assuming the GravityBallView is inside the layout item_fidget_gravity.xml with id gravity_view or similar
             // Let's look up by type if ID is unknown or find by known ID if I knew it.
             // I'll check item_fidget_gravity.xml later if this fails, but for now safe assumption:
-            View v = itemView.findViewById(R.id.gravity_ball_view); 
+            View v = itemView.findViewById(R.id.gravity_ball_view);
             if (v instanceof com.visiboard.app.ui.feed.widgets.GravityBallView) {
                 gravityView = (com.visiboard.app.ui.feed.widgets.GravityBallView) v;
             }
         }
-        
+
         void randomize() {
             if (gravityView != null) gravityView.randomizeTheme();
         }
     }
-    
+
     class SimpleFidgetViewHolder extends RecyclerView.ViewHolder {
         View internalView;
-        
-        SimpleFidgetViewHolder(View itemView) { 
-            super(itemView); 
+
+        SimpleFidgetViewHolder(View itemView) {
+            super(itemView);
             // Identify the internal custom view
             if (itemView instanceof ViewGroup) {
                 ViewGroup vg = (ViewGroup) itemView;
                 if (vg.getChildCount() > 0) {
-                     // Inside the card view usually?
-                     // Let's search recursively? Or just finding by ID is safer.
-                     // The layouts have specific IDs usually.
-                     View v1 = itemView.findViewById(R.id.neon_trace_view);
-                     if (v1 != null) internalView = v1;
-                     
-                     View v2 = itemView.findViewById(R.id.lava_lamp_view);
-                     if (v2 != null) internalView = v2;
-                     
-                     // Strings removed
-                     
-                     View v4 = itemView.findViewById(R.id.fluid_view);
-                     if (v4 != null) internalView = v4;
+                    // Inside the card view usually?
+                    // Let's search recursively? Or just finding by ID is safer.
+                    // The layouts have specific IDs usually.
+                    View v1 = itemView.findViewById(R.id.neon_trace_view);
+                    if (v1 != null) internalView = v1;
+
+                    View v2 = itemView.findViewById(R.id.lava_lamp_view);
+                    if (v2 != null) internalView = v2;
+
+                    // Strings removed
+
+                    View v4 = itemView.findViewById(R.id.fluid_view);
+                    if (v4 != null) internalView = v4;
                 }
             }
         }
-        
+
         void randomize(int type) {
             if (internalView == null) return;
-            
+
             if (internalView instanceof com.visiboard.app.ui.feed.widgets.LavaLampView) {
                 ((com.visiboard.app.ui.feed.widgets.LavaLampView) internalView).randomizeTheme();
             } else if (internalView instanceof com.visiboard.app.ui.feed.widgets.NeonTraceView) {
@@ -327,7 +327,7 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
                     listener.onNoteClick(notes.get(position));
                 }
             });
-            
+
             View btnShare = itemView.findViewById(R.id.btn_share);
             if (btnShare != null) {
                 btnShare.setOnClickListener(v -> {
@@ -341,7 +341,7 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
 
         void bind(NearbyNote note) {
             tvLikeCount.setText(String.valueOf(note.getLikesCount()));
-            
+
             if (note.getDistance() > 0) {
                 tvDistance.setVisibility(View.VISIBLE);
                 if (note.getDistance() < 1.0) {
@@ -355,19 +355,19 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
 
             // Always set placeholder first to handle recycling correctly
             ivNoteImage.setImageResource(R.drawable.placeholder_image);
-            
+
             String localPath = note.getLocalImagePath();
-            String imageBase64 = note.getImageBase64(); 
-            
+            String imageBase64 = note.getImageBase64();
+
             // Simple image binding (reverted from progressive/skeleton logic)
             // The image is expected to be on disk now due to DiscoverTabFragment logic
             if (localPath != null && !localPath.isEmpty()) {
-                 com.visiboard.app.utils.ImageCache.getInstance()
-                    .loadImageFromPath(localPath, ivNoteImage, R.drawable.placeholder_image);
+                com.visiboard.app.utils.ImageCache.getInstance()
+                        .loadImageFromPath(localPath, ivNoteImage, R.drawable.placeholder_image);
             } else if (imageBase64 != null && !imageBase64.isEmpty()) {
                 // Fallback for memory-only images (though rare with new logic)
                 com.visiboard.app.utils.ImageCache.getInstance()
-                    .loadBase64Image(note.getId(), imageBase64, ivNoteImage, R.drawable.placeholder_image);
+                        .loadBase64Image(note.getId(), imageBase64, ivNoteImage, R.drawable.placeholder_image);
             } else {
                 ivNoteImage.setImageResource(R.drawable.placeholder_image);
             }
@@ -407,10 +407,10 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
         void bind(NearbyNote note) {
             tvText.setText(note.getText() != null ? note.getText() : "");
             tvLikeCount.setText(String.valueOf(note.getLikesCount()));
-            
+
             String userName = note.getUserName();
             tvName.setText(userName != null && !userName.isEmpty() ? userName : "User");
-            
+
             // Explicitly set placeholder first for recycling safety
             ivAvatar.setImageResource(R.drawable.ic_profile_placeholder);
 
@@ -419,12 +419,12 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
                 // For profile pics, we can use userId as key prefix
                 String key = "user_" + note.getUserId();
                 com.visiboard.app.utils.ImageCache.getInstance()
-                    .loadBase64Image(key, userProfilePic, ivAvatar, R.drawable.ic_profile_placeholder);
+                        .loadBase64Image(key, userProfilePic, ivAvatar, R.drawable.ic_profile_placeholder);
             }
-            
+
             if (note.getDistance() > 0) {
                 tvDistance.setVisibility(View.VISIBLE);
-                 if (note.getDistance() < 1.0) {
+                if (note.getDistance() < 1.0) {
                     tvDistance.setText(String.format("%.0fm", note.getDistance() * 1000));
                 } else {
                     tvDistance.setText(String.format("%.1fkm", note.getDistance()));

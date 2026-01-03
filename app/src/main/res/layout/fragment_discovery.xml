@@ -41,30 +41,43 @@
 
     </LinearLayout>
 
-    <ProgressBar
-        android:id="@+id/pb_loading"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:visibility="gone"/>
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rv_discovery"
+    <!-- Main Content Wrapper -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingBottom="16dp"/>
+        android:layout_height="match_parent">
 
-    <!-- Empty State for "You follow everyone" -->
-    <TextView
-        android:id="@+id/tv_empty_state"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:text="You follow everyone! 🎉\n\nNo new people to discover right now."
-        android:textSize="16sp"
-        android:textColor="@color/text_secondary"
-        android:fontFamily="@font/poppins_regular"
-        android:visibility="gone"/>
+        <!-- Shimmer View -->
+        <com.facebook.shimmer.ShimmerFrameLayout
+            android:id="@+id/shimmer_view_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="visible">
+            
+            <include layout="@layout/layout_shimmer_discovery" />
+            
+        </com.facebook.shimmer.ShimmerFrameLayout>
+
+        <!-- Data Content -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_discovery"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp"
+            android:visibility="gone"/>
+
+        <!-- Empty State for "You follow everyone" -->
+        <TextView
+            android:id="@+id/tv_empty_state"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="You follow everyone! 🎉\n\nNo new people to discover right now."
+            android:textSize="16sp"
+            android:textColor="@color/text_secondary"
+            android:fontFamily="@font/poppins_regular"
+            android:visibility="gone"/>
+
+    </FrameLayout>
 
 </LinearLayout>

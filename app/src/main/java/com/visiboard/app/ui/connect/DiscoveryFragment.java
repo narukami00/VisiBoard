@@ -42,7 +42,7 @@ public class DiscoveryFragment extends Fragment {
     private RecyclerView rvDiscovery;
     private EditText etSearch;
     private ImageButton btnViewMode;
-    private ProgressBar pbLoading;
+    private com.facebook.shimmer.ShimmerFrameLayout shimmerFrameLayout;
     private TextView tvEmptyState;
     
     private DiscoveryAdapter adapter;
@@ -77,29 +77,49 @@ public class DiscoveryFragment extends Fragment {
         
         fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(requireActivity());
         
-        // Check permissions and get location immediately
-        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
-                if (location != null) {
-                    currentLocation = location;
-                    if (adapter != null) adapter.notifyDataSetChanged(); // Refresh if data already loaded
-                }
-            });
-        }
-
         rvDiscovery = view.findViewById(R.id.rv_discovery);
         etSearch = view.findViewById(R.id.et_search);
         btnViewMode = view.findViewById(R.id.btn_view_mode);
-        pbLoading = view.findViewById(R.id.pb_loading);
+        shimmerFrameLayout = view.findViewById(R.id.shimmer_view_container);
         tvEmptyState = view.findViewById(R.id.tv_empty_state);
 
         setupRecyclerView();
         setupViewModeToggle();
         setupSearch();
         
-        loadData();
+        // Start shimmer immediately
+        startShimmer();
+        
+        // Check permissions and get location, then load data
+        if (androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                if (location != null) {
+                    currentLocation = location;
+                }
+                loadData();
+            }).addOnFailureListener(e -> loadData());
+        } else {
+            loadData();
+        }
     }
 
+    private void startShimmer() {
+        if (shimmerFrameLayout != null) {
+            shimmerFrameLayout.startShimmer();
+            shimmerFrameLayout.setVisibility(View.VISIBLE);
+            rvDiscovery.setVisibility(View.GONE);
+            tvEmptyState.setVisibility(View.GONE);
+        }
+    }
+
+    private void stopShimmer() {
+        if (shimmerFrameLayout != null) {
+            shimmerFrameLayout.stopShimmer();
+            shimmerFrameLayout.setVisibility(View.GONE);
+        }
+    }
+
+    // ... setup methods (unchanged) ...
     private void setupRecyclerView() {
         adapter = new DiscoveryAdapter();
         GridLayoutManager layoutManager = new GridLayoutManager(getContext(), 2);
@@ -138,7 +158,14 @@ public class DiscoveryFragment extends Fragment {
                 String query = s.toString().trim();
                 if (query.isEmpty()) {
                     isSearching = false;
-                    adapter.setItems(discoveryItems);
+                    adapter.setItems(discoveryItems); // Restore original list
+                    if (discoveryItems.isEmpty()) {
+                         tvEmptyState.setVisibility(View.VISIBLE);
+                         rvDiscovery.setVisibility(View.GONE);
+                    } else {
+                         tvEmptyState.setVisibility(View.GONE);
+                         rvDiscovery.setVisibility(View.VISIBLE);
+                    }
                 } else {
                     isSearching = true;
                     performSearch(query);
@@ -150,8 +177,6 @@ public class DiscoveryFragment extends Fragment {
     }
 
     private void loadData() {
-        pbLoading.setVisibility(View.VISIBLE);
-        
         if (currentUserId == null) return;
 
         // 1. Fetch Following IDs first (to exclude)
@@ -169,7 +194,6 @@ public class DiscoveryFragment extends Fragment {
                         blockedIds.clear();
                         for (DocumentSnapshot doc : blockedSnap) {
                             blockedIds.add(doc.getId());
-                            // Also update cache just in case
                             com.visiboard.app.utils.UserCache.getInstance().addBlockedUser(doc.getId());
                         }
                         fetchDiscoveryUsers();
@@ -177,55 +201,122 @@ public class DiscoveryFragment extends Fragment {
                     .addOnFailureListener(e -> fetchDiscoveryUsers());
             })
             .addOnFailureListener(e -> {
-                 pbLoading.setVisibility(View.GONE);
+                 stopShimmer();
                  Toast.makeText(getContext(), "Error loading connections", Toast.LENGTH_SHORT).show();
             });
     }
 
     private void fetchDiscoveryUsers() {
-        // Parallel fetches for Nearby (For now: Random/Recent) and Popular
+        // Fetch a larger batch of users to filter locally
+        // We use a reasonably high limit (e.g. 200) to simulate "all" for now
         db.collection("users")
-            .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-            .limit(20)
+            .limit(200) 
             .get()
-            .addOnSuccessListener(popularSnap -> {
-                List<UserInfo> popularUsers = new ArrayList<>();
-                for (DocumentSnapshot doc : popularSnap) {
+            .addOnSuccessListener(querySnap -> {
+                if (!isAdded()) return;
+                
+                List<UserInfo> validUsers = new ArrayList<>();
+                for (DocumentSnapshot doc : querySnap) {
+                    // Filter: Not Me, Not Following, Not Blocked
                     if (!followingIds.contains(doc.getId()) && !blockedIds.contains(doc.getId())) {
                         UserInfo u = doc.toObject(UserInfo.class);
                         if (u != null) {
                             u.setUserId(doc.getId());
-                            popularUsers.add(u);
+                            validUsers.add(u);
                         }
                     }
                 }
                 
+                // Calculate Distance and Sort
+                if (currentLocation != null) {
+                    for (UserInfo u : validUsers) {
+                        try {
+                            // Extract lat/lng from lastKnownLocation string "lat,lng" if available, 
+                            // OR usage of 'lat'/'lng' fields if they exist in UserInfo model. 
+                            // The model has getLat()/getLng(), let's assume those are populated. 
+                            // If they are 0, try parsing string.
+                            double uLat = u.getLat();
+                            double uLng = u.getLng();
+                            
+                            if (uLat == 0 && uLng == 0 && u.getLastKnownLocation() != null) {
+                                String[] parts = u.getLastKnownLocation().split(",");
+                                if (parts.length == 2) {
+                                    uLat = Double.parseDouble(parts[0].trim());
+                                    uLng = Double.parseDouble(parts[1].trim());
+                                    u.setLat(uLat);
+                                    u.setLng(uLng);
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Ignore specific parse errors
+                        }
+                    }
+                    
+                    // Sort by distance locally
+                    validUsers.sort((u1, u2) -> {
+                        float dist1 = 0;
+                        float dist2 = 0;
+                        
+                        if (u1.getLat() != 0 || u1.getLng() != 0) {
+                            float[] results = new float[1];
+                            android.location.Location.distanceBetween(currentLocation.getLatitude(), currentLocation.getLongitude(), u1.getLat(), u1.getLng(), results);
+                            dist1 = results[0];
+                        } else {
+                            dist1 = Float.MAX_VALUE; // Push to bottom if no location
+                        }
+                        
+                        if (u2.getLat() != 0 || u2.getLng() != 0) {
+                             float[] results = new float[1];
+                             android.location.Location.distanceBetween(currentLocation.getLatitude(), currentLocation.getLongitude(), u2.getLat(), u2.getLng(), results);
+                             dist2 = results[0];
+                        } else {
+                            dist2 = Float.MAX_VALUE;
+                        }
+                        
+                        return Float.compare(dist1, dist2);
+                    });
+                } else {
+                    // Fallback sort if no location: Random shuffle or by popularity?
+                    // User asked to "load all... regardless of distance" but "could sort".
+                    // If no location, we just show them. Maybe by followersCount (Popularity) as fallback.
+                    validUsers.sort((u1, u2) -> Integer.compare(u2.getFollowersCount(), u1.getFollowersCount()));
+                }
+                
                 discoveryItems.clear();
                 
-                if (!popularUsers.isEmpty()) {
-                    discoveryItems.add(new DiscoveryItem("People You May Know")); // Renamed title
-                    for (UserInfo u : popularUsers) {
-                        discoveryItems.add(new DiscoveryItem(u, null)); 
+                if (!validUsers.isEmpty()) {
+                    discoveryItems.add(new DiscoveryItem(currentLocation != null ? "People Nearby" : "People You May Know"));
+                    for (UserInfo u : validUsers) {
+                        // Context: Distance if available
+                        String context = null;
+                        if (currentLocation != null && (u.getLat() != 0 || u.getLng() != 0)) {
+                             float[] results = new float[1];
+                             android.location.Location.distanceBetween(currentLocation.getLatitude(), currentLocation.getLongitude(), u.getLat(), u.getLng(), results);
+                             float distMeters = results[0];
+                             if (distMeters < 1000) {
+                                 context = String.format(java.util.Locale.US, "%.0f m away", distMeters);
+                             } else {
+                                 context = String.format(java.util.Locale.US, "%.1f km away", distMeters / 1000);
+                             }
+                        }
+                        discoveryItems.add(new DiscoveryItem(u, context)); 
                     }
-                    // Hide empty state, show list
+                    
                     if (tvEmptyState != null) tvEmptyState.setVisibility(View.GONE);
                     rvDiscovery.setVisibility(View.VISIBLE);
                 } else {
-                    // Show empty state
                     if (tvEmptyState != null) tvEmptyState.setVisibility(View.VISIBLE);
                     rvDiscovery.setVisibility(View.GONE);
                 }
                 
-                // TODO: Real "Nearby" logic based on Lat/Lng
-                // For now, prototype with simple data or separate query
-                
-                pbLoading.setVisibility(View.GONE);
+                stopShimmer();
                 if (!isSearching) {
                     adapter.setItems(discoveryItems);
                 }
             })
             .addOnFailureListener(e -> {
-                pbLoading.setVisibility(View.GONE);
+                Log.e(TAG, "Error fetching users", e);
+                stopShimmer();
             });
     }
 

@@ -54,6 +54,7 @@ public class ChatsFragment extends Fragment {
     private TextView tvEmptyTitle;
     private TextView tvEmptySubtitle;
     private SwipeRefreshLayout swipeRefresh;
+    private com.facebook.shimmer.ShimmerFrameLayout shimmerFrameLayout;
 
     private ActiveChatsAdapter activeChatsAdapter;
     private FollowingAdapter followingAdapter;
@@ -66,6 +67,9 @@ public class ChatsFragment extends Fragment {
     private Set<String> activeChatUserIds = new HashSet<>();
     
     private ValueEventListener userChatsListener;
+    
+    private boolean isActiveChatsLoaded = false;
+    private boolean isFollowingLoaded = false;
 
     @Nullable
     @Override
@@ -89,8 +93,32 @@ public class ChatsFragment extends Fragment {
 
         setupSearch();
         setupSwipeRefresh();
-        setupSwipeRefresh();
+        
+        startShimmer();
         loadBlockedUsers(); // Load blocked users first
+    }
+    
+    private void startShimmer() {
+        if (shimmerFrameLayout != null) {
+            shimmerFrameLayout.startShimmer();
+            shimmerFrameLayout.setVisibility(View.VISIBLE);
+            swipeRefresh.setVisibility(View.GONE);
+        }
+    }
+    
+    private void stopShimmer() {
+        if (shimmerFrameLayout != null) {
+            shimmerFrameLayout.stopShimmer();
+            shimmerFrameLayout.setVisibility(View.GONE);
+            swipeRefresh.setVisibility(View.VISIBLE);
+        }
+    }
+    
+    private void checkLoadingComplete() {
+        if (isActiveChatsLoaded && isFollowingLoaded) {
+            stopShimmer();
+            calculateEmptyState();
+        }
     }
 
     private void loadBlockedUsers() {
@@ -121,6 +149,7 @@ public class ChatsFragment extends Fragment {
         tvEmptyTitle = view.findViewById(R.id.tv_empty_title);
         tvEmptySubtitle = view.findViewById(R.id.tv_empty_subtitle);
         swipeRefresh = view.findViewById(R.id.swipe_refresh);
+        shimmerFrameLayout = view.findViewById(R.id.shimmer_view_container);
     }
 
 
@@ -128,8 +157,14 @@ public class ChatsFragment extends Fragment {
     private void setupSwipeRefresh() {
         swipeRefresh.setColorSchemeResources(R.color.primary);
         swipeRefresh.setOnRefreshListener(() -> {
+            isActiveChatsLoaded = false;
+            isFollowingLoaded = false;
             loadFollowing();
-            // Active chats are real-time, so just stop refreshing
+            // Active chats are real-time, but we can trigger a re-check if needed, or just rely on listeners.
+            // Listeners push updates automatically. We just simulate "refreshing" logic.
+            // Actually, for "refresh", we might want to re-load following.
+            // We don't restart shimmer on swipe refresh typically.
+            
             swipeRefresh.postDelayed(() -> swipeRefresh.setRefreshing(false), 1000);
         });
     }
@@ -226,7 +261,9 @@ public class ChatsFragment extends Fragment {
                 Long.compare(c2.getLastMessageTime(), c1.getLastMessageTime()));
             
             activeChatsAdapter.setChats(allActiveChats);
-            calculateEmptyState();
+            
+            isActiveChatsLoaded = true;
+            checkLoadingComplete();
             
             // Refresh following list to hide users with active chats
             filterFollowingList();
@@ -255,10 +292,14 @@ public class ChatsFragment extends Fragment {
                 }
                 
                 filterFollowingList();
-                calculateEmptyState();
+                
+                isFollowingLoaded = true;
+                checkLoadingComplete();
             })
             .addOnFailureListener(e -> {
                 Log.e(TAG, "Failed to load following", e);
+                isFollowingLoaded = true; // Still mark as loaded to stop shimmer
+                checkLoadingComplete();
                 if (isAdded()) {
                     Toast.makeText(getContext(), "Failed to load contacts", Toast.LENGTH_SHORT).show();
                 }

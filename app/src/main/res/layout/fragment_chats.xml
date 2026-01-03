@@ -25,114 +25,134 @@
 
 
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipe_refresh"
+    <!-- Main Content Wrapper -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <androidx.core.widget.NestedScrollView
+        <!-- Shimmer View Container -->
+        <com.facebook.shimmer.ShimmerFrameLayout
+            android:id="@+id/shimmer_view_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="visible">
+            
+            <include layout="@layout/layout_shimmer_chats" />
+
+        </com.facebook.shimmer.ShimmerFrameLayout>
+
+        <!-- Actual Data Content -->
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_refresh"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:fillViewport="true">
+            android:visibility="gone">
 
-            <LinearLayout
+            <androidx.core.widget.NestedScrollView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:layout_height="match_parent"
+                android:fillViewport="true">
 
-                <!-- Active Chats Section -->
                 <LinearLayout
-                    android:id="@+id/ll_active_chats_section"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="visible">
+                    android:orientation="vertical">
 
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/rv_active_chats"
+                    <!-- Active Chats Section -->
+                    <LinearLayout
+                        android:id="@+id/ll_active_chats_section"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:nestedScrollingEnabled="false"
-                        android:clipToPadding="false"
-                        android:paddingBottom="8dp"/>
+                        android:orientation="vertical"
+                        android:visibility="visible">
 
-                </LinearLayout>
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/rv_active_chats"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:nestedScrollingEnabled="false"
+                            android:clipToPadding="false"
+                            android:paddingBottom="8dp"/>
 
-                <!-- Following Section (Contacts) -->
-                <LinearLayout
-                    android:id="@+id/ll_following_section"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="visible">
-                    
-                    <TextView
+                    </LinearLayout>
+
+                    <!-- Following Section (Contacts) -->
+                    <LinearLayout
+                        android:id="@+id/ll_following_section"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Start a new chat"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary"
-                        android:fontFamily="@font/poppins_semibold"
-                        android:paddingHorizontal="16dp"
-                        android:paddingTop="24dp"
-                        android:paddingBottom="8dp"/>
+                        android:orientation="vertical"
+                        android:visibility="visible">
+                        
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Start a new chat"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"
+                            android:fontFamily="@font/poppins_semibold"
+                            android:paddingHorizontal="16dp"
+                            android:paddingTop="24dp"
+                            android:paddingBottom="8dp"/>
 
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/rv_following"
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/rv_following"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:nestedScrollingEnabled="false"
+                            android:clipToPadding="false"
+                            android:paddingBottom="24dp"/>
+
+                    </LinearLayout>
+
+                    <!-- Empty State -->
+                    <LinearLayout
+                        android:id="@+id/ll_empty_state"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:nestedScrollingEnabled="false"
-                        android:clipToPadding="false"
-                        android:paddingBottom="24dp"/>
-
-                </LinearLayout>
-
-                <!-- Empty State -->
-                <LinearLayout
-                    android:id="@+id/ll_empty_state"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center"
-                    android:padding="48dp"
-                    android:visibility="gone">
-
-                    <ImageView
-                        android:layout_width="100dp"
-                        android:layout_height="100dp"
-                        android:src="@drawable/ic_chat"
-                        android:tint="@color/text_tertiary"
-                        android:alpha="0.5"/>
-
-                    <TextView
-                        android:id="@+id/tv_empty_title"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="No chats yet"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary"
-                        android:fontFamily="@font/poppins_semibold"
-                        android:layout_marginTop="16dp"/>
-
-                    <TextView
-                        android:id="@+id/tv_empty_subtitle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Start a new chat from the Contacts tab"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_secondary"
-                        android:fontFamily="@font/poppins_regular"
+                        android:orientation="vertical"
                         android:gravity="center"
-                        android:layout_marginTop="8dp"/>
+                        android:padding="48dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:layout_width="100dp"
+                            android:layout_height="100dp"
+                            android:src="@drawable/ic_chat"
+                            android:tint="@color/text_tertiary"
+                            android:alpha="0.5"/>
+
+                        <TextView
+                            android:id="@+id/tv_empty_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="No chats yet"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"
+                            android:fontFamily="@font/poppins_semibold"
+                            android:layout_marginTop="16dp"/>
+
+                        <TextView
+                            android:id="@+id/tv_empty_subtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Start a new chat from the Contacts tab"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_secondary"
+                            android:fontFamily="@font/poppins_regular"
+                            android:gravity="center"
+                            android:layout_marginTop="8dp"/>
+
+                    </LinearLayout>
 
                 </LinearLayout>
 
-            </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
 
-        </androidx.core.widget.NestedScrollView>
-
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        
+    </FrameLayout>
 
 </LinearLayout>

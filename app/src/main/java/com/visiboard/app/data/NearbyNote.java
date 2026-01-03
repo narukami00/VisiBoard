@@ -86,6 +86,10 @@ public class NearbyNote {
     public String getLocalImagePath() { return localImagePath; }
     public void setLocalImagePath(String localImagePath) { this.localImagePath = localImagePath; }
 
+    private String imageUrl; // ImgBB URL
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+
     private boolean isHidden;
     public boolean isHidden() { return isHidden; }
     public void setHidden(boolean hidden) { isHidden = hidden; }

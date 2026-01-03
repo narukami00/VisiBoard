@@ -86,7 +86,7 @@ public class CreateNoteActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
         storage = FirebaseStorage.getInstance();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-        
+
         // Check if user is restricted before allowing note creation
         if (auth.getCurrentUser() != null) {
             checkRestrictionStatus(auth.getCurrentUser().getUid());
@@ -118,8 +118,8 @@ public class CreateNoteActivity extends AppCompatActivity {
             isRemote = true;
             remoteLat = getIntent().getDoubleExtra("lat", 0.0);
             remoteLon = getIntent().getDoubleExtra("lon", 0.0);
-            
-            android.widget.TextView tvTitle = findViewById(R.id.tv_create_note_title); 
+
+            android.widget.TextView tvTitle = findViewById(R.id.tv_create_note_title);
             if (tvTitle != null) tvTitle.setText("Post Remote Note");
             // btnPost.setText("Post Remote Note"); // Reverted per user request
             // Toast.makeText(this, "Creating Remote Note", Toast.LENGTH_SHORT).show();
@@ -138,10 +138,10 @@ public class CreateNoteActivity extends AppCompatActivity {
             editNoteId = getIntent().getStringExtra("edit_note_id");
             String content = getIntent().getStringExtra("edit_content");
             String b64 = getIntent().getStringExtra("edit_image_base64");
-            
+
             etNoteContent.setText(content);
             btnPost.setText("Update Note");
-            
+
             if (b64 != null && !b64.isEmpty()) {
                 try {
                     byte[] decodedString = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
@@ -150,21 +150,21 @@ public class CreateNoteActivity extends AppCompatActivity {
                     currentBitmap = decodedByte;
                     cardImagePreview.setVisibility(View.VISIBLE);
                     btnAddImage.setVisibility(View.GONE);
-                } catch (Exception e) { 
-                    e.printStackTrace(); 
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
             }
         }
 
         if (selectedImageUri != null) {
-             updateImagePreview();
+            updateImagePreview();
         }
 
         // Fetch Note Details if Editing (for Visibility and fresh data)
         if (editNoteId != null) {
             fetchNoteDetails(editNoteId);
         }
-        
+
         setupListeners();
     }
 
@@ -172,9 +172,9 @@ public class CreateNoteActivity extends AppCompatActivity {
 
     private void setupListeners() {
         btnClose.setOnClickListener(v -> finish());
-        
+
         btnAddImage.setOnClickListener(v -> pickImage.launch("image/*"));
-        
+
         btnRotateImage.setOnClickListener(v -> {
             currentRotation = (currentRotation + 90) % 360;
             ivPreview.animate().rotation(currentRotation).setDuration(200).start();
@@ -194,23 +194,23 @@ public class CreateNoteActivity extends AppCompatActivity {
         ivPreview.setOnClickListener(v -> {
             // Check if LayoutParams are of ConstraintLayout type
             if (ivPreview.getLayoutParams() instanceof androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) {
-                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams params = 
-                    (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) ivPreview.getLayoutParams();
-                
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams params =
+                        (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) ivPreview.getLayoutParams();
+
                 String currentRatio = params.dimensionRatio;
                 // Default handling if null
                 if (currentRatio == null) currentRatio = "1:1";
-                
+
                 String nextRatio = "1:1";
                 if ("1:1".equals(currentRatio)) nextRatio = "4:3";
                 else if ("4:3".equals(currentRatio)) nextRatio = "16:9";
                 else if ("16:9".equals(currentRatio)) nextRatio = "3:4";
                 else if ("3:4".equals(currentRatio)) nextRatio = "9:16";
                 else if ("9:16".equals(currentRatio)) nextRatio = "1:1";
-                
+
                 params.dimensionRatio = nextRatio;
-            ivPreview.setLayoutParams(params);
-            // Toast.makeText(this, "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
+                ivPreview.setLayoutParams(params);
+                // Toast.makeText(this, "Ratio: " + nextRatio, Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -240,7 +240,7 @@ public class CreateNoteActivity extends AppCompatActivity {
         // Relax check for Edit Mode: might keep existing image
         boolean hasExistingImage = (editNoteId != null && !isImageRemoved && cardImagePreview.getVisibility() == View.VISIBLE);
         boolean isRotated = currentRotation % 360 != 0;
-        
+
         if (content.isEmpty() && selectedImageUri == null && !hasExistingImage) {
             com.visiboard.app.utils.UiHelper.showWarning(findViewById(android.R.id.content), "Please add some text or an image");
             return;
@@ -256,15 +256,15 @@ public class CreateNoteActivity extends AppCompatActivity {
         if (editNoteId != null) {
             // Update Flow
             if (selectedImageUri != null || (currentBitmap != null && isRotated)) {
-                 processImageAndSaveNote(content, null); 
+                processImageAndSaveNote(content, null);
             } else {
-                 int w = 0;
-                 int h = 0;
-                 if (currentBitmap != null) {
+                int w = 0;
+                int h = 0;
+                if (currentBitmap != null) {
                     w = currentBitmap.getWidth();
                     h = currentBitmap.getHeight();
-                 }
-                 saveNoteToFirestore(content, null, null, w, h);
+                }
+                saveNoteToFirestore(content, null, null, w, h);
             }
         } else {
             // Create Flow
@@ -273,7 +273,7 @@ public class CreateNoteActivity extends AppCompatActivity {
                 android.location.Location location = new android.location.Location("remote");
                 location.setLatitude(remoteLat);
                 location.setLongitude(remoteLon);
-                
+
                 if (selectedImageUri != null) {
                     processImageAndSaveNote(content, location);
                 } else {
@@ -302,14 +302,14 @@ public class CreateNoteActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 android.graphics.Bitmap bitmap = null;
-                
+
                 if (selectedImageUri != null) {
-                     bitmap = android.graphics.BitmapFactory.decodeStream(
-                        getContentResolver().openInputStream(selectedImageUri));
+                    bitmap = android.graphics.BitmapFactory.decodeStream(
+                            getContentResolver().openInputStream(selectedImageUri));
                 } else if (currentBitmap != null) {
                     bitmap = currentBitmap;
                 }
-                
+
                 if (bitmap == null) {
                     runOnUiThread(() -> {
                         setLoading(false);
@@ -326,9 +326,9 @@ public class CreateNoteActivity extends AppCompatActivity {
                 }
 
                 // Scale down if too large (max 800px width/height)
-                int maxDimension = 800; 
+                int maxDimension = 800;
                 float scale = Math.min((float) maxDimension / bitmap.getWidth(), (float) maxDimension / bitmap.getHeight());
-                
+
                 if (scale < 1.0f) {
                     int newWidth = Math.round(bitmap.getWidth() * scale);
                     int newHeight = Math.round(bitmap.getHeight() * scale);
@@ -338,13 +338,13 @@ public class CreateNoteActivity extends AppCompatActivity {
                 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
                 bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, baos);
                 byte[] imageBytes = baos.toByteArray();
-                
+
                 String base64Image = android.util.Base64.encodeToString(imageBytes, android.util.Base64.DEFAULT);
                 int finalWidth = bitmap.getWidth();
                 int finalHeight = bitmap.getHeight();
-                
+
                 if (base64Image.length() > 1000000) {
-                     runOnUiThread(() -> {
+                    runOnUiThread(() -> {
                         setLoading(false);
                         com.visiboard.app.utils.UiHelper.showWarning(findViewById(android.R.id.content), "Image too large. Please choose a smaller image.");
                     });
@@ -352,7 +352,7 @@ public class CreateNoteActivity extends AppCompatActivity {
                 }
 
                 runOnUiThread(() -> saveNoteToFirestore(content, location, base64Image, finalWidth, finalHeight));
-                
+
             } catch (Exception e) {
                 e.printStackTrace();
                 runOnUiThread(() -> {
@@ -376,7 +376,7 @@ public class CreateNoteActivity extends AppCompatActivity {
             updates.put("summary", content.length() > 100 ? content.substring(0, 100) + "..." : content);
             updates.put("text", content); // Ensure both fields updated just in case
             updates.put("visibility", spinnerVisibility.getSelectedItem().toString().toLowerCase());
-            
+
             if (imageBase64 != null) {
                 updates.put("imageBase64", imageBase64);
                 updates.put("imageWidth", width);
@@ -393,26 +393,26 @@ public class CreateNoteActivity extends AppCompatActivity {
             }
 
             db.collection("notes").document(editNoteId).update(updates)
-                .addOnSuccessListener(aVoid -> {
-                    com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note updated!");
-                    finish();
-                })
-                .addOnFailureListener(e -> {
-                    setLoading(false);
-                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to update note: " + e.getMessage());
-                });
-                
+                    .addOnSuccessListener(aVoid -> {
+                        com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note updated!");
+                        finish();
+                    })
+                    .addOnFailureListener(e -> {
+                        setLoading(false);
+                        com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to update note: " + e.getMessage());
+                    });
+
         } else {
             // CREATE NEW NOTE
             if (location == null) { // Should not happen for new notes
-                 setLoading(false);
-                 return;
+                setLoading(false);
+                return;
             }
-            
+
             db.collection("users").document(uid).get().addOnSuccessListener(userDoc -> {
                 String userName = userDoc.getString("name");
                 String userProfilePic = userDoc.getString("profilePic");
-    
+
                 Map<String, Object> noteMap = new HashMap<>();
                 noteMap.put("userId", uid);
                 noteMap.put("userName", userName);
@@ -431,17 +431,17 @@ public class CreateNoteActivity extends AppCompatActivity {
                 noteMap.put("commentsCount", 0);
                 noteMap.put("visibility", spinnerVisibility.getSelectedItem().toString().toLowerCase());
                 noteMap.put("allowComments", true); // Default: comments enabled
-                
+
                 if (isRemote) {
                     noteMap.put("isVirtual", true);
                 }
-                
+
                 if (imageBase64 != null) {
                     noteMap.put("imageBase64", imageBase64);
                     noteMap.put("imageWidth", width);
                     noteMap.put("imageHeight", height);
                 }
-    
+
                 db.collection("notes").add(noteMap)
                         .addOnSuccessListener(docRef -> {
                             com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note posted successfully!");
@@ -473,9 +473,9 @@ public class CreateNoteActivity extends AppCompatActivity {
                 if (doc.exists()) {
                     String name = doc.getString("name");
                     String profilePic = doc.getString("profilePic");
-                    
+
                     tvUserName.setText(name != null ? name : "User");
-                    
+
                     if (profilePic != null && !profilePic.isEmpty()) {
                         byte[] decodedString = android.util.Base64.decode(profilePic, android.util.Base64.DEFAULT);
                         android.graphics.Bitmap decodedByte = android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
@@ -488,58 +488,58 @@ public class CreateNoteActivity extends AppCompatActivity {
 
     private void fetchNoteDetails(String noteId) {
         db.collection("notes").document(noteId).get()
-            .addOnSuccessListener(doc -> {
-                if (doc.exists()) {
-                    // Set Visibility Spinner
-                    String visibility = doc.getString("visibility");
-                    if (visibility != null) {
-                        if (visibility.equalsIgnoreCase("followers")) {
-                            spinnerVisibility.setSelection(1);
-                        } else if (visibility.equalsIgnoreCase("private")) {
-                            spinnerVisibility.setSelection(2);
-                        } else {
-                            spinnerVisibility.setSelection(0); // Public default
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        // Set Visibility Spinner
+                        String visibility = doc.getString("visibility");
+                        if (visibility != null) {
+                            if (visibility.equalsIgnoreCase("followers")) {
+                                spinnerVisibility.setSelection(1);
+                            } else if (visibility.equalsIgnoreCase("private")) {
+                                spinnerVisibility.setSelection(2);
+                            } else {
+                                spinnerVisibility.setSelection(0); // Public default
+                            }
                         }
                     }
-                }
-            })
-            .addOnFailureListener(e -> {
-                com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to load note details");
-            });
+                })
+                .addOnFailureListener(e -> {
+                    com.visiboard.app.utils.UiHelper.showError(findViewById(android.R.id.content), "Failed to load note details");
+                });
     }
-    
+
     private void checkRestrictionStatus(String userId) {
         db.collection("users").document(userId).get()
-            .addOnSuccessListener(doc -> {
-                if (doc.exists()) {
-                    Boolean restricted = doc.getBoolean("restricted");
-                    Long restrictionExpiryDate = doc.getLong("restrictionExpiryDate");
-                    
-                    if (restricted != null && restricted) {
-                        long now = System.currentTimeMillis();
-                        
-                        if (restrictionExpiryDate != null && restrictionExpiryDate > now) {
-                            // User is restricted and restriction hasn't expired
-                            showRestrictedDialog(restrictionExpiryDate);
-                        } else if (restrictionExpiryDate != null && restrictionExpiryDate <= now) {
-                            // Restriction has expired, auto-lift
-                            db.collection("users").document(userId)
-                                .update("restricted", false)
-                                .addOnSuccessListener(aVoid -> {
-                                    // Restriction lifted, allow creation
-                                });
-                        } else {
-                            // Permanent restriction (no expiry date)
-                            showRestrictedDialog(0);
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Boolean restricted = doc.getBoolean("restricted");
+                        Long restrictionExpiryDate = doc.getLong("restrictionExpiryDate");
+
+                        if (restricted != null && restricted) {
+                            long now = System.currentTimeMillis();
+
+                            if (restrictionExpiryDate != null && restrictionExpiryDate > now) {
+                                // User is restricted and restriction hasn't expired
+                                showRestrictedDialog(restrictionExpiryDate);
+                            } else if (restrictionExpiryDate != null && restrictionExpiryDate <= now) {
+                                // Restriction has expired, auto-lift
+                                db.collection("users").document(userId)
+                                        .update("restricted", false)
+                                        .addOnSuccessListener(aVoid -> {
+                                            // Restriction lifted, allow creation
+                                        });
+                            } else {
+                                // Permanent restriction (no expiry date)
+                                showRestrictedDialog(0);
+                            }
                         }
                     }
-                }
-            });
+                });
     }
-    
+
     private void showRestrictedDialog(long expiryDate) {
         android.view.View dialogView = getLayoutInflater().inflate(R.layout.dialog_restricted, null);
-        
+
         android.widget.TextView tvExpiry = dialogView.findViewById(R.id.tv_restrict_expiry);
         if (expiryDate > 0) {
             java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MMMM dd, yyyy", java.util.Locale.getDefault());
@@ -547,21 +547,21 @@ public class CreateNoteActivity extends AppCompatActivity {
         } else {
             tvExpiry.setText("Indefinite");
         }
-        
+
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setCancelable(false)
-            .create();
-        
+                .setView(dialogView)
+                .setCancelable(false)
+                .create();
+
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
-        
+
         dialogView.findViewById(R.id.btn_ok).setOnClickListener(v -> {
             dialog.dismiss();
             finish(); // Close CreateNoteActivity
         });
-        
+
         dialog.show();
     }
 }
