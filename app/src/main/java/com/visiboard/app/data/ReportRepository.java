@@ -37,6 +37,8 @@ public class ReportRepository {
                 // Now delete
                 db.collection("notes").document(noteId).delete()
                         .addOnSuccessListener(aVoid -> {
+                            // Also delete from notes_feed
+                            db.collection("notes_feed").document(noteId).delete();
                             // Notify owner if found
                             if (ownerId != null) {
                                 notifyUser(ownerId, "Your note was removed by Admin.", "admin");

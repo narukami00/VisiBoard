@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.animation.ObjectAnimator;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.location.Location;
 import android.os.Bundle;
 import android.util.Log;
@@ -43,6 +44,10 @@ public class DiscoverTabFragment extends Fragment {
     private static final String TAG = "DiscoverTabFragment";
     private static final int FETCH_SIZE = 10;
     private static final int PAGE_SIZE = 5;
+    private static final String PREFS_NAME = "visiboard_feed_prefs";
+    private static final String KEY_BOOTSTRAP_COMPLETE = "notes_feed_bootstrap_complete";
+
+    private volatile boolean isBootstrapping = false;
 
     private SwipeRefreshLayout swipeRefresh;
     private RecyclerView rvPinterestFeed;
@@ -70,6 +75,10 @@ public class DiscoverTabFragment extends Fragment {
 
     private ObjectAnimator pulseAnimator;
     private Thread imageProcessingThread;
+
+    // Lazy loading infrastructure
+    private final java.util.Set<String> inFlightImageRequests = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    private final java.util.Set<String> pendingImageLoads = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     private NoteClickListener noteClickListener;
 
@@ -200,6 +209,9 @@ public class DiscoverTabFragment extends Fragment {
             }
         });
 
+        // Register lazy image load callback
+        pinterestFeedAdapter.setLazyLoadCallback((noteId, target) -> loadNoteImage(noteId, target));
+
         // Responsive grid columns based on screen size
         int columnCount = getResources().getInteger(R.integer.feed_grid_columns);
         StaggeredGridLayoutManager layoutManager = new StaggeredGridLayoutManager(columnCount, StaggeredGridLayoutManager.VERTICAL);
@@ -266,12 +278,14 @@ public class DiscoverTabFragment extends Fragment {
 
                                             isPrivacyDataLoaded = true;
 
-                                            // Now proceed to location check
-                                            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                                                loadUserLocation();
-                                            } else {
-                                                requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
-                                            }
+                                            // Check bootstrap then proceed to location
+                                            checkAndBootstrapNotesFeed(() -> {
+                                                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                                                    loadUserLocation();
+                                                } else {
+                                                    requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
+                                                }
+                                            });
                                         })
                                         .addOnFailureListener(e -> proceedWithDefaults());
                             })
@@ -334,17 +348,49 @@ public class DiscoverTabFragment extends Fragment {
             // pbLoading.setVisibility(View.VISIBLE); // REMOVED
         }
 
-        // Load more items to compensate for client-side privacy filtering
-        Query query = db.collection("notes")
+        // Query lightweight notes_feed collection (no imageBase64)
+        Query query = db.collection("notes_feed")
                 .orderBy("timestamp", Query.Direction.DESCENDING)
-                .orderBy("__name__", Query.Direction.DESCENDING) // Keep stability
-                .limit(50); // Increased from 10 to 50
+                .orderBy("__name__", Query.Direction.DESCENDING)
+                .limit(50);
 
         if (isNextPage && feedViewModel.getLastVisible() != null) {
             query = query.startAfter(feedViewModel.getLastVisible());
         }
 
         query.get().addOnSuccessListener(queryDocumentSnapshots -> {
+            // If notes_feed is empty and this is first page, fallback to notes collection
+            if (!isNextPage && queryDocumentSnapshots.isEmpty()) {
+                Log.w(TAG, "notes_feed empty, triggering bootstrap and falling back to notes");
+                Toast.makeText(getContext(), "Building feed cache...", Toast.LENGTH_LONG).show();
+                loadFromNotesCollection(isNextPage);
+                return;
+            }
+            processQueryResults(queryDocumentSnapshots, isNextPage);
+        }).addOnFailureListener(e -> {
+            Log.e(TAG, "notes_feed query failed, falling back", e);
+            loadFromNotesCollection(isNextPage);
+        });
+    }
+
+    private void loadFromNotesCollection(boolean isNextPage) {
+        Query fallbackQuery = db.collection("notes")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .orderBy("__name__", Query.Direction.DESCENDING)
+                .limit(50);
+        if (isNextPage && feedViewModel.getLastVisible() != null) {
+            fallbackQuery = fallbackQuery.startAfter(feedViewModel.getLastVisible());
+        }
+        fallbackQuery.get().addOnSuccessListener(snapshot -> processQueryResults(snapshot, isNextPage))
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Fallback query also failed", e);
+                    feedViewModel.setLoading(false);
+                    if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
+                    stopShimmer();
+                });
+    }
+
+    private void processQueryResults(com.google.firebase.firestore.QuerySnapshot queryDocumentSnapshots, boolean isNextPage) {
                     // Critical safety check: Don't process if fragment is destroyed or detached
                     if (isFragmentDestroyed || !isAdded() || getContext() == null) {
                         Log.d(TAG, "Fragment detached, aborting data processing");
@@ -433,7 +479,7 @@ public class DiscoverTabFragment extends Fragment {
                                 note.setSummary(doc.getString("summary"));
                                 note.setUserId(doc.getString("userId"));
                                 note.setUserName(doc.getString("userName"));
-                                note.setUserProfilePic(doc.getString("userProfilePic"));
+                                note.setUserProfilePic(doc.getString("userProfilePicThumb"));
 
                                 GeoPoint location = doc.getGeoPoint("location");
                                 note.setLat(location != null ? location.getLatitude() : 0);
@@ -475,56 +521,28 @@ public class DiscoverTabFragment extends Fragment {
 
                                 // 2. Process Image (Disk Cache Optimization)
                                 String b64 = doc.getString("imageBase64");
-                                if (b64 != null && !b64.isEmpty()) {
+                                java.io.File cachedFile = new java.io.File(cacheDir, "note_" + doc.getId() + ".jpg");
+                                if (cachedFile.exists()) {
+                                    // Cache hit - use existing file
+                                    note.setLocalImagePath(cachedFile.getAbsolutePath());
+                                } else if (b64 != null && !b64.isEmpty()) {
+                                    // Cache miss - decode and save to disk
                                     try {
-                                        // Check interruption again before heavy IO
                                         if (Thread.currentThread().isInterrupted()) return;
-
-                                        java.io.File file = new java.io.File(cacheDir, "note_" + doc.getId() + ".jpg");
-
-                                        // Check if exists, if not save it
-                                        if (!file.exists()) {
-                                            byte[] decodedString = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
-
-                                            // Decode with sampling to reduce memory (Optimization from user)
-                                            android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
-                                            options.inJustDecodeBounds = true;
-                                            android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length, options);
-
-                                            // Calculate sample size (max 1200px)
-                                            int maxDim = Math.max(options.outWidth, options.outHeight);
-                                            options.inSampleSize = maxDim > 1200 ? maxDim / 1200 : 1;
-                                            options.inJustDecodeBounds = false;
-                                            options.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;
-
-                                            // Check interruption before decode
-                                            if (Thread.currentThread().isInterrupted()) return;
-
-                                            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(
-                                                    decodedString, 0, decodedString.length, options);
-
-                                            if (bitmap != null) {
-                                                // Save compressed version
-                                                java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
-                                                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, fos);
-                                                fos.flush();
-                                                fos.close();
-                                                bitmap.recycle(); // Free memory immediately
-                                            }
+                                        byte[] decodedBytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                                        android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
+                                        if (bitmap != null) {
+                                            java.io.FileOutputStream fos = new java.io.FileOutputStream(cachedFile);
+                                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, fos);
+                                            fos.close();
+                                            bitmap.recycle();
+                                            note.setLocalImagePath(cachedFile.getAbsolutePath());
                                         }
-                                        note.setLocalImagePath(file.getAbsolutePath());
-                                        note.setImageBase64(null); // Release memory
                                     } catch (Exception e) {
-                                        Log.e(TAG, "Error processing image for " + doc.getId(), e);
-                                        // Fallback
-                                        note.setImageBase64(b64);
-                                    } catch (OutOfMemoryError oom) {
-                                        Log.e(TAG, "OOM processing image for " + doc.getId(), oom);
-                                        System.gc();
+                                        Log.e(TAG, "Error caching image for " + doc.getId(), e);
                                     }
-                                } else {
-                                    note.setImageBase64(null);
                                 }
+                                note.setImageBase64(null); // Never store base64 in memory
 
                                 fetchedNotes.add(note);
                             }
@@ -605,18 +623,6 @@ public class DiscoverTabFragment extends Fragment {
                         }
                     });
                     imageProcessingThread.start();
-                })
-                .addOnFailureListener(e -> {
-                    // Safety check: Don't touch UI if fragment is destroyed or detached
-                    if (isFragmentDestroyed || !isAdded()) return;
-
-                    Log.e(TAG, "Error loading feed", e);
-                    feedViewModel.setLoading(false);
-                    if (pinterestFeedAdapter != null) pinterestFeedAdapter.setLoading(false);
-                    if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-                    if (pbLoading != null) pbLoading.setVisibility(View.GONE);
-                    if (!isNextPage) stopShimmer();
-                });
     }
 
     private void optimizeItemOrder(List<NearbyNote> notes) {
@@ -830,5 +836,176 @@ public class DiscoverTabFragment extends Fragment {
         if (pulseAnimator != null && pulseAnimator.isPaused()) {
             pulseAnimator.resume();
         }
+    }
+
+    /**
+     * Lazy loads an image for a note that wasn't in disk cache.
+     * Fetches imageBase64 from Firestore, decodes, caches to disk, and updates the ImageView.
+     */
+    public void loadNoteImage(String noteId, android.widget.ImageView target) {
+        if (noteId == null || target == null) return;
+        if (inFlightImageRequests.contains(noteId)) return;
+        if (getContext() == null) return;
+        
+        final java.io.File cacheDir = getContext().getCacheDir();
+        final java.io.File cacheFile = new java.io.File(cacheDir, "note_" + noteId + ".jpg");
+        
+        if (cacheFile.exists()) {
+            com.visiboard.app.utils.ImageCache.getInstance()
+                .loadImageFromPath(cacheFile.getAbsolutePath(), target, R.drawable.placeholder_image);
+            return;
+        }
+        
+        inFlightImageRequests.add(noteId);
+        
+        db.collection("notes").document(noteId).get()
+            .addOnSuccessListener(doc -> {
+                if (isFragmentDestroyed || !isAdded()) {
+                    inFlightImageRequests.remove(noteId);
+                    return;
+                }
+                
+                String b64 = doc.getString("imageBase64");
+                if (b64 != null && !b64.isEmpty()) {
+                    new Thread(() -> {
+                        try {
+                            byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                            
+                            if (bmp != null) {
+                                java.io.FileOutputStream fos = new java.io.FileOutputStream(cacheFile);
+                                bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, fos);
+                                fos.close();
+                                bmp.recycle();
+                                
+                                if (getActivity() != null && !isFragmentDestroyed) {
+                                    getActivity().runOnUiThread(() -> {
+                                        com.visiboard.app.utils.ImageCache.getInstance()
+                                            .loadImageFromPath(cacheFile.getAbsolutePath(), target, R.drawable.placeholder_image);
+                                    });
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG, "Lazy load failed for " + noteId, e);
+                        } finally {
+                            inFlightImageRequests.remove(noteId);
+                            pendingImageLoads.remove(noteId);
+                        }
+                    }).start();
+                } else {
+                    inFlightImageRequests.remove(noteId);
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Lazy load fetch failed: " + noteId, e);
+                inFlightImageRequests.remove(noteId);
+            });
+    }
+
+    /**
+     * Checks if notes_feed bootstrap is complete. If not, migrates all notes to notes_feed.
+     * On completion (or if already done), runs the callback.
+     */
+    private void checkAndBootstrapNotesFeed(Runnable onComplete) {
+        if (getContext() == null) return;
+        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        boolean isBootstrapComplete = prefs.getBoolean(KEY_BOOTSTRAP_COMPLETE, false);
+        
+        if (isBootstrapComplete) {
+            onComplete.run();
+            return;
+        }
+        
+        if (isBootstrapping) return; // Already in progress
+        isBootstrapping = true;
+        Log.d(TAG, "Starting notes_feed bootstrap...");
+        
+        // Fetch all notes and copy to notes_feed (without imageBase64)
+        db.collection("notes").get().addOnSuccessListener(snapshot -> {
+            if (isFragmentDestroyed || !isAdded()) return;
+            
+            new Thread(() -> {
+                try {
+                    for (DocumentSnapshot doc : snapshot) {
+                        if (isFragmentDestroyed) return;
+                        
+                        // Build lightweight document
+                        java.util.Map<String, Object> feedDoc = new java.util.HashMap<>();
+                        feedDoc.put("userId", doc.getString("userId"));
+                        feedDoc.put("userName", doc.getString("userName"));
+                        
+                        // Generate profile pic thumbnail
+                        String profilePic = doc.getString("userProfilePic");
+                        if (profilePic != null && !profilePic.isEmpty()) {
+                            try {
+                                byte[] profileBytes = android.util.Base64.decode(profilePic, android.util.Base64.DEFAULT);
+                                android.graphics.Bitmap profileBmp = android.graphics.BitmapFactory.decodeByteArray(profileBytes, 0, profileBytes.length);
+                                if (profileBmp != null) {
+                                    android.graphics.Bitmap profileThumb = android.graphics.Bitmap.createScaledBitmap(profileBmp, 40, 40, true);
+                                    profileBmp.recycle();
+                                    java.io.ByteArrayOutputStream profileBaos = new java.io.ByteArrayOutputStream();
+                                    profileThumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 50, profileBaos);
+                                    profileThumb.recycle();
+                                    feedDoc.put("userProfilePicThumb", android.util.Base64.encodeToString(profileBaos.toByteArray(), android.util.Base64.DEFAULT));
+                                }
+                            } catch (Exception e) { /* ignore */ }
+                        }
+                        
+                        feedDoc.put("text", doc.getString("text") != null ? doc.getString("text") : doc.getString("note"));
+                        feedDoc.put("summary", doc.getString("summary"));
+                        feedDoc.put("location", doc.getGeoPoint("location"));
+                        feedDoc.put("timestamp", doc.getLong("timestamp"));
+                        feedDoc.put("likeCount", doc.get("likeCount") != null ? doc.get("likeCount") : doc.get("likesCount"));
+                        feedDoc.put("imageWidth", doc.get("imageWidth"));
+                        feedDoc.put("imageHeight", doc.get("imageHeight"));
+                        feedDoc.put("visibility", doc.getString("visibility"));
+                        feedDoc.put("isHidden", doc.getBoolean("isHidden"));
+                        feedDoc.put("isOwnerPrivate", doc.getBoolean("isOwnerPrivate"));
+                        
+                        // Generate thumbnail from imageBase64
+                        String b64 = doc.getString("imageBase64");
+                        if (b64 != null && !b64.isEmpty()) {
+                            try {
+                                byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                                if (bmp != null) {
+                                    android.graphics.Bitmap thumb = android.graphics.Bitmap.createScaledBitmap(bmp, 50, 50, true);
+                                    bmp.recycle();
+                                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                                    thumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 30, baos);
+                                    thumb.recycle();
+                                    feedDoc.put("imageThumb64", android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.DEFAULT));
+                                }
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error generating thumbnail for " + doc.getId(), e);
+                            }
+                        }
+                        
+                        // Write to notes_feed (blocking call for simplicity)
+                        db.collection("notes_feed").document(doc.getId()).set(feedDoc);
+                    }
+                    
+                    // Mark complete
+                    if (getActivity() != null && !isFragmentDestroyed) {
+                        getActivity().runOnUiThread(() -> {
+                            prefs.edit().putBoolean(KEY_BOOTSTRAP_COMPLETE, true).apply();
+                            Log.d(TAG, "Bootstrap complete: " + snapshot.size() + " notes.");
+                            isBootstrapping = false;
+                            onComplete.run();
+                        });
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Bootstrap failed", e);
+                    isBootstrapping = false;
+                    if (getActivity() != null && !isFragmentDestroyed) {
+                        getActivity().runOnUiThread(onComplete);
+                    }
+                }
+            }).start();
+        }).addOnFailureListener(e -> {
+            Log.e(TAG, "Bootstrap query failed", e);
+            isBootstrapping = false;
+            onComplete.run();
+        });
     }
 }

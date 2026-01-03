@@ -647,6 +647,10 @@ public class MapFragment extends Fragment {
              noteCardView = LayoutInflater.from(requireContext()).inflate(R.layout.note_card_glow_layout, null);
              // Apply Vibrant Gradient Glow
              applyGradientGlow(noteCardView);
+        } else if (isVirtual) {
+             noteCardView = LayoutInflater.from(requireContext()).inflate(R.layout.note_card_glow_layout, null);
+             // Apply Remote Note Glow (Accent)
+             applyRemoteGlow(noteCardView);
         } else {
              noteCardView = LayoutInflater.from(requireContext()).inflate(R.layout.note_card_layout, null);
         }
@@ -733,12 +737,12 @@ public class MapFragment extends Fragment {
         ImageView btnComment = infoWindow.findViewById(R.id.btn_comment);
         TextView tvCommentCount = infoWindow.findViewById(R.id.tv_comment_count);
         android.widget.Button btnGoToNote = infoWindow.findViewById(R.id.btn_go_to_note);
-        ImageView ivRemoteIndicator = infoWindow.findViewById(R.id.iv_remote_indicator);
+        TextView tvFloatingRemoteHeader = infoWindow.findViewById(R.id.tv_floating_remote_header);
 
         if (isVirtual) {
-            ivRemoteIndicator.setVisibility(View.VISIBLE);
+            tvFloatingRemoteHeader.setVisibility(View.VISIBLE);
         } else {
-            ivRemoteIndicator.setVisibility(View.GONE);
+            tvFloatingRemoteHeader.setVisibility(View.GONE);
         }
         
         // Show Go button if this window was opened from saved notes
@@ -1508,6 +1512,8 @@ public class MapFragment extends Fragment {
                 .document(docId)
                 .delete()
                 .addOnSuccessListener(aVoid -> {
+                    // Also delete from notes_feed
+                    db.collection("notes_feed").document(docId).delete();
                     Log.d("MapFragment", "Note deleted from Firestore");
                     if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Note deleted");
                 })
@@ -3070,11 +3076,19 @@ public class MapFragment extends Fragment {
                         if (user != null) {
                             if (tvLegendName != null) tvLegendName.setText(user.getName() != null ? user.getName() : "Anonymous");
                             if (ivLegendAvatar != null && user.getProfilePic() != null) {
-                                try {
-                                    byte[] bytes = android.util.Base64.decode(user.getProfilePic(), android.util.Base64.DEFAULT);
-                                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                                    ivLegendAvatar.setImageBitmap(bitmap);
-                                } catch (Exception e) { e.printStackTrace(); }
+                                // Decode bitmap on background thread to prevent UI freeze
+                                String profilePic = user.getProfilePic();
+                                new Thread(() -> {
+                                    try {
+                                        byte[] bytes = android.util.Base64.decode(profilePic, android.util.Base64.DEFAULT);
+                                        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                                        if (getActivity() != null && isAdded()) {
+                                            getActivity().runOnUiThread(() -> {
+                                                if (ivLegendAvatar != null) ivLegendAvatar.setImageBitmap(bitmap);
+                                            });
+                                        }
+                                    } catch (Exception e) { e.printStackTrace(); }
+                                }).start();
                             }
                         }
                     }
@@ -3584,7 +3598,9 @@ public class MapFragment extends Fragment {
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setView(dialogView).create();
 
-        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
 
         btnSend.setOnClickListener(v -> {
             String messageText = etMessage.getText().toString().trim();
@@ -3595,6 +3611,7 @@ public class MapFragment extends Fragment {
                 if (getView() != null) com.visiboard.app.utils.UiHelper.showWarning(getView(), "Please enter a message");
             }
         });
+        
         btnCancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
@@ -3926,6 +3943,59 @@ public class MapFragment extends Fragment {
              });
     }
     
+    // Helper for Remote Note Glow (Accent Color)
+    private void applyRemoteGlow(View view) {
+        if (view == null) return;
+        
+        // Define accent gradient colors
+        int[] colors = {
+            0xFF00B894, // Accent
+            0xFF00966D, // Accent Dark
+            0xFF00B894  // Accent
+        };
+        
+        // Layer 1: Outer Faint Glow
+        android.graphics.drawable.GradientDrawable l1 = new android.graphics.drawable.GradientDrawable();
+        l1.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        l1.setCornerRadius(dpToPx(18));
+        l1.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TL_BR);
+        l1.setColors(colors);
+        l1.setAlpha(40);
+        
+        // Layer 2: Middle Glow
+        android.graphics.drawable.GradientDrawable l2 = new android.graphics.drawable.GradientDrawable();
+        l2.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        l2.setCornerRadius(dpToPx(18));
+        l2.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TL_BR);
+        l2.setColors(colors);
+        l2.setAlpha(100); 
+        
+        // Layer 3: Inner Core
+        android.graphics.drawable.GradientDrawable l3 = new android.graphics.drawable.GradientDrawable();
+        l3.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        l3.setCornerRadius(dpToPx(18));
+        l3.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TL_BR);
+        l3.setColors(colors);
+        l3.setAlpha(255);
+        
+        // Combine into LayerDrawable
+        android.graphics.drawable.LayerDrawable layerDrawable = new android.graphics.drawable.LayerDrawable(
+            new android.graphics.drawable.Drawable[]{l1, l2, l3}
+        );
+        
+        // Settings insets
+        int step = dpToPx(1);
+        layerDrawable.setLayerInset(0, 0, 0, 0, 0);       // Outer
+        layerDrawable.setLayerInset(1, step, step, step, step);   // Middle
+        layerDrawable.setLayerInset(2, step*3, step*3, step*3, step*3); // Inner
+        
+        view.setBackground(layerDrawable);
+        
+        // Enforce padding
+        int borderThickness = dpToPx(4);
+        view.setPadding(borderThickness, borderThickness, borderThickness, borderThickness);
+    }
+
     // Helper for Gradient Glow (Simulated Blur)
     private void applyGradientGlow(View view) {
         if (view == null) return;

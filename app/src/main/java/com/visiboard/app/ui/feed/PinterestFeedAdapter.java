@@ -43,6 +43,16 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
         void onShareClick(NearbyNote note);
     }
 
+    public interface LazyImageLoadCallback {
+        void requestImageLoad(String noteId, ImageView target);
+    }
+
+    private LazyImageLoadCallback lazyLoadCallback;
+
+    public void setLazyLoadCallback(LazyImageLoadCallback callback) {
+        this.lazyLoadCallback = callback;
+    }
+
     public PinterestFeedAdapter(OnNoteClickListener listener) {
         this.listener = listener;
     }
@@ -359,15 +369,20 @@ public class PinterestFeedAdapter extends RecyclerView.Adapter<RecyclerView.View
             String localPath = note.getLocalImagePath();
             String imageBase64 = note.getImageBase64();
 
-            // Simple image binding (reverted from progressive/skeleton logic)
-            // The image is expected to be on disk now due to DiscoverTabFragment logic
+            // Simple image binding with lazy load support
             if (localPath != null && !localPath.isEmpty()) {
+                // Cache hit: load from disk
                 com.visiboard.app.utils.ImageCache.getInstance()
                         .loadImageFromPath(localPath, ivNoteImage, R.drawable.placeholder_image);
             } else if (imageBase64 != null && !imageBase64.isEmpty()) {
-                // Fallback for memory-only images (though rare with new logic)
+                // Fallback for memory-only images
                 com.visiboard.app.utils.ImageCache.getInstance()
                         .loadBase64Image(note.getId(), imageBase64, ivNoteImage, R.drawable.placeholder_image);
+            } else if (note.getImageWidth() > 0 && note.getImageHeight() > 0) {
+                // Has image but not cached - trigger lazy load
+                if (lazyLoadCallback != null) {
+                    lazyLoadCallback.requestImageLoad(note.getId(), ivNoteImage);
+                }
             } else {
                 ivNoteImage.setImageResource(R.drawable.placeholder_image);
             }

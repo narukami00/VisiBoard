@@ -394,6 +394,8 @@ public class CreateNoteActivity extends AppCompatActivity {
 
             db.collection("notes").document(editNoteId).update(updates)
                     .addOnSuccessListener(aVoid -> {
+                        // Sync to notes_feed
+                        syncToNotesFeed(editNoteId, updates, imageBase64, width, height);
                         com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note updated!");
                         finish();
                     })
@@ -444,6 +446,8 @@ public class CreateNoteActivity extends AppCompatActivity {
 
                 db.collection("notes").add(noteMap)
                         .addOnSuccessListener(docRef -> {
+                            // Sync to notes_feed
+                            syncToNotesFeedNew(docRef.getId(), noteMap, imageBase64, width, height);
                             com.visiboard.app.utils.UiHelper.showSuccess(findViewById(android.R.id.content), "Note posted successfully!");
                             setResult(RESULT_OK);
                             finish();
@@ -563,5 +567,96 @@ public class CreateNoteActivity extends AppCompatActivity {
         });
 
         dialog.show();
+    }
+
+    /**
+     * Syncs updates to notes_feed collection (for edits)
+     */
+    private void syncToNotesFeed(String noteId, Map<String, Object> updates, @Nullable String imageBase64, int width, int height) {
+        Map<String, Object> feedUpdates = new HashMap<>();
+        if (updates.containsKey("text")) feedUpdates.put("text", updates.get("text"));
+        if (updates.containsKey("note")) feedUpdates.put("text", updates.get("note"));
+        if (updates.containsKey("summary")) feedUpdates.put("summary", updates.get("summary"));
+        if (updates.containsKey("visibility")) feedUpdates.put("visibility", updates.get("visibility"));
+        if (updates.containsKey("imageWidth")) feedUpdates.put("imageWidth", updates.get("imageWidth"));
+        if (updates.containsKey("imageHeight")) feedUpdates.put("imageHeight", updates.get("imageHeight"));
+        
+        // Generate thumbnail if image updated
+        if (imageBase64 != null && !imageBase64.isEmpty()) {
+            new Thread(() -> {
+                try {
+                    byte[] bytes = android.util.Base64.decode(imageBase64, android.util.Base64.DEFAULT);
+                    android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    if (bmp != null) {
+                        android.graphics.Bitmap thumb = android.graphics.Bitmap.createScaledBitmap(bmp, 50, 50, true);
+                        bmp.recycle();
+                        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                        thumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 30, baos);
+                        thumb.recycle();
+                        feedUpdates.put("imageThumb64", android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.DEFAULT));
+                        db.collection("notes_feed").document(noteId).update(feedUpdates);
+                    }
+                } catch (Exception e) { /* ignore */ }
+            }).start();
+        } else if (!feedUpdates.isEmpty()) {
+            db.collection("notes_feed").document(noteId).update(feedUpdates);
+        }
+    }
+
+    /**
+     * Syncs new note to notes_feed collection
+     */
+    private void syncToNotesFeedNew(String noteId, Map<String, Object> noteMap, @Nullable String imageBase64, int width, int height) {
+        Map<String, Object> feedDoc = new HashMap<>();
+        feedDoc.put("userId", noteMap.get("userId"));
+        feedDoc.put("userName", noteMap.get("userName"));
+        feedDoc.put("text", noteMap.get("text"));
+        feedDoc.put("summary", noteMap.get("summary"));
+        feedDoc.put("location", noteMap.get("location"));
+        feedDoc.put("timestamp", noteMap.get("timestamp"));
+        feedDoc.put("likeCount", noteMap.get("likeCount"));
+        feedDoc.put("imageWidth", width);
+        feedDoc.put("imageHeight", height);
+        feedDoc.put("visibility", noteMap.get("visibility"));
+        feedDoc.put("isHidden", false);
+        feedDoc.put("isOwnerPrivate", false);
+
+        // Generate thumbnails in background
+        new Thread(() -> {
+            try {
+                // Profile pic thumbnail
+                String profilePic = (String) noteMap.get("userProfilePic");
+                if (profilePic != null && !profilePic.isEmpty()) {
+                    byte[] profileBytes = android.util.Base64.decode(profilePic, android.util.Base64.DEFAULT);
+                    android.graphics.Bitmap profileBmp = android.graphics.BitmapFactory.decodeByteArray(profileBytes, 0, profileBytes.length);
+                    if (profileBmp != null) {
+                        android.graphics.Bitmap profileThumb = android.graphics.Bitmap.createScaledBitmap(profileBmp, 40, 40, true);
+                        profileBmp.recycle();
+                        java.io.ByteArrayOutputStream profileBaos = new java.io.ByteArrayOutputStream();
+                        profileThumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 50, profileBaos);
+                        profileThumb.recycle();
+                        feedDoc.put("userProfilePicThumb", android.util.Base64.encodeToString(profileBaos.toByteArray(), android.util.Base64.DEFAULT));
+                    }
+                }
+                
+                // Image thumbnail
+                if (imageBase64 != null && !imageBase64.isEmpty()) {
+                    byte[] bytes = android.util.Base64.decode(imageBase64, android.util.Base64.DEFAULT);
+                    android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    if (bmp != null) {
+                        android.graphics.Bitmap thumb = android.graphics.Bitmap.createScaledBitmap(bmp, 50, 50, true);
+                        bmp.recycle();
+                        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                        thumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 30, baos);
+                        thumb.recycle();
+                        feedDoc.put("imageThumb64", android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.DEFAULT));
+                    }
+                }
+                
+                db.collection("notes_feed").document(noteId).set(feedDoc);
+            } catch (Exception e) {
+                db.collection("notes_feed").document(noteId).set(feedDoc);
+            }
+        }).start();
     }
 }
