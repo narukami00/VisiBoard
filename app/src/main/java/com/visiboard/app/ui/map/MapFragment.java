@@ -226,6 +226,10 @@ public class MapFragment extends Fragment {
     // Blocked users
     private java.util.Set<String> blockedUserIds = new java.util.HashSet<>();
 
+    // Stickman Animation
+    private ImageView ivDropAnimation;
+    private ImageView ivRemoteDropIcon;
+
 
 
     private final String GEOAPIFY_LIGHT_STYLE_URL =
@@ -409,35 +413,74 @@ public class MapFragment extends Fragment {
             
             performHapticClick(v);
             
-            // Create drag shadow
+            // Load the "hanging" stickman bitmap for drag shadow (preserve aspect ratio)
+            Bitmap hangingBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.stick_2);
+            final int targetHeight = (int) (80 * getResources().getDisplayMetrics().density);
+            float aspectRatio = (float) hangingBitmap.getWidth() / hangingBitmap.getHeight();
+            final int targetWidth = (int) (targetHeight * aspectRatio);
+            Bitmap scaledBitmap = Bitmap.createScaledBitmap(hangingBitmap, targetWidth, targetHeight, true);
+            
+            // Apply dark mode color inversion
+            boolean isDarkModeDrag = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
+            if (isDarkModeDrag) {
+                Bitmap tintedBitmap = Bitmap.createBitmap(scaledBitmap.getWidth(), scaledBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+                Canvas tintCanvas = new Canvas(tintedBitmap);
+                android.graphics.Paint tintPaint = new android.graphics.Paint();
+                android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
+                cm.set(new float[]{
+                    -1, 0, 0, 0, 255,
+                    0, -1, 0, 0, 255,
+                    0, 0, -1, 0, 255,
+                    0, 0, 0, 1, 0
+                });
+                tintPaint.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
+                tintCanvas.drawBitmap(scaledBitmap, 0, 0, tintPaint);
+                scaledBitmap = tintedBitmap;
+            }
+            
+            final Bitmap finalScaledBitmap = scaledBitmap;
+            final int shadowWidth = targetWidth;
+            final int shadowHeight = targetHeight;
+            
+            // Create drag shadow with hanging stickman
             View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v) {
                 @Override
                 public void onProvideShadowMetrics(android.graphics.Point outShadowSize, android.graphics.Point outShadowTouchPoint) {
-                    outShadowSize.set(v.getWidth(), v.getHeight());
-                    outShadowTouchPoint.set(v.getWidth() / 2, v.getHeight() / 2);
+                    outShadowSize.set(shadowWidth, shadowHeight);
+                    outShadowTouchPoint.set(shadowWidth / 2, 10); // Hang from top
                 }
                 
                 @Override
                 public void onDrawShadow(Canvas canvas) {
-                    // Draw the icon as shadow
-                    Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_remote_drop);
-                    if (icon != null) {
-                        icon.setBounds(0, 0, v.getWidth(), v.getHeight());
-                        icon.setTint(getResources().getColor(R.color.text_primary));
-                        icon.draw(canvas);
-                    }
+                    canvas.drawBitmap(finalScaledBitmap, 0, 0, null);
                 }
             };
             
             // Hide icon immediately (empty box effect)
-            if (v instanceof androidx.cardview.widget.CardView) {
-                androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) v;
-                if (cv.getChildCount() > 0) cv.getChildAt(0).setVisibility(View.INVISIBLE);
+            if (ivRemoteDropIcon != null) {
+                ivRemoteDropIcon.setVisibility(View.INVISIBLE);
             }
             
             v.startDragAndDrop(null, shadowBuilder, null, 0);
             return true;
         });
+        
+        // Initialize animation views
+        ivDropAnimation = view.findViewById(R.id.ivDropAnimation);
+        ivRemoteDropIcon = view.findViewById(R.id.ivRemoteDropIcon);
+        
+        // Apply dark mode tint to button icon (invert black stickman to white)
+        boolean isDarkModeForIcon = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
+        if (isDarkModeForIcon && ivRemoteDropIcon != null) {
+            android.graphics.ColorMatrix colorMatrixIcon = new android.graphics.ColorMatrix();
+            colorMatrixIcon.set(new float[]{
+                -1, 0, 0, 0, 255,
+                0, -1, 0, 0, 255,
+                0, 0, -1, 0, 255,
+                0, 0, 0, 1, 0
+            });
+            ivRemoteDropIcon.setColorFilter(new android.graphics.ColorMatrixColorFilter(colorMatrixIcon));
+        }
         
         // Handle Drop on Map
         view.setOnDragListener((v, event) -> {
@@ -445,27 +488,39 @@ public class MapFragment extends Fragment {
                 case android.view.DragEvent.ACTION_DROP:
                     if (mapLibreMap != null) {
                         float x = event.getX();
-                        float y = event.getY(); // Adjust for offset if needed
+                        float y = event.getY();
                         
                         // Check if dropped back onto the button (Cancel)
                         View btn = view.findViewById(R.id.btnRemoteDrop);
                         android.graphics.Rect hitRect = new android.graphics.Rect();
                         btn.getHitRect(hitRect);
                         if (hitRect.contains((int)x, (int)y)) {
-                             // Restore Icon Visibility (Snap Back)
-                             if (btn instanceof androidx.cardview.widget.CardView) {
-                                 androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) btn;
-                                 if (cv.getChildCount() > 0) cv.getChildAt(0).setVisibility(View.VISIBLE);
+                             // Restore Icon Visibility with pop animation
+                             if (ivRemoteDropIcon != null) {
+                                 ivRemoteDropIcon.setVisibility(View.VISIBLE);
+                                 ivRemoteDropIcon.setScaleX(0f);
+                                 ivRemoteDropIcon.setScaleY(0f);
+                                 ivRemoteDropIcon.animate()
+                                     .scaleX(1f).scaleY(1f)
+                                     .setDuration(300)
+                                     .setInterpolator(new OvershootInterpolator())
+                                     .start();
                              }
                              return true; // Cancelled
                         }
 
                         // Convert screen point to LatLng
                         LatLng latLng = mapLibreMap.getProjection().fromScreenLocation(new android.graphics.PointF(x, y));
-                        handleRemoteDrop(latLng);
+                        playDropAnimation(x, y, latLng);
                     }
                     return true;
                 case android.view.DragEvent.ACTION_DRAG_STARTED:
+                    return true;
+                case android.view.DragEvent.ACTION_DRAG_ENDED:
+                    // If drag ended without a drop (e.g., cancelled), restore icon
+                    if (!event.getResult() && ivRemoteDropIcon != null && !isRemotePinPlaced) {
+                        ivRemoteDropIcon.setVisibility(View.VISIBLE);
+                    }
                     return true;
             }
             return false;
@@ -503,38 +558,198 @@ public class MapFragment extends Fragment {
     private LatLng remoteDropLatLng;
     private Symbol remoteDropSymbol;
     
+    /**
+     * Plays the stickman drop animation sequence: falling → impact → recovery → settled
+     */
+    private void playDropAnimation(float screenX, float screenY, LatLng latLng) {
+        if (ivDropAnimation == null || getView() == null) {
+            handleRemoteDrop(latLng);
+            return;
+        }
+        
+        // Position the animation overlay at drop location using FrameLayout margins
+        int animWidth = (int) (64 * getResources().getDisplayMetrics().density);
+        int animHeight = (int) (80 * getResources().getDisplayMetrics().density);
+        
+        // Calculate the top-left position for the animation (centered on drop point)
+        int leftMargin = (int) (screenX - animWidth / 2f);
+        int topMargin = (int) (screenY - animHeight / 2f);
+        
+        // Use LayoutParams margins for reliable positioning in FrameLayout
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(animWidth, animHeight);
+        params.leftMargin = Math.max(0, leftMargin);
+        params.topMargin = Math.max(0, topMargin);
+        ivDropAnimation.setLayoutParams(params);
+        
+        ivDropAnimation.setVisibility(View.VISIBLE);
+        ivDropAnimation.setAlpha(1f);
+        ivDropAnimation.bringToFront();
+        
+        // Apply dark mode tint to animation (invert black stickman to white)
+        boolean isDarkMode = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
+        if (isDarkMode) {
+            android.graphics.ColorMatrix colorMatrix = new android.graphics.ColorMatrix();
+            colorMatrix.set(new float[]{
+                -1, 0, 0, 0, 255,
+                0, -1, 0, 0, 255,
+                0, 0, -1, 0, 255,
+                0, 0, 0, 1, 0
+            });
+            ivDropAnimation.setColorFilter(new android.graphics.ColorMatrixColorFilter(colorMatrix));
+        } else {
+            ivDropAnimation.clearColorFilter();
+        }
+        
+        // Animation frames: falling → impact → recovery → settled
+        int[] frames = {R.drawable.stick_3, R.drawable.stick_4, R.drawable.stick_5, R.drawable.stick_1};
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        
+        // Start with falling frame
+        ivDropAnimation.setImageResource(R.drawable.stick_3);
+        
+        // Add a small fall animation (translate down slightly)
+        ivDropAnimation.setTranslationY(-30);
+        ivDropAnimation.animate()
+            .translationY(0)
+            .setDuration(150)
+            .setInterpolator(new android.view.animation.AccelerateInterpolator())
+            .start();
+        
+        // Haptic on impact
+        handler.postDelayed(() -> {
+            if (getView() != null) {
+                getView().performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            }
+        }, 150);
+        
+        // Cycle through frames
+        for (int i = 0; i < frames.length; i++) {
+            int frame = frames[i];
+            int delay = 150 + (i * 120); // Start after fall, 120ms per frame
+            
+            handler.postDelayed(() -> {
+                if (ivDropAnimation != null) {
+                    ivDropAnimation.setImageResource(frame);
+                    
+                    // Bounce effect on final "settled" frame
+                    if (frame == R.drawable.stick_1) {
+                        ivDropAnimation.setScaleX(1.3f);
+                        ivDropAnimation.setScaleY(0.7f);
+                        ivDropAnimation.animate()
+                            .scaleX(1f).scaleY(1f)
+                            .setDuration(200)
+                            .setInterpolator(new OvershootInterpolator(2f))
+                            .start();
+                    }
+                    // Squash effect on impact frame
+                    else if (frame == R.drawable.stick_4) {
+                        ivDropAnimation.setScaleX(1.2f);
+                        ivDropAnimation.setScaleY(0.8f);
+                        ivDropAnimation.animate()
+                            .scaleX(1f).scaleY(1f)
+                            .setDuration(100)
+                            .start();
+                    }
+                }
+            }, delay);
+        }
+        
+        // After animation completes, shrink down to map symbol size then place
+        int totalDuration = 150 + (frames.length * 120) + 250;
+        handler.postDelayed(() -> {
+            if (ivDropAnimation != null) {
+                // Shrink animation to match map symbol size (from 80dp to ~48dp = 0.6 scale)
+                ivDropAnimation.animate()
+                    .scaleX(0.6f).scaleY(0.6f)
+                    .setDuration(200)
+                    .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                    .withEndAction(() -> {
+                        // Fade out while placing the map symbol
+                        ivDropAnimation.animate()
+                            .alpha(0f)
+                            .setDuration(100)
+                            .withEndAction(() -> {
+                                ivDropAnimation.setVisibility(View.GONE);
+                                ivDropAnimation.setAlpha(1f);
+                                ivDropAnimation.setScaleX(1f);
+                                ivDropAnimation.setScaleY(1f);
+                            })
+                            .start();
+                        handleRemoteDrop(latLng);
+                    })
+                    .start();
+            }
+        }, totalDuration);
+    }
+    
     private void handleRemoteDrop(LatLng latLng) {
         if (mapLibreMap == null || symbolManager == null) return;
         
         isRemotePinPlaced = true;
         remoteDropCoordinates = latLng;
 
-        // Add Pin at Drop Location
+        // Add standing stickman at Drop Location
+        // First, register stick_1 bitmap as a map icon if not already
+        boolean isDarkMode = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
+        String stickmanIconId = isDarkMode ? "stickman_standing_dark" : "stickman_standing";
+        
+        if (mapLibreMap.getStyle() != null && mapLibreMap.getStyle().getImage(stickmanIconId) == null) {
+            Bitmap stickmanBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.stick_1);
+            // Scale to reasonable size for map
+            int iconHeight = (int) (48 * getResources().getDisplayMetrics().density);
+            float aspectRatio = (float) stickmanBitmap.getWidth() / stickmanBitmap.getHeight();
+            int iconWidth = (int) (iconHeight * aspectRatio);
+            Bitmap scaledStickman = Bitmap.createScaledBitmap(stickmanBitmap, iconWidth, iconHeight, true);
+            
+            // Apply tint for dark mode (invert black to white)
+            if (isDarkMode) {
+                Bitmap tintedBitmap = Bitmap.createBitmap(scaledStickman.getWidth(), scaledStickman.getHeight(), Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(tintedBitmap);
+                android.graphics.Paint paint = new android.graphics.Paint();
+                android.graphics.ColorMatrix colorMatrix = new android.graphics.ColorMatrix();
+                colorMatrix.set(new float[]{
+                    -1, 0, 0, 0, 255,
+                    0, -1, 0, 0, 255,
+                    0, 0, -1, 0, 255,
+                    0, 0, 0, 1, 0
+                });
+                paint.setColorFilter(new android.graphics.ColorMatrixColorFilter(colorMatrix));
+                canvas.drawBitmap(scaledStickman, 0, 0, paint);
+                scaledStickman = tintedBitmap;
+            }
+            
+            mapLibreMap.getStyle().addImage(stickmanIconId, scaledStickman);
+        }
+        
         SymbolOptions options = new SymbolOptions()
                 .withLatLng(latLng)
-                .withIconImage("remote_drop_pin")
-                .withIconSize(1.5f);
+                .withIconImage(stickmanIconId)
+                .withIconSize(1.0f);
         symbolManager.create(options);
         
         // Update Button UI to 'X' (Cancel)
-        View btn = getView().findViewById(R.id.btnRemoteDrop);
-        if (btn instanceof androidx.cardview.widget.CardView) {
-             androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) btn;
-             if (cv.getChildCount() > 0) {
-                 ImageView iconView = (ImageView) cv.getChildAt(0);
-                 iconView.setImageResource(R.drawable.ic_close); // Show X
-                 iconView.setVisibility(View.VISIBLE);
-             }
+        // Update Button UI to 'X' (Cancel)
+        if (ivRemoteDropIcon != null) {
+            ivRemoteDropIcon.setImageResource(R.drawable.ic_close);
+            ivRemoteDropIcon.setVisibility(View.VISIBLE);
+            
+            // For vector icon ic_close, we can just use normal tinting
+            if (isDarkMode) {
+                ivRemoteDropIcon.clearColorFilter(); // Clear the matrix filter used for stickman PNG
+                ivRemoteDropIcon.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+            } else {
+                ivRemoteDropIcon.setImageTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.text_primary)));
+            }
         }
 
-        // Update 'Add Note' Button
+        // Update 'Add Note' Button (use location icon, not stickman since it gets squeezed)
         ExtendedFloatingActionButton btnAddNote = getView().findViewById(R.id.btnAddNote);
         btnAddNote.setText("Post Remote Note");
-        btnAddNote.setIconResource(R.drawable.ic_remote_drop);
+        btnAddNote.setIconResource(R.drawable.ic_location_pin);
         btnAddNote.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.accent)));
         
-        // Show Animation/Feedback
-        // Toast.makeText(requireContext(), "Location set! Tap 'Post Remote Note'", Toast.LENGTH_SHORT).show();
+        // Show feedback
+        if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Location set! Tap 'Post Remote Note'");
     }
     
     private void resetRemoteDropState() {
@@ -544,25 +759,35 @@ public class MapFragment extends Fragment {
         // Remove temporary pin (reload notes which clears temp symbols)
         renderNotesFromCache(); 
         
-        // Reset Button UI
-        View btn = getView().findViewById(R.id.btnRemoteDrop);
-        if (btn instanceof androidx.cardview.widget.CardView) {
-             androidx.cardview.widget.CardView cv = (androidx.cardview.widget.CardView) btn;
-             if (cv.getChildCount() > 0) {
-                 ImageView iconView = (ImageView) cv.getChildAt(0);
-                 iconView.setImageResource(R.drawable.ic_remote_drop); // Reset to Pin
-                 iconView.setVisibility(View.VISIBLE);
-                 
-                 // Animate "Return" (Pop in)
-                 ScaleAnimation scaleAnim = new ScaleAnimation(
-                     0f, 1f, 0f, 1f, 
-                     Animation.RELATIVE_TO_SELF, 0.5f, 
-                     Animation.RELATIVE_TO_SELF, 0.5f
-                 );
-                 scaleAnim.setDuration(300);
-                 scaleAnim.setInterpolator(new OvershootInterpolator());
-                 iconView.startAnimation(scaleAnim);
-             }
+        // Reset Button UI to standing stickman with pop animation
+        if (ivRemoteDropIcon != null) {
+            ivRemoteDropIcon.setImageResource(R.drawable.stick_1);
+            
+            // Restore dark mode filter for PNG stickman, clear vector tint
+            boolean isDarkMode = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
+            ivRemoteDropIcon.setImageTintList(null); // Clear vector tint
+            
+            if (isDarkMode) {
+                android.graphics.ColorMatrix colorMatrix = new android.graphics.ColorMatrix();
+                colorMatrix.set(new float[]{
+                    -1, 0, 0, 0, 255,
+                    0, -1, 0, 0, 255,
+                    0, 0, -1, 0, 255,
+                    0, 0, 0, 1, 0
+                });
+                ivRemoteDropIcon.setColorFilter(new android.graphics.ColorMatrixColorFilter(colorMatrix));
+            } else {
+                ivRemoteDropIcon.clearColorFilter();
+            }
+            
+            ivRemoteDropIcon.setVisibility(View.VISIBLE);
+            ivRemoteDropIcon.setScaleX(0f);
+            ivRemoteDropIcon.setScaleY(0f);
+            ivRemoteDropIcon.animate()
+                .scaleX(1f).scaleY(1f)
+                .setDuration(300)
+                .setInterpolator(new OvershootInterpolator())
+                .start();
         }
         
         // Reset Add Note Button
@@ -570,8 +795,6 @@ public class MapFragment extends Fragment {
         btnAddNote.setText("Add Note");
         btnAddNote.setIconResource(R.drawable.ic_add);
         btnAddNote.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.primary)));
-        
-        // Toast.makeText(requireContext(), "Remote drop cancelled", Toast.LENGTH_SHORT).show();
     }
 
     @Override

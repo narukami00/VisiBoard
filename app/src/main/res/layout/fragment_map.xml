@@ -376,12 +376,22 @@
         android:visibility="visible">
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_remote_drop"
+            android:id="@+id/ivRemoteDropIcon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@drawable/stick_1"
             android:layout_gravity="center"
-            app:tint="@color/text_primary"/>
+            android:scaleType="centerInside"/>
     </androidx.cardview.widget.CardView>
+
+    <!-- Stickman Drop Animation Overlay -->
+    <ImageView
+        android:id="@+id/ivDropAnimation"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:visibility="gone"
+        android:elevation="100dp"
+        android:scaleType="centerInside"/>
 
     <!-- Modern Add Note Button -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
