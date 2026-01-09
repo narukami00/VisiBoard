@@ -228,54 +228,28 @@ public class ChatActivity extends AppCompatActivity {
     
     /**
      * Creates a compressed image file from URI to reduce upload size and bandwidth.
-     * Targets ~800KB max compressed size.
+     * Targets ~800KB max compressed size. Properly handles EXIF orientation.
      */
     private File createCompressedImageFile(Uri uri) {
         try {
-            InputStream inputStream = getContentResolver().openInputStream(uri);
-            if (inputStream == null) return null;
+            // Use ImageUtils to load bitmap with correct EXIF orientation
+            android.graphics.Bitmap bitmap = com.visiboard.app.utils.ImageUtils.loadBitmapWithCorrectOrientation(
+                this, uri);
             
-            // Decode with inJustDecodeBounds first to get size
-            android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
-            options.inJustDecodeBounds = true;
-            android.graphics.BitmapFactory.decodeStream(inputStream, null, options);
-            inputStream.close();
-            
-            // Calculate sample size to reduce memory usage
-            int sampleSize = 1;
-            int maxDimension = 1200; // Max width or height
-            if (options.outWidth > maxDimension || options.outHeight > maxDimension) {
-                int halfWidth = options.outWidth / 2;
-                int halfHeight = options.outHeight / 2;
-                while ((halfWidth / sampleSize) >= maxDimension && (halfHeight / sampleSize) >= maxDimension) {
-                    sampleSize *= 2;
-                }
+            if (bitmap == null) {
+                // Fallback to legacy method
+                return createTempFileFromUri(uri);
             }
             
-            // Decode with sample size
-            options.inJustDecodeBounds = false;
-            options.inSampleSize = sampleSize;
-            inputStream = getContentResolver().openInputStream(uri);
-            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(inputStream, null, options);
-            inputStream.close();
-            
-            if (bitmap == null) return null;
-            
-            // Scale down if still too large
-            int width = bitmap.getWidth();
-            int height = bitmap.getHeight();
-            if (width > maxDimension || height > maxDimension) {
-                float scale = Math.min((float) maxDimension / width, (float) maxDimension / height);
-                width = Math.round(width * scale);
-                height = Math.round(height * scale);
-                bitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, width, height, true);
-            }
+            // Scale down if needed
+            bitmap = com.visiboard.app.utils.ImageUtils.scaleBitmapIfNeeded(bitmap, 1200);
             
             // Write to temp file with compression
             File file = new File(getCacheDir(), "chat_img_" + System.currentTimeMillis() + ".jpg");
             FileOutputStream fos = new FileOutputStream(file);
             bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, fos); // 75% quality
             fos.close();
+            bitmap.recycle();
             
             Log.d(TAG, "Compressed image: " + file.length() / 1024 + "KB");
             return file;

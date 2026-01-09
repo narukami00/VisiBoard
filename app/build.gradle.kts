@@ -129,6 +129,9 @@ dependencies {
     implementation ("androidx.camera:camera-lifecycle:1.3.0")
     implementation ("androidx.camera:camera-view:1.3.0")
 
+    // ExifInterface for EXIF orientation handling
+    implementation ("androidx.exifinterface:exifinterface:1.3.7")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

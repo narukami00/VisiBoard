@@ -802,7 +802,7 @@ public class MapFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         
         // Listen for requests to close note window from other fragments
-        getParentFragmentManager().setFragmentResultListener("close_note_window", this, (requestKey, bundle) -> {
+        getParentFragmentManager().setFragmentResultListener("close_note_window", getViewLifecycleOwner(), (requestKey, bundle) -> {
             if (bundle.getBoolean("close_note_window", false)) {
                 if (currentNoteDialog != null && currentNoteDialog.isShowing()) {
                     currentNoteDialog.dismiss();
@@ -812,7 +812,7 @@ public class MapFragment extends Fragment {
         });
         
         // Listen for navigation requests when fragment is already visible
-        getParentFragmentManager().setFragmentResultListener("navigate_to_note", this, (requestKey, bundle) -> {
+        getParentFragmentManager().setFragmentResultListener("navigate_to_note", getViewLifecycleOwner(), (requestKey, bundle) -> {
             String targetNoteId = bundle.getString("note_id");
             if (targetNoteId != null) {
                 double lat = bundle.getDouble("latitude", 0);
@@ -2805,16 +2805,8 @@ public class MapFragment extends Fragment {
         if (mapView != null) mapView.onResume();
         // Restart location updates for accuracy
         startLocationUpdates();
-        
-        // Re-register fragment result listener in case it was cleared
-        getParentFragmentManager().setFragmentResultListener("close_note_window", this, (requestKey, bundle) -> {
-            if (bundle.getBoolean("close_note_window", false)) {
-                if (currentNoteDialog != null && currentNoteDialog.isShowing()) {
-                    currentNoteDialog.dismiss();
-                    currentNoteDialog = null;
-                }
-            }
-        });
+        // FragmentResultListeners are now registered in onViewCreated with getViewLifecycleOwner()
+        // No need to re-register here as they're tied to view lifecycle
     }
     @Override
     public void onPause() {

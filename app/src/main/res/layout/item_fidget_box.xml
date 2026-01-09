@@ -8,27 +8,9 @@
     app:cardElevation="2dp"
     app:cardBackgroundColor="@color/fidget_floating_bg">
 
-    <LinearLayout
+    <com.visiboard.app.ui.feed.widgets.FloatingBubblesView
+        android:id="@+id/floating_bubbles_view"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:gravity="center">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Pop the Bubbles!"
-            android:textSize="12sp"
-            android:textColor="@color/fidget_text_secondary"
-            android:layout_marginBottom="8dp"
-            android:fontFamily="sans-serif-medium"/>
-
-        <com.visiboard.app.ui.feed.widgets.FloatingBubblesView
-            android:id="@+id/floating_bubbles_view"
-            android:layout_width="match_parent"
-            android:layout_height="160dp"/>
-
-    </LinearLayout>
+        android:layout_height="180dp"/>
 
 </androidx.cardview.widget.CardView>

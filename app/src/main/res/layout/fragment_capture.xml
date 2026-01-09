@@ -83,6 +83,35 @@
                     android:shadowDy="1"
                     android:shadowRadius="2" />
                     
+                <!-- Zoom Indicator -->
+                <LinearLayout
+                    android:id="@+id/ll_zoom_indicator"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_zoom_indicator"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone">
+                    
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_search"
+                        android:tint="@color/white"
+                        android:layout_marginEnd="6dp" />
+                    
+                    <TextView
+                        android:id="@+id/tv_zoom_level"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1.0x"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:fontFamily="@font/poppins_semibold" />
+                </LinearLayout>
+                    
                 <TextView
                     android:id="@+id/tv_status_indicator"
                     android:layout_width="wrap_content"

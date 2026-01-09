@@ -95,16 +95,8 @@ public class ProfileFragment extends Fragment {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (getParentFragmentManager() != null) {
-            getParentFragmentManager().setFragmentResultListener("details_updated", this, (requestKey, result) -> {
-                refreshData();
-                if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Profile Updated");
-            });
-            
-            getParentFragmentManager().setFragmentResultListener("fav_notes_updated", this, (requestKey, result) -> {
-                refreshData(); 
-            });
-        }
+        // FragmentResultListeners moved to onCreateView with getViewLifecycleOwner()
+        // to prevent crashes when views are recreated
     }
 
     @Nullable
@@ -155,9 +147,17 @@ public class ProfileFragment extends Fragment {
         
         // Listen for favorite selection updates
         getParentFragmentManager().setFragmentResultListener("fav_notes_updated", getViewLifecycleOwner(), (key, bundle) -> {
-            if (bundle.getBoolean("refresh_favs")) {
+            if (bundle.getBoolean("refresh_favs", false)) {
                 loadUserData(); // Reloads user data which fetches favourites
+            } else {
+                refreshData();
             }
+        });
+        
+        // Listen for profile detail updates
+        getParentFragmentManager().setFragmentResultListener("details_updated", getViewLifecycleOwner(), (key, bundle) -> {
+            refreshData();
+            if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Profile Updated");
         });
 
         swipeRefreshLayout.setOnRefreshListener(this::refreshData);
@@ -765,7 +765,15 @@ public class ProfileFragment extends Fragment {
         if (requestCode == PICK_IMAGE && resultCode == getActivity().RESULT_OK && data != null) {
             Uri imgUri = data.getData();
             try {
-                Bitmap bitmap = MediaStore.Images.Media.getBitmap(getActivity().getContentResolver(), imgUri);
+                // Use ImageUtils to load bitmap with correct EXIF orientation
+                Bitmap bitmap = com.visiboard.app.utils.ImageUtils.loadBitmapWithCorrectOrientation(
+                    requireContext(), imgUri);
+                
+                if (bitmap == null) {
+                    // Fallback to legacy method if ImageUtils fails
+                    bitmap = MediaStore.Images.Media.getBitmap(getActivity().getContentResolver(), imgUri);
+                }
+                
                 profileImage.setImageBitmap(bitmap);
 
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -789,10 +797,105 @@ public class ProfileFragment extends Fragment {
                 .addOnSuccessListener(unused -> {
                     viewModel.setProfilePicBase64(base64Image);
                     if (getView() != null) com.visiboard.app.utils.UiHelper.showSuccess(getView(), "Profile picture updated");
+                    
+                    // Sync to all user's notes in background
+                    syncProfilePicToNotes(uid, base64Image);
                 })
                 .addOnFailureListener(e -> {
                     if (getView() != null) com.visiboard.app.utils.UiHelper.showError(getView(), "Failed to update: " + e.getMessage());
                 });
+    }
+    
+    /**
+     * Updates all notes by this user with the new profile picture.
+     * This runs in background and updates both 'notes' and 'notes_feed' collections.
+     */
+    private void syncProfilePicToNotes(String userId, String base64Image) {
+        new Thread(() -> {
+            try {
+                // Generate thumbnail with center-crop (same logic as CreateNoteActivity)
+                String thumbBase64 = null;
+                if (base64Image != null && !base64Image.isEmpty()) {
+                    byte[] profileBytes = android.util.Base64.decode(base64Image, android.util.Base64.DEFAULT);
+                    android.graphics.Bitmap profileBmp = android.graphics.BitmapFactory.decodeByteArray(profileBytes, 0, profileBytes.length);
+                    if (profileBmp != null) {
+                        // Center-crop to 40x40 without distortion
+                        int size = 40;
+                        int w = profileBmp.getWidth();
+                        int h = profileBmp.getHeight();
+                        int cropSize = Math.min(w, h);
+                        int x = (w - cropSize) / 2;
+                        int y = (h - cropSize) / 2;
+                        android.graphics.Bitmap cropped = android.graphics.Bitmap.createBitmap(profileBmp, x, y, cropSize, cropSize);
+                        android.graphics.Bitmap profileThumb = android.graphics.Bitmap.createScaledBitmap(cropped, size, size, true);
+                        if (cropped != profileBmp) cropped.recycle();
+                        profileBmp.recycle();
+                        java.io.ByteArrayOutputStream profileBaos = new java.io.ByteArrayOutputStream();
+                        profileThumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 50, profileBaos);
+                        profileThumb.recycle();
+                        thumbBase64 = android.util.Base64.encodeToString(profileBaos.toByteArray(), android.util.Base64.DEFAULT);
+                    }
+                }
+                
+                final String finalThumb = thumbBase64;
+                
+                // Update all notes by this user
+                db.collection("notes")
+                    .whereEqualTo("userId", userId)
+                    .get()
+                    .addOnSuccessListener(notesSnapshot -> {
+                        if (notesSnapshot.isEmpty()) return;
+                        
+                        com.google.firebase.firestore.WriteBatch batch = db.batch();
+                        int count = 0;
+                        
+                        for (com.google.firebase.firestore.DocumentSnapshot doc : notesSnapshot) {
+                            batch.update(doc.getReference(), "userProfilePic", base64Image);
+                            count++;
+                            
+                            // Firestore batch limit is 500
+                            if (count % 490 == 0) {
+                                batch.commit();
+                                batch = db.batch();
+                            }
+                        }
+                        
+                        if (count > 0) {
+                            batch.commit();
+                        }
+                    });
+                
+                // Update notes_feed collection with thumbnail
+                if (finalThumb != null) {
+                    db.collection("notes_feed")
+                        .whereEqualTo("userId", userId)
+                        .get()
+                        .addOnSuccessListener(feedSnapshot -> {
+                            if (feedSnapshot.isEmpty()) return;
+                            
+                            com.google.firebase.firestore.WriteBatch batch = db.batch();
+                            int count = 0;
+                            
+                            for (com.google.firebase.firestore.DocumentSnapshot doc : feedSnapshot) {
+                                batch.update(doc.getReference(), "userProfilePicThumb", finalThumb);
+                                count++;
+                                
+                                if (count % 490 == 0) {
+                                    batch.commit();
+                                    batch = db.batch();
+                                }
+                            }
+                            
+                            if (count > 0) {
+                                batch.commit();
+                            }
+                        });
+                }
+                
+            } catch (Exception e) {
+                android.util.Log.e("ProfileFragment", "Failed to sync profile pic to notes", e);
+            }
+        }).start();
     }
 
     private void showEditNameDialog() {

@@ -199,6 +199,15 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
     private TextRecognizer textRecognizer;
     private ExecutorService cameraExecutor;
     private ImageAnalysis imageAnalysis;
+    
+    // Zoom & Focus
+    private android.view.ScaleGestureDetector scaleGestureDetector;
+    private float currentZoomRatio = 1.0f;
+    private static final float MAX_ZOOM_RATIO = 10.0f;
+    private View focusIndicator;
+    private android.os.Handler focusHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private TextView tvZoomLevel;
+    private LinearLayout zoomContainer;
 
     @Nullable
     @Override
@@ -253,6 +262,10 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         llStepCounter = view.findViewById(R.id.ll_step_counter);
         graphicOverlay = view.findViewById(R.id.graphic_overlay);
         filterOverlay = view.findViewById(R.id.filter_overlay);
+        
+        // Zoom indicator from layout
+        zoomContainer = view.findViewById(R.id.ll_zoom_indicator);
+        tvZoomLevel = view.findViewById(R.id.tv_zoom_level);
 
         vibrator = (android.os.Vibrator) requireActivity().getSystemService(android.content.Context.VIBRATOR_SERVICE);
 
@@ -271,6 +284,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
 
         setupButtonListeners();
         updateRadiusDisplay();
+        setupZoomAndFocus();
         checkCameraPermission();
 
         return view;
@@ -480,6 +494,152 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
             } else {
                 vibrator.vibrate(15);
             }
+        }
+    }
+    
+    /**
+     * Sets up pinch-to-zoom (max 10x) and tap-to-focus for the camera
+     */
+    private void setupZoomAndFocus() {
+        // Create focus indicator view (small circle) - added to arOverlay
+        focusIndicator = new View(requireContext());
+        focusIndicator.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.focus_indicator));
+        focusIndicator.setVisibility(View.GONE);
+        FrameLayout.LayoutParams focusParams = new FrameLayout.LayoutParams(80, 80);
+        arOverlay.addView(focusIndicator, focusParams);
+        
+        // Zoom indicator is now in XML (ll_zoom_indicator, tv_zoom_level)
+        // Already bound in onCreateView
+        
+        // Pinch-to-zoom gesture detector
+        scaleGestureDetector = new android.view.ScaleGestureDetector(requireContext(), 
+            new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                @Override
+                public boolean onScale(android.view.ScaleGestureDetector detector) {
+                    if (camera == null) return false;
+                    
+                    float scaleFactor = detector.getScaleFactor();
+                    
+                    // Calculate new zoom with limits
+                    float maxZoom = Math.min(
+                        camera.getCameraInfo().getZoomState().getValue() != null 
+                            ? camera.getCameraInfo().getZoomState().getValue().getMaxZoomRatio() 
+                            : MAX_ZOOM_RATIO,
+                        MAX_ZOOM_RATIO
+                    );
+                    
+                    currentZoomRatio = Math.max(1.0f, Math.min(currentZoomRatio * scaleFactor, maxZoom));
+                    
+                    camera.getCameraControl().setZoomRatio(currentZoomRatio);
+                    
+                    // Show zoom level indicator
+                    updateZoomIndicator();
+                    
+                    return true;
+                }
+                
+                @Override
+                public void onScaleEnd(android.view.ScaleGestureDetector detector) {
+                    // Hide zoom indicator after delay
+                    focusHandler.postDelayed(() -> {
+                        if (zoomContainer != null) {
+                            zoomContainer.animate().alpha(0f).setDuration(300)
+                                .withEndAction(() -> zoomContainer.setVisibility(View.GONE))
+                                .start();
+                        }
+                    }, 1500);
+                }
+            });
+        
+        // Touch listener for zoom and focus
+        cameraPreview.setOnTouchListener((v, event) -> {
+            // Handle pinch zoom
+            scaleGestureDetector.onTouchEvent(event);
+            
+            // Handle tap to focus (only on single tap, not during zoom)
+            if (event.getPointerCount() == 1 && event.getAction() == MotionEvent.ACTION_UP) {
+                if (!scaleGestureDetector.isInProgress()) {
+                    handleTapToFocus(event.getX(), event.getY());
+                }
+            }
+            
+            return true;
+        });
+    }
+    
+    private void updateZoomIndicator() {
+        if (zoomContainer != null && tvZoomLevel != null) {
+            // Only show when zoomed in (above 1x)
+            if (currentZoomRatio > 1.05f) {
+                zoomContainer.setVisibility(View.VISIBLE);
+                zoomContainer.setAlpha(1f);
+                tvZoomLevel.setText(String.format(java.util.Locale.US, "%.1fx", currentZoomRatio));
+            } else {
+                // Hide at 1x zoom
+                zoomContainer.setVisibility(View.GONE);
+            }
+        }
+    }
+    
+    private void handleTapToFocus(float x, float y) {
+        if (camera == null) return;
+        
+        performHapticFeedback();
+        
+        // Show focus indicator
+        if (focusIndicator != null) {
+            focusIndicator.setVisibility(View.VISIBLE);
+            focusIndicator.setX(x - 40);
+            focusIndicator.setY(y - 40);
+            focusIndicator.setScaleX(1.5f);
+            focusIndicator.setScaleY(1.5f);
+            focusIndicator.setAlpha(1f);
+            
+            // Animate focus indicator
+            focusIndicator.animate()
+                .scaleX(1.0f)
+                .scaleY(1.0f)
+                .setDuration(200)
+                .start();
+            
+            // Hide after delay
+            focusHandler.removeCallbacksAndMessages(null);
+            focusHandler.postDelayed(() -> {
+                focusIndicator.animate()
+                    .alpha(0f)
+                    .setDuration(300)
+                    .withEndAction(() -> focusIndicator.setVisibility(View.GONE))
+                    .start();
+            }, 1500);
+        }
+        
+        // Create focus metering point
+        try {
+            androidx.camera.core.MeteringPointFactory factory = cameraPreview.getMeteringPointFactory();
+            androidx.camera.core.MeteringPoint point = factory.createPoint(x, y);
+            
+            // Focus and meter at this point
+            androidx.camera.core.FocusMeteringAction action = 
+                new androidx.camera.core.FocusMeteringAction.Builder(point, 
+                    androidx.camera.core.FocusMeteringAction.FLAG_AF | 
+                    androidx.camera.core.FocusMeteringAction.FLAG_AE)
+                .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                .build();
+            
+            camera.getCameraControl().startFocusAndMetering(action);
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting focus point", e);
+        }
+    }
+    
+    /**
+     * Double-tap to reset zoom to 1x
+     */
+    private void resetZoom() {
+        if (camera != null) {
+            currentZoomRatio = 1.0f;
+            camera.getCameraControl().setZoomRatio(1.0f);
+            updateZoomIndicator();
         }
     }
 

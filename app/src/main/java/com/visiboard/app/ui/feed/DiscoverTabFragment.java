@@ -934,14 +934,23 @@ public class DiscoverTabFragment extends Fragment {
                         feedDoc.put("userId", doc.getString("userId"));
                         feedDoc.put("userName", doc.getString("userName"));
                         
-                        // Generate profile pic thumbnail
+                        // Generate profile pic thumbnail (center-crop to avoid distortion)
                         String profilePic = doc.getString("userProfilePic");
                         if (profilePic != null && !profilePic.isEmpty()) {
                             try {
                                 byte[] profileBytes = android.util.Base64.decode(profilePic, android.util.Base64.DEFAULT);
                                 android.graphics.Bitmap profileBmp = android.graphics.BitmapFactory.decodeByteArray(profileBytes, 0, profileBytes.length);
                                 if (profileBmp != null) {
-                                    android.graphics.Bitmap profileThumb = android.graphics.Bitmap.createScaledBitmap(profileBmp, 40, 40, true);
+                                    // Center-crop to 40x40 without distortion
+                                    int size = 40;
+                                    int w = profileBmp.getWidth();
+                                    int h = profileBmp.getHeight();
+                                    int cropSize = Math.min(w, h);
+                                    int x = (w - cropSize) / 2;
+                                    int y = (h - cropSize) / 2;
+                                    android.graphics.Bitmap cropped = android.graphics.Bitmap.createBitmap(profileBmp, x, y, cropSize, cropSize);
+                                    android.graphics.Bitmap profileThumb = android.graphics.Bitmap.createScaledBitmap(cropped, size, size, true);
+                                    if (cropped != profileBmp) cropped.recycle();
                                     profileBmp.recycle();
                                     java.io.ByteArrayOutputStream profileBaos = new java.io.ByteArrayOutputStream();
                                     profileThumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 50, profileBaos);

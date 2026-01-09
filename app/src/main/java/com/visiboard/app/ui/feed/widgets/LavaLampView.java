@@ -4,8 +4,9 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.Path;
+import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
@@ -16,25 +17,27 @@ import java.util.Random;
 
 /**
  * A "Lava Lamp" style fidget widget.
- * Simulates rising blobs that merge using a metaball-like effect 
- * (approximated here with gooey connections for performance).
+ * Simulates rising blobs with elegant gradients.
  */
 public class LavaLampView extends View {
 
     private final List<Blob> blobs = new ArrayList<>();
     private Paint paint;
+    private Paint bgPaint;
     private ValueAnimator animator;
     private Random random = new Random();
     
-    // Colors for the "Lava"
-    private int[] colors = {
-        0xFFFF5252, // Red
-        0xFFFF4081, // Pink
-        0xFFFF6E40, // Deep Orange
-        0xFFFFD740  // Amber
-    };
+    // Theme Palettes (Solid Colors)
+    // Dark Mode Backgrounds
+    private int[] darkBgs = {0xFF120024, 0xFF000000, 0xFF1A237E, 0xFF263238}; 
+    private int darkBlob = 0xFFD500F9; // Neon Purple/Pink
     
-    private int currentColorIndex = 0;
+    // Light Mode Backgrounds
+    private int[] lightBgs = {0xFFFFF3E0, 0xFFECEFF1, 0xFFF3E5F5, 0xFFE0F7FA};
+    private int lightBlob = 0xFFFF5722; // Deep Orange
+
+    private float hueOffset = 0;
+    private int currentBgColor;
 
     public LavaLampView(Context context) {
         super(context);
@@ -50,10 +53,12 @@ public class LavaLampView extends View {
         paint = new Paint();
         paint.setStyle(Paint.Style.FILL);
         paint.setAntiAlias(true);
-        paint.setColor(colors[0]);
+        
+        bgPaint = new Paint();
+        bgPaint.setStyle(Paint.Style.FILL);
 
-        // Create initial blobs
-        for (int i = 0; i < 6; i++) {
+        // create initial blobs
+        for (int i = 0; i < 7; i++) {
             blobs.add(new Blob());
         }
 
@@ -67,33 +72,40 @@ public class LavaLampView extends View {
             invalidate();
         });
         
-        // Tap to change color
+        // Tap to shift hue/randomize
         setOnClickListener(v -> {
-            currentColorIndex = (currentColorIndex + 1) % colors.length;
-            paint.setColor(colors[currentColorIndex]);
-            // Add a "pop" effect
+            randomizeTheme();
+            // Pop effect
             for (Blob b : blobs) {
-                b.radius += 10; 
+                 b.radius += 5;
             }
             performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
         });
     }
     
     public void randomizeTheme() {
-        // Pick random base color index
-        currentColorIndex = random.nextInt(colors.length);
-        paint.setColor(colors[currentColorIndex]);
-        // Randomize blob positions slightly too for uniqueness
-        for (Blob blob : blobs) {
-             blob.x = random.nextFloat() * getWidth();
-        }
+        hueOffset = random.nextInt(360);
+        
+        // Pick new random background
+        int nightModeFlags = getContext().getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        boolean isDark = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        int[] bgs = isDark ? darkBgs : lightBgs;
+        currentBgColor = bgs[random.nextInt(bgs.length)];
+        
         invalidate();
+    }
+    
+    public void randomize() {
+        randomizeTheme();
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (animator != null && !animator.isRunning()) animator.start();
+        
+        // Init color
+        randomizeTheme();
     }
 
     @Override
@@ -107,24 +119,21 @@ public class LavaLampView extends View {
             blob.y -= blob.speed;
             
             // "Wobble" logic
-            blob.x += Math.sin(blob.y * 0.02 + blob.phase) * 1.5;
+            blob.x += Math.sin(blob.y * 0.015 + blob.phase) * 1.8;
 
             // Reset if goes off top
             if (blob.y < -blob.radius * 2) {
                 resetBlob(blob);
             }
-            
-            // Shrink slowly as it rises to simulate cooling/stretching potentially
-            // blob.radius = Math.max(20, blob.radius - 0.05f);
         }
     }
     
     // Reset a blob to the bottom
     private void resetBlob(Blob blob) {
-        blob.radius = 40 + random.nextFloat() * 40; // 40 to 80
+        blob.radius = 50 + random.nextFloat() * 50; 
         blob.x = random.nextFloat() * getWidth();
         blob.y = getHeight() + blob.radius;
-        blob.speed = 1 + random.nextFloat() * 2; // 1 to 3 pixels per frame
+        blob.speed = 1.5f + random.nextFloat() * 2.5f; 
         blob.phase = random.nextFloat() * 100;
     }
 
@@ -132,11 +141,11 @@ public class LavaLampView extends View {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         for (Blob blob : blobs) {
-            if (blob.y == 0) { // Initial placement relative to height
+            if (blob.y == 0) { 
                 blob.x = random.nextFloat() * w;
-                blob.y = h + random.nextFloat() * 200; // Staggered start below
-                resetBlob(blob); // Proper init
-                blob.y = h + random.nextFloat() * h; // Spread out initially
+                blob.y = h + random.nextFloat() * h * 0.5f; 
+                resetBlob(blob); 
+                blob.y = random.nextFloat() * h; 
             }
         }
     }
@@ -145,19 +154,45 @@ public class LavaLampView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         
-        // Draw background container implied? No, simpler to draw blobs on transparent.
-        // Actually, let's draw connections (Metaball approx)
-        // For simple, optimized "Lava", we just draw circles. 
-        // Real metaballs are expensive in Java Canvas without shaders.
-        // We can do a "Gooey" effect by drawing a path connecting close blobs.
+        int nightModeFlags = getContext().getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        boolean isDark = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES;
         
-        // Simple circle approach first for performance/smoothness
+        // Ensure color is set if 0 (first run)
+        if (currentBgColor == 0) {
+             int[] bgs = isDark ? darkBgs : lightBgs;
+             currentBgColor = bgs[0];
+        }
+        
+        int blobBase = isDark ? darkBlob : lightBlob;
+        
+        // Apply Hue Offset if user tapped
+        if (hueOffset != 0) {
+            float[] hsv = new float[3];
+            Color.colorToHSV(blobBase, hsv);
+            hsv[0] = (hsv[0] + hueOffset) % 360;
+            blobBase = Color.HSVToColor(hsv);
+        }
+
+        // Draw Solid Background
+        canvas.drawColor(currentBgColor);
+        
+        // Draw Blobs
+        paint.setColor(blobBase);
+        
         for (Blob blob : blobs) {
+            // Slight transparency for "goo" feel
+            paint.setAlpha(200); 
             canvas.drawCircle(blob.x, blob.y, blob.radius, paint);
+            
+            // Highlight/Reflection
+            Paint highlight = new Paint();
+            highlight.setColor(Color.WHITE);
+            highlight.setAlpha(50);
+            canvas.drawCircle(blob.x - blob.radius/3, blob.y - blob.radius/3, blob.radius/4, highlight);
         }
     }
 
-    private class Blob {
+    private static class Blob {
         float x, y, radius, speed, phase;
     }
 }

@@ -96,7 +96,15 @@ public class SignupActivity extends AppCompatActivity {
         if (requestCode == PICK_IMAGE && resultCode == RESULT_OK && data != null) {
             Uri imgUri = data.getData();
             try {
-                Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), imgUri);
+                // Use ImageUtils to load bitmap with correct EXIF orientation
+                Bitmap bitmap = com.visiboard.app.utils.ImageUtils.loadBitmapWithCorrectOrientation(
+                    this, imgUri);
+                
+                if (bitmap == null) {
+                    // Fallback to legacy method if ImageUtils fails
+                    bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), imgUri);
+                }
+                
                 profilePic.setImageBitmap(bitmap);
 
                 // Convert to base64
