@@ -859,7 +859,7 @@ public class MapFragment extends Fragment {
     }
 
     // Add note marker
-    private void addNoteMarker(LatLng position, String fullNote, String shortNote, long timestamp, String docId, String userId, boolean hasImage, boolean isVirtual) {
+    private void addNoteMarker(LatLng position, String fullNote, String shortNote, long timestamp, String docId, String userId, boolean hasImage, boolean isVirtual, java.util.List<com.visiboard.app.data.Mention> mentions) {
         if (symbolManager == null || mapLibreMap == null) return;
 
         View noteCardView;
@@ -910,6 +910,9 @@ public class MapFragment extends Fragment {
             if (userId != null) data.put("userId", userId);
             data.put("hasImage", hasImage);
             data.put("isVirtual", isVirtual);
+            if (mentions != null && !mentions.isEmpty()) {
+                data.put("mentions", new org.json.JSONArray(new Gson().toJson(mentions)));
+            }
 
             Gson gson = new Gson();
             JsonElement jsonData = gson.fromJson(data.toString(), JsonElement.class);
@@ -922,7 +925,7 @@ public class MapFragment extends Fragment {
             // Check if this is the pending target note (Share Guard Success)
             if (docId != null && docId.equals(pendingTargetNoteId)) {
                 if (pendingOpenWindow) {
-                    showCustomInfoWindow(fullNote, timestamp, position, null, docId, userId, null, hasImage, isVirtual);
+                    showCustomInfoWindow(fullNote, timestamp, position, null, docId, userId, null, hasImage, isVirtual, mentions);
                 }
                 pendingTargetNoteId = null; // Mark as found
                 pendingOpenWindow = false;
@@ -942,7 +945,7 @@ public class MapFragment extends Fragment {
     }
 
     // Show info window with delete, like, and comment
-    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId, String imageBase64, boolean hasImage, boolean isVirtual) {
+    private void showCustomInfoWindow(String noteText, long timestamp, LatLng position, Symbol symbol, String docId, String noteOwnerId, String imageBase64, boolean hasImage, boolean isVirtual, java.util.List<com.visiboard.app.data.Mention> mentions) {
         View infoWindow = LayoutInflater.from(requireContext()).inflate(R.layout.custom_info_window, null);
 
         // Find views
@@ -1103,7 +1106,11 @@ public class MapFragment extends Fragment {
         // ... but we might want to pre-fetch it efficiently or just fetch on "More" click.
         // For now, let's keep the timestamp formatting.
 
-        noteTextView.setText(noteText);
+        if (mentions != null && !mentions.isEmpty()) {
+            com.visiboard.app.utils.MentionHelper.applyMentionsToTextView(requireContext(), noteTextView, noteText, mentions, this::showUserInfoDialog);
+        } else {
+            noteTextView.setText(noteText);
+        }
         timestampTextView.setText(new SimpleDateFormat("dd MMM yyyy • hh:mm a", java.util.Locale.getDefault())
                 .format(new java.util.Date(timestamp)));
 
@@ -1973,10 +1980,16 @@ public class MapFragment extends Fragment {
                 boolean isVirtual = doc.getBoolean("isVirtual") != null && doc.getBoolean("isVirtual");
                 LatLng pos = new LatLng(lat, lon);
 
+                java.util.List<com.visiboard.app.data.Mention> mentions = null;
+                if (doc.get("mentions") != null) {
+                     java.util.List<java.util.Map<String, Object>> raw = (java.util.List<java.util.Map<String, Object>>) doc.get("mentions");
+                     mentions = new Gson().fromJson(new Gson().toJson(raw), new com.google.gson.reflect.TypeToken<java.util.List<com.visiboard.app.data.Mention>>(){}.getType());
+                }
+
                 // Only add marker if Heatmap is OFF
                 if (!isHeatmapEnabled) {
                     addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                            timestamp, doc.getId(), userId, hasImage, isVirtual);
+                            timestamp, doc.getId(), userId, hasImage, isVirtual, mentions);
                 }
             } catch (Exception e) {
                 Log.e("MapFragment", "Error processing note: " + e.getMessage());
@@ -2008,7 +2021,16 @@ public class MapFragment extends Fragment {
                                         String userId = jsonObject.has("userId") ? jsonObject.get("userId").getAsString() : null;
                                         boolean hasImage = jsonObject.has("hasImage") && jsonObject.get("hasImage").getAsBoolean();
                                         boolean isVirtual = jsonObject.has("isVirtual") && jsonObject.get("isVirtual").getAsBoolean();
-                                        showCustomInfoWindow(note, timestamp, notePosition, symbol, docId, userId, null, hasImage, isVirtual);
+                                        
+                                        java.util.List<com.visiboard.app.data.Mention> mentionsList = null;
+                                        if (jsonObject.has("mentions")) {
+                                            try {
+                                                String mentionsJson = jsonObject.get("mentions").toString();
+                                                mentionsList = new Gson().fromJson(mentionsJson, new com.google.gson.reflect.TypeToken<java.util.List<com.visiboard.app.data.Mention>>(){}.getType());
+                                            } catch (Exception e) {}
+                                        }
+
+                                        showCustomInfoWindow(note, timestamp, notePosition, symbol, docId, userId, null, hasImage, isVirtual, mentionsList);
                                         break;
                                     }
                                 }
@@ -2071,7 +2093,7 @@ public class MapFragment extends Fragment {
                     LatLng pos = new LatLng(obj.getDouble("lat"), obj.getDouble("lon"));
                     String note = obj.getString("note");
                     long timestamp = obj.has("timestamp") ? obj.getLong("timestamp") : 0L;
-                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null, false, false);
+                    addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null, false, false, null);
                 }
             } catch (Exception e) { e.printStackTrace(); }
     }
@@ -2161,8 +2183,13 @@ public class MapFragment extends Fragment {
 
                 if (!isHeatmapEnabled) {
                     boolean isVirtual = doc.getBoolean("isVirtual") != null && doc.getBoolean("isVirtual");
+                    java.util.List<com.visiboard.app.data.Mention> mentions = null;
+                    if (doc.get("mentions") != null) {
+                         java.util.List<java.util.Map<String, Object>> raw = (java.util.List<java.util.Map<String, Object>>) doc.get("mentions");
+                         mentions = new Gson().fromJson(new Gson().toJson(raw), new com.google.gson.reflect.TypeToken<java.util.List<com.visiboard.app.data.Mention>>(){}.getType());
+                    }
                     addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note,
-                            timestamp, doc.getId(), userId, hasImage, isVirtual);
+                            timestamp, doc.getId(), userId, hasImage, isVirtual, mentions);
                 }
              } catch (Exception e) {
                  e.printStackTrace();
@@ -2742,7 +2769,12 @@ public class MapFragment extends Fragment {
                             Symbol targetSymbol = findSymbolAtLocation(location);
                             boolean hasImage = imageBase64 != null && !imageBase64.isEmpty();
                             boolean isVirtual = doc.getBoolean("isVirtual") != null && doc.getBoolean("isVirtual");
-                            showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId, imageBase64, hasImage, isVirtual);
+                            java.util.List<com.visiboard.app.data.Mention> mentions = null;
+                            if (doc.get("mentions") != null) {
+                                 java.util.List<java.util.Map<String, Object>> raw = (java.util.List<java.util.Map<String, Object>>) doc.get("mentions");
+                                 mentions = new Gson().fromJson(new Gson().toJson(raw), new com.google.gson.reflect.TypeToken<java.util.List<com.visiboard.app.data.Mention>>(){}.getType());
+                            }
+                            showCustomInfoWindow(noteText, timestamp, location, targetSymbol, noteId, userId, imageBase64, hasImage, isVirtual, mentions);
                         }
                     }
                 })
@@ -3003,7 +3035,15 @@ public class MapFragment extends Fragment {
                     boolean hasImage = data.has("hasImage") && data.getBoolean("hasImage");
 
                     boolean isVirtual = data.optBoolean("isVirtual", false);
-                    showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64, hasImage, isVirtual);
+                    java.util.List<com.visiboard.app.data.Mention> mentionsList = null;
+                    if (data.has("mentions")) {
+                        try {
+                            // data is org.json.JSONObject, mentions is JSONArray
+                             org.json.JSONArray mentionsArray = data.getJSONArray("mentions");
+                             mentionsList = new Gson().fromJson(mentionsArray.toString(), new com.google.gson.reflect.TypeToken<java.util.List<com.visiboard.app.data.Mention>>(){}.getType());
+                        } catch (Exception e) {}
+                    }
+                    showCustomInfoWindow(noteText, timestamp, symbol.getLatLng(), symbol, docId, ownerId, imageBase64, hasImage, isVirtual, mentionsList);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

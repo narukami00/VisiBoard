@@ -54,9 +54,11 @@ import com.visiboard.app.data.UserInfo;
 import com.visiboard.app.utils.UserCache;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
+import com.google.gson.Gson;
+import com.visiboard.app.data.Mention;
 import java.util.HashSet;
 import java.util.Set;
-
+import java.util.Map;
 import java.io.File;
 
 import com.google.mlkit.vision.barcode.BarcodeScanner;
@@ -1193,6 +1195,11 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
                                 location.getLongitude()
                         );
 
+                        if (doc.get("mentions") != null) {
+                            java.util.List<java.util.Map<String, Object>> raw = (java.util.List<java.util.Map<String, Object>>) doc.get("mentions");
+                            arNote.mentions = new Gson().fromJson(new Gson().toJson(raw), new com.google.gson.reflect.TypeToken<java.util.List<Mention>>(){}.getType());
+                        }
+
                         newNotes.add(arNote);
                     }
                 }
@@ -1475,7 +1482,11 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         androidx.cardview.widget.CardView cardView = noteView.findViewById(R.id.ar_note_card);
 
         tvUserName.setText(note.userName != null ? note.userName : "User");
-        tvNoteText.setText(note.text != null ? note.text : "");
+        if (note.mentions != null && !note.mentions.isEmpty()) {
+            com.visiboard.app.utils.MentionHelper.applyMentionsToTextView(requireContext(), tvNoteText, note.text, note.mentions, this::showUserInfoDialog);
+        } else {
+            tvNoteText.setText(note.text != null ? note.text : "");
+        }
         tvDistance.setText(String.format("%.0fm", note.distance));
         if (tvTimeAgo != null) {
             tvTimeAgo.setText(getTimeAgo(note.timestamp));
@@ -1803,6 +1814,7 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         double distance;
         float bearing;
         long timestamp;
+        java.util.List<Mention> mentions;
     }
 
     private void restoreUiState() {
@@ -1872,5 +1884,11 @@ public class CaptureFragment extends Fragment implements SensorEventListener {
         if (ivMenuEye != null) {
             ivMenuEye.setImageResource(isArVisible ? R.drawable.ic_eye_visible : R.drawable.ic_eye_hidden);
         }
+    }
+
+    private void showUserInfoDialog(String userId) {
+        Bundle args = new Bundle();
+        args.putString("userId", userId);
+        androidx.navigation.Navigation.findNavController(requireView()).navigate(R.id.userProfileFragment, args);
     }
 }

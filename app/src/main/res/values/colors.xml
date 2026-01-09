@@ -86,4 +86,8 @@
     <color name="copy_button_icon">#333333</color>
     
     <color name="reaction_popup_divider">#20000000</color>
+    
+    <!-- Mention Colors -->
+    <color name="mention_color">@color/primary</color>
+    <color name="mention_following_color">@color/primaryLight</color>
 </resources>

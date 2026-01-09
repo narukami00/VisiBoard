@@ -1,34 +1,47 @@
 package com.visiboard.app.ui.map;
 
 import android.content.Context;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ListView;
+import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import android.widget.ListView;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 import com.visiboard.app.R;
 import com.visiboard.app.data.Comment;
+import com.visiboard.app.data.FollowerSuggestion;
+import com.visiboard.app.data.Mention;
+import com.visiboard.app.ui.mentions.MentionAutocompleteAdapter;
+import com.visiboard.app.utils.MentionHelper;
+import com.visiboard.app.utils.MentionNotificationHelper;
+import com.visiboard.app.utils.MentionTextWatcher;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
 
@@ -49,6 +62,7 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
     private EditText etComment;
     private ImageButton btnSend;
     private TextView tvNoComments;
+    private View inputContainer;
 
     private FirebaseFirestore db;
     private FirebaseAuth auth;
@@ -62,9 +76,14 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
     }
 
     private static final String ARG_IS_COMMENTS_DISABLED = "is_comments_disabled";
-    
-    // ...
     private boolean isCommentsDisabled;
+
+    // Mention autocomplete
+    private PopupWindow mentionPopup;
+    private MentionAutocompleteAdapter mentionAdapter;
+    private MentionTextWatcher mentionTextWatcher;
+    private List<FollowerSuggestion> followingList = new ArrayList<>();
+    private List<MentionHelper.SelectedMention> selectedMentions = new ArrayList<>();
 
     public static CommentsBottomSheetFragment newInstance(String noteId, String noteOwnerId, String noteText, double lat, double lng, boolean isCommentsDisabled) {
         CommentsBottomSheetFragment fragment = new CommentsBottomSheetFragment();
@@ -108,6 +127,7 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
         etComment = view.findViewById(R.id.et_comment);
         btnSend = view.findViewById(R.id.btn_send);
         tvNoComments = view.findViewById(R.id.tv_no_comments);
+        inputContainer = view.findViewById(R.id.input_container);
 
         setupRecyclerView();
         
@@ -131,6 +151,136 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
             etComment.setBackground(null); // Remove input background
         } else {
             btnSend.setOnClickListener(v -> postComment());
+            loadFollowingList();
+            setupMentionAutocomplete();
+        }
+    }
+
+    /**
+     * Load the current user's following list for mention suggestions
+     */
+    private void loadFollowingList() {
+        if (auth.getCurrentUser() == null) return;
+        String uid = auth.getCurrentUser().getUid();
+
+        db.collection("users").document(uid)
+            .collection("following").get()
+            .addOnSuccessListener(docs -> {
+                followingList = new ArrayList<>();
+                // Add @following option first
+                followingList.add(FollowerSuggestion.createFollowingAll());
+                
+                for (DocumentSnapshot doc : docs) {
+                    String followedName = doc.getString("followedName");
+                    String followedPic = doc.getString("followedProfilePic");
+                    followingList.add(new FollowerSuggestion(
+                        doc.getId(),
+                        followedName != null ? followedName : "Unknown",
+                        followedPic
+                    ));
+                }
+                android.util.Log.d("CommentsSheet", "Loaded " + followingList.size() + " following for mentions");
+            })
+            .addOnFailureListener(e -> {
+                android.util.Log.e("CommentsSheet", "Failed to load following list", e);
+            });
+    }
+
+    /**
+     * Setup the mention autocomplete popup and text watcher
+     */
+    private void setupMentionAutocomplete() {
+        // Create popup
+        View popupView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.popup_mention_suggestions, null);
+        RecyclerView rvSuggestions = popupView.findViewById(R.id.rv_suggestions);
+        rvSuggestions.setLayoutManager(new LinearLayoutManager(requireContext()));
+
+        mentionAdapter = new MentionAutocompleteAdapter(requireContext(), suggestion -> {
+            // User selected a suggestion
+            if (mentionTextWatcher != null) {
+                mentionTextWatcher.insertMention(suggestion.getName());
+            }
+            
+            // Track selected mention for later
+            selectedMentions.add(new MentionHelper.SelectedMention(
+                suggestion.getUserId(),
+                suggestion.getName(),
+                suggestion.isFollowingAll()
+            ));
+            
+            hideMentionPopup();
+        });
+        rvSuggestions.setAdapter(mentionAdapter);
+
+        mentionPopup = new PopupWindow(
+            popupView,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            false
+        );
+        mentionPopup.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
+        mentionPopup.setOutsideTouchable(true);
+
+        // Setup text watcher
+        mentionTextWatcher = new MentionTextWatcher(etComment, new MentionTextWatcher.MentionCallback() {
+            @Override
+            public void onMentionQueryChanged(String query) {
+                if (query.isEmpty()) {
+                    hideMentionPopup();
+                } else {
+                    showMentionPopup(filterSuggestions(query));
+                }
+            }
+
+            @Override
+            public int getCursorPosition() {
+                return etComment.getSelectionStart();
+            }
+        });
+        etComment.addTextChangedListener(mentionTextWatcher);
+    }
+
+    private List<FollowerSuggestion> filterSuggestions(String query) {
+        if (followingList == null) return new ArrayList<>();
+        
+        return followingList.stream()
+            .filter(s -> s.matchesQuery(query))
+            .collect(Collectors.toList());
+    }
+
+    private void showMentionPopup(List<FollowerSuggestion> suggestions) {
+        if (suggestions.isEmpty()) {
+            hideMentionPopup();
+            return;
+        }
+
+        mentionAdapter.setSuggestions(suggestions);
+
+        if (!mentionPopup.isShowing() && inputContainer != null) {
+            // Measure the popup to know its height
+            View popupView = mentionPopup.getContentView();
+            popupView.measure(
+                View.MeasureSpec.makeMeasureSpec(inputContainer.getWidth(), View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            );
+            int popupHeight = Math.min(popupView.getMeasuredHeight(), 
+                (int) (168 * getResources().getDisplayMetrics().density));  // max 168dp
+            
+            // Get the location of input container on screen
+            int[] location = new int[2];
+            inputContainer.getLocationOnScreen(location);
+            
+            // Show popup ABOVE the input container
+            mentionPopup.showAtLocation(inputContainer, Gravity.NO_GRAVITY,
+                location[0],  // x position
+                location[1] - popupHeight - 8);  // y position (above input with 8px gap)
+        }
+    }
+
+    private void hideMentionPopup() {
+        if (mentionPopup != null && mentionPopup.isShowing()) {
+            mentionPopup.dismiss();
         }
     }
 
@@ -258,18 +408,38 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
                     System.currentTimeMillis()
             );
 
+            // Process mentions
+            List<Mention> mentions = MentionHelper.createMentionsForPosting(text, selectedMentions);
+            if (!mentions.isEmpty()) {
+                comment.setMentionsFromList(mentions);
+            }
+
+            final String userProfilePic = userDoc.getString("profilePic");
+
             noteRef.collection("comments").document(commentId).set(comment)
                     .addOnSuccessListener(aVoid -> {
                         android.util.Log.d("CommentsSheet", "Comment posted successfully!");
+                        
+                        // Clear input and mentions
                         etComment.setText("");
+                        selectedMentions.clear();
                         btnSend.setEnabled(true);
                         
                         // Update comment count
                         noteRef.update("commentsCount", FieldValue.increment(1));
 
-                        // Send notification if not owner
+                        // Send notification to note owner if not self
                         if (!uid.equals(noteOwnerId)) {
-                            createNotification(noteOwnerId, uid, userName, userDoc.getString("profilePic"));
+                            createNotification(noteOwnerId, uid, userName, userProfilePic);
+                        }
+
+                        // Send mention notifications
+                        if (!mentions.isEmpty()) {
+                            MentionNotificationHelper.sendMentionNotifications(
+                                uid, userName, userProfilePic,
+                                noteId, noteText, noteLat, noteLng,
+                                commentId, mentions
+                            );
                         }
                         
                         // Hide keyboard
@@ -321,6 +491,9 @@ public class CommentsBottomSheetFragment extends BottomSheetDialogFragment {
         if (adapter != null) {
             adapter.clearCache();
         }
+
+        // Dismiss mention popup
+        hideMentionPopup();
     }
 
     private void showDeleteCommentDialog(Comment comment, int position) {

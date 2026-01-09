@@ -136,10 +136,17 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
                     iconRes = R.drawable.ic_check;
                     break;
                 case "admin":
-                    text = notification.getMessageText(); // Admin message content
+                    text = notification.getMessageText();
                     iconRes = R.drawable.ic_crown; 
-                    // If messageText is null/empty, fallback?
                     if (text == null || text.isEmpty()) text = "New System Notification";
+                    break;
+                case "mention":
+                    if (notification.getCommentId() != null && !notification.getCommentId().isEmpty()) {
+                        text = notification.getFromUserName() + " mentioned you in a comment";
+                    } else {
+                        text = notification.getFromUserName() + " mentioned you in a note";
+                    }
+                    iconRes = R.drawable.ic_mention;
                     break;
                 default:
                      text = "New Notification";

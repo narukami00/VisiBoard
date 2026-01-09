@@ -3,6 +3,7 @@ package com.visiboard.app.ui.map;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.text.method.LinkMovementMethod;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,6 +13,8 @@ import android.widget.TextView;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.visiboard.app.R;
 import com.visiboard.app.data.Comment;
+import com.visiboard.app.data.Mention;
+import com.visiboard.app.utils.MentionHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -105,8 +108,21 @@ public class CommentsListAdapter extends BaseAdapter {
 
         void bind(Comment comment, int position, View itemView) {
             tvUser.setText(comment.userName);
-            tvText.setText(comment.text);
             tvTime.setText(getTimeAgo(comment.timestamp));
+
+            // Display comment text with styled mentions
+            List<Mention> mentions = comment.getMentionsParsed();
+            if (mentions != null && !mentions.isEmpty()) {
+                // Apply mention styling
+                MentionHelper.applyMentionsToTextView(context, tvText, comment.text, mentions,
+                    userId -> {
+                        if (onUserClickListener != null) {
+                            onUserClickListener.onUserClick(userId);
+                        }
+                    });
+            } else {
+                tvText.setText(comment.text);
+            }
 
             // Reset to default image first
             commentUserPic.setImageResource(R.drawable.ic_profile_placeholder);

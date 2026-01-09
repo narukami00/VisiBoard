@@ -3,7 +3,7 @@ package com.visiboard.app.data;
 public class Notification {
     private String id;
     private String toUserId;
-    private String type; // "like", "comment", "follow", "message", "admin"
+    private String type; // "like", "comment", "follow", "message", "admin", "mention"
     private String fromUserId;
     private String fromUserName;
     private String fromUserProfilePic;
@@ -13,6 +13,7 @@ public class Notification {
     private double noteLng;
     private String messageId;
     private String messageText;
+    private String commentId;  // For mention-in-comment navigation
     private long timestamp;
     private boolean read;
 
@@ -76,4 +77,7 @@ public class Notification {
 
     public boolean isRead() { return read; }
     public void setRead(boolean read) { this.read = read; }
+
+    public String getCommentId() { return commentId; }
+    public void setCommentId(String commentId) { this.commentId = commentId; }
 }
