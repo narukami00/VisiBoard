@@ -228,6 +228,7 @@ public class MapFragment extends Fragment {
 
     // Stickman Animation
     private ImageView ivDropAnimation;
+    private View loadingCard;
     private ImageView ivRemoteDropIcon;
 
 
@@ -408,65 +409,9 @@ public class MapFragment extends Fragment {
             }
         });
 
-        btnRemoteDrop.setOnLongClickListener(v -> {
-            if (isRemotePinPlaced) return true; // Disable drag if already placed
-            
-            performHapticClick(v);
-            
-            // Load the "hanging" stickman bitmap for drag shadow (preserve aspect ratio)
-            Bitmap hangingBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.stick_2);
-            final int targetHeight = (int) (80 * getResources().getDisplayMetrics().density);
-            float aspectRatio = (float) hangingBitmap.getWidth() / hangingBitmap.getHeight();
-            final int targetWidth = (int) (targetHeight * aspectRatio);
-            Bitmap scaledBitmap = Bitmap.createScaledBitmap(hangingBitmap, targetWidth, targetHeight, true);
-            
-            // Apply dark mode color inversion
-            boolean isDarkModeDrag = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
-            if (isDarkModeDrag) {
-                Bitmap tintedBitmap = Bitmap.createBitmap(scaledBitmap.getWidth(), scaledBitmap.getHeight(), Bitmap.Config.ARGB_8888);
-                Canvas tintCanvas = new Canvas(tintedBitmap);
-                android.graphics.Paint tintPaint = new android.graphics.Paint();
-                android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
-                cm.set(new float[]{
-                    -1, 0, 0, 0, 255,
-                    0, -1, 0, 0, 255,
-                    0, 0, -1, 0, 255,
-                    0, 0, 0, 1, 0
-                });
-                tintPaint.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
-                tintCanvas.drawBitmap(scaledBitmap, 0, 0, tintPaint);
-                scaledBitmap = tintedBitmap;
-            }
-            
-            final Bitmap finalScaledBitmap = scaledBitmap;
-            final int shadowWidth = targetWidth;
-            final int shadowHeight = targetHeight;
-            
-            // Create drag shadow with hanging stickman
-            View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v) {
-                @Override
-                public void onProvideShadowMetrics(android.graphics.Point outShadowSize, android.graphics.Point outShadowTouchPoint) {
-                    outShadowSize.set(shadowWidth, shadowHeight);
-                    outShadowTouchPoint.set(shadowWidth / 2, 10); // Hang from top
-                }
-                
-                @Override
-                public void onDrawShadow(Canvas canvas) {
-                    canvas.drawBitmap(finalScaledBitmap, 0, 0, null);
-                }
-            };
-            
-            // Hide icon immediately (empty box effect)
-            if (ivRemoteDropIcon != null) {
-                ivRemoteDropIcon.setVisibility(View.INVISIBLE);
-            }
-            
-            v.startDragAndDrop(null, shadowBuilder, null, 0);
-            return true;
-        });
-        
-        // Initialize animation views
+        // Initialize animation views (CRITICAL - was accidentally removed)
         ivDropAnimation = view.findViewById(R.id.ivDropAnimation);
+        loadingCard = view.findViewById(R.id.cv_map_loading);
         ivRemoteDropIcon = view.findViewById(R.id.ivRemoteDropIcon);
         
         // Apply dark mode tint to button icon (invert black stickman to white)
@@ -481,50 +426,199 @@ public class MapFragment extends Fragment {
             });
             ivRemoteDropIcon.setColorFilter(new android.graphics.ColorMatrixColorFilter(colorMatrixIcon));
         }
-        
-        // Handle Drop on Map
-        view.setOnDragListener((v, event) -> {
-            switch (event.getAction()) {
-                case android.view.DragEvent.ACTION_DROP:
-                    if (mapLibreMap != null) {
-                        float x = event.getX();
-                        float y = event.getY();
-                        
-                        // Check if dropped back onto the button (Cancel)
-                        View btn = view.findViewById(R.id.btnRemoteDrop);
-                        android.graphics.Rect hitRect = new android.graphics.Rect();
-                        btn.getHitRect(hitRect);
-                        if (hitRect.contains((int)x, (int)y)) {
-                             // Restore Icon Visibility with pop animation
-                             if (ivRemoteDropIcon != null) {
-                                 ivRemoteDropIcon.setVisibility(View.VISIBLE);
-                                 ivRemoteDropIcon.setScaleX(0f);
-                                 ivRemoteDropIcon.setScaleY(0f);
-                                 ivRemoteDropIcon.animate()
-                                     .scaleX(1f).scaleY(1f)
-                                     .setDuration(300)
-                                     .setInterpolator(new OvershootInterpolator())
-                                     .start();
-                             }
-                             return true; // Cancelled
-                        }
 
-                        // Convert screen point to LatLng
-                        LatLng latLng = mapLibreMap.getProjection().fromScreenLocation(new android.graphics.PointF(x, y));
-                        playDropAnimation(x, y, latLng);
+// Physics Constants
+        final float GRAVITY = 0.8f;
+        final float VISCOSITY = 0.92f; // Air resistance/damping
+        final float MOVEMENT_INFLUENCE = 0.03f; // Very low sensitivity - max rotation only at extreme speed
+
+        btnRemoteDrop.setOnTouchListener(new View.OnTouchListener() {
+            private float lastX, lastY;
+            private float currentRotation = 0f;
+            private float angularVelocity = 0f;
+            private android.os.Handler physicsHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+            private boolean isDragging = false;
+            
+            // Physics loop runnable
+            private Runnable physicsRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (!isDragging && Math.abs(currentRotation) < 0.5f && Math.abs(angularVelocity) < 0.5f) {
+                        return; // Stop simulation when settled
                     }
-                    return true;
-                case android.view.DragEvent.ACTION_DRAG_STARTED:
-                    return true;
-                case android.view.DragEvent.ACTION_DRAG_ENDED:
-                    // If drag ended without a drop (e.g., cancelled), restore icon
-                    if (!event.getResult() && ivRemoteDropIcon != null && !isRemotePinPlaced) {
-                        ivRemoteDropIcon.setVisibility(View.VISIBLE);
+
+                    // Simple Pendulum Physics
+                    // Force restoring to 0 (gravity)
+                    float force = -GRAVITY * (float) Math.sin(Math.toRadians(currentRotation));
+                    
+                    // Apply force to velocity
+                    angularVelocity += force;
+                    
+                    // Apply damping
+                    angularVelocity *= VISCOSITY;
+                    
+                    // Apply velocity to rotation
+                    currentRotation += angularVelocity;
+                    
+                    // Clamp rotation to ±45 degrees for natural swing
+                    if (currentRotation > 45) { currentRotation = 45; angularVelocity = 0; }
+                    if (currentRotation < -45) { currentRotation = -45; angularVelocity = 0; }
+
+                    if (ivDropAnimation != null) {
+                        ivDropAnimation.setRotation(currentRotation);
                     }
-                    return true;
+                    
+                    physicsHandler.postDelayed(this, 16); // ~60fps
+                }
+            };
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (isRemotePinPlaced) return false;
+
+                float rawX = event.getRawX();
+                float rawY = event.getRawY();
+
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        isDragging = true;
+                        lastX = rawX;
+                        lastY = rawY;
+                        
+                        // Haptic feedback
+                        v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        
+                        // Hide the button icon
+                        if (ivRemoteDropIcon != null) {
+                            ivRemoteDropIcon.setVisibility(View.INVISIBLE);
+                        }
+                        
+                        // Initial setup for the flying stickman
+                        if (ivDropAnimation != null) {
+                            ivDropAnimation.setVisibility(View.VISIBLE);
+                            ivDropAnimation.setImageResource(R.drawable.stick_2); // Hanging stickman
+                            
+                            // Set size for dragging (larger than map icon)
+                            int dragSize = (int) (80 * getResources().getDisplayMetrics().density);
+                            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) ivDropAnimation.getLayoutParams();
+                            params.width = (int)(dragSize * 0.6f); // Maintain aspect ratio
+                            params.height = dragSize;
+                             // Center under finger initially - but we want it hanging *below* finger slightly
+                            params.leftMargin = (int) (rawX - params.width / 2);
+                            params.topMargin = (int) (rawY - 20); // 20px above finger to look like holding string
+                            ivDropAnimation.setLayoutParams(params);
+                            
+                            // Initialize Rotation
+                            currentRotation = 0;
+                            angularVelocity = 0;
+                            ivDropAnimation.setRotation(0);
+                            
+                            // Set pivot point to top-center (where the hand/string is)
+                            ivDropAnimation.setPivotX(params.width / 2f);
+                            ivDropAnimation.setPivotY(0f);
+                            
+                            // Start Physics Loop
+                            physicsHandler.removeCallbacks(physicsRunnable);
+                            physicsHandler.post(physicsRunnable);
+                            
+                            // Apply dark mode tint if needed
+                            boolean isDarkMode = com.visiboard.app.utils.ThemeManager.getInstance(requireContext()).isDarkMode();
+                            if (isDarkMode) {
+                                android.graphics.ColorMatrix colorMatrix = new android.graphics.ColorMatrix();
+                                colorMatrix.set(new float[]{
+                                    -1, 0, 0, 0, 255,
+                                    0, -1, 0, 0, 255,
+                                    0, 0, -1, 0, 255,
+                                    0, 0, 0, 1, 0
+                                });
+                                ivDropAnimation.setColorFilter(new android.graphics.ColorMatrixColorFilter(colorMatrix));
+                            } else {
+                                ivDropAnimation.clearColorFilter();
+                            }
+                        }
+                        
+                        // Consume event to keep receiving updates
+                        v.getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+
+                    case MotionEvent.ACTION_MOVE:
+                        // Move the stickman
+                        if (ivDropAnimation != null) {
+                             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) ivDropAnimation.getLayoutParams();
+                             params.leftMargin = (int) (rawX - params.width / 2);
+                             params.topMargin = (int) (rawY - 20); // Offset
+                             ivDropAnimation.setLayoutParams(params);
+                             
+                             // Calculate Drag Velocity for Physics Impulse
+                             float dx = rawX - lastX;
+                             
+                             // Inertia: drag left → swing right (remove negative for correct direction)
+                             float impulse = dx * MOVEMENT_INFLUENCE; 
+                             angularVelocity += impulse;
+                        }
+                        
+                        lastX = rawX;
+                        lastY = rawY;
+                        return true;
+
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        isDragging = false;
+                        v.getParent().requestDisallowInterceptTouchEvent(false);
+
+                        // Check if dropped on Map (roughly above the button area)
+                        int[] btnLocation = new int[2];
+                        v.getLocationOnScreen(btnLocation);
+                        int btnY = btnLocation[1];
+                        
+                        // If dropped significantly above the button (on the map)
+                        if (rawY < btnY - 100) { 
+                             // Valid Drop
+                             if (mapLibreMap != null) {
+                                 // Convert screen center of drag view to LatLng
+                                 // We use the 'hanging' point roughly
+                                 LatLng latLng = mapLibreMap.getProjection().fromScreenLocation(new android.graphics.PointF(rawX, rawY));
+                                 
+                                 // Stop physics loop for smooth transition
+                                 physicsHandler.removeCallbacks(physicsRunnable);
+                                 
+                                 // Transition to Drop Animation
+                                 playDropAnimation(rawX, rawY, latLng);
+                             }
+                        } else {
+                            // Cancelled - Animate back to button
+                            if (ivDropAnimation != null) {
+                                ivDropAnimation.animate()
+                                    .translationX(v.getX() + v.getWidth()/2f - ivDropAnimation.getX() - ivDropAnimation.getWidth()/2f)
+                                    .translationY(v.getY() + v.getHeight()/2f - ivDropAnimation.getY() - ivDropAnimation.getHeight()/2f)
+                                    .scaleX(0.1f).scaleY(0.1f)
+                                    .alpha(0f)
+                                    .setDuration(200)
+                                    .withEndAction(() -> {
+                                        ivDropAnimation.setVisibility(View.GONE);
+                                        ivDropAnimation.setAlpha(1f);
+                                        ivDropAnimation.setScaleX(1f);
+                                        ivDropAnimation.setScaleY(1f);
+                                        ivDropAnimation.setTranslationX(0); // Reset translation
+                                        ivDropAnimation.setTranslationY(0);
+                                        
+                                        // Restore Button Icon
+                                        if (ivRemoteDropIcon != null) {
+                                            ivRemoteDropIcon.setVisibility(View.VISIBLE);
+                                            ivRemoteDropIcon.setScaleX(0f);
+                                            ivRemoteDropIcon.setScaleY(0f);
+                                            ivRemoteDropIcon.animate().scaleX(1f).scaleY(1f).setDuration(200).start();
+                                        }
+                                    }).start();
+                            }
+                        }
+                        return true;
+                }
+                return false;
             }
-            return false;
         });
+        
+        // Removed old system drag listener logic as it's now handled in OnTouch
 
         // Floating button to add note
         com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton btnAddNote = view.findViewById(R.id.btnAddNote);
@@ -611,6 +705,7 @@ public class MapFragment extends Fragment {
         ivDropAnimation.setTranslationY(-30);
         ivDropAnimation.animate()
             .translationY(0)
+            .rotation(0f) // Straighten out while falling
             .setDuration(150)
             .setInterpolator(new android.view.animation.AccelerateInterpolator())
             .start();
@@ -1797,12 +1892,19 @@ public class MapFragment extends Fragment {
                         loadBlockedUsersAndNotes();
                     })
                     .addOnFailureListener(e -> {
+                        Log.e(TAG, "Error loading hidden notes: " + e.getMessage());
+                        hideLoadingIndicator(); // Release loading on error
                         // Still load notes even if hidden list fails
                         loadBlockedUsersAndNotes();
                     });
         } else {
             // Local mode
             loadLocalNotes();
+        }
+        
+        if (loadingCard != null) {
+            loadingCard.setAlpha(1f);
+            loadingCard.setVisibility(android.view.View.VISIBLE);
         }
     }
 
@@ -1827,6 +1929,8 @@ public class MapFragment extends Fragment {
                     setupNotesListener();
                 })
                 .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error loading blocked users: " + e.getMessage());
+                    hideLoadingIndicator(); // Release loading on error
                     // Still load notes even if blocked list fails
                     setupNotesListener();
                 });
@@ -1838,6 +1942,7 @@ public class MapFragment extends Fragment {
                 .addSnapshotListener((querySnapshot, error) -> {
                     if (error != null) {
                         Log.e("MapFragment", "Error loading notes: " + error.getMessage());
+                        hideLoadingIndicator(); // Release loading on error
                         return;
                     }
 
@@ -1884,6 +1989,7 @@ public class MapFragment extends Fragment {
                             }).addOnFailureListener(e -> {
                                 Log.e("MapFragment", "Failed to batch fetch users", e);
                                 if (isAdded()) processAndRenderNotes(querySnapshot);
+                                hideLoadingIndicator(); // Release loading on error
                             });
                         }
                     }
@@ -2055,6 +2161,9 @@ public class MapFragment extends Fragment {
 
         // Ensure userLocationSymbol is still present after notes are loaded
         ensureUserLocationMarkerExists();
+        
+        // Data loaded
+        hideLoadingIndicator();
     }
     
     // Helper method to ensure userLocationSymbol exists
@@ -2096,6 +2205,7 @@ public class MapFragment extends Fragment {
                     addNoteMarker(pos, note, note.length() > 30 ? note.substring(0, 30) + "..." : note, timestamp, null, null, false, false, null);
                 }
             } catch (Exception e) { e.printStackTrace(); }
+            hideLoadingIndicator(); // Release loading after local notes are loaded
     }
 
     // Helper method to safely delete all symbols except userLocationSymbol
@@ -2121,7 +2231,12 @@ public class MapFragment extends Fragment {
     }
 
     private void renderNotesFromCache() {
-        if (cachedNotesSnapshot == null || mapLibreMap == null || symbolManager == null) return;
+        if (cachedNotesSnapshot == null || mapLibreMap == null || symbolManager == null) {
+             if (loadingCard != null && cachedNotesSnapshot == null) {
+                 // Keep loading visible if we are waiting for data
+             }
+             return;
+        }
 
         // Clear existing note markers (keep user location marker)
         deleteAllSymbolsExceptUserLocation();
@@ -2206,6 +2321,8 @@ public class MapFragment extends Fragment {
         
         // Ensure userLocationSymbol still exists after rendering notes
         ensureUserLocationMarkerExists();
+        
+        hideLoadingIndicator();
     }
 
     // Enable user location
@@ -2798,6 +2915,16 @@ public class MapFragment extends Fragment {
     }
 
     // Lifecycle
+    private void hideLoadingIndicator() {
+        if (loadingCard != null && loadingCard.getVisibility() == android.view.View.VISIBLE) {
+            loadingCard.animate()
+                .alpha(0f)
+                .setDuration(500)
+                .withEndAction(() -> loadingCard.setVisibility(android.view.View.GONE))
+                .start();
+        }
+    }
+    
     @Override public void onStart() { super.onStart(); if (mapView != null) mapView.onStart(); }
     @Override
     public void onResume() {

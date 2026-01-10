@@ -14,6 +14,41 @@
 
     </org.maplibre.android.maps.MapView>
 
+
+    <!-- Map Loading Indicator -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cv_map_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="12dp"
+        app:cardBackgroundColor="@color/card_background"
+        android:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp">
+
+            <com.visiboard.app.ui.custom.GlobeSpinningView
+                android:layout_width="80dp"
+                android:layout_height="80dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Loading world..."
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:fontFamily="@font/poppins_bold" />
+                
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
     <!-- Navigation Overlay (Top Center) -->
     <androidx.cardview.widget.CardView
         android:id="@+id/cv_navigation_overlay"
