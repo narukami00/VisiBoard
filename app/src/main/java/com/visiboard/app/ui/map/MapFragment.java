@@ -753,6 +753,10 @@ public class MapFragment extends Fragment {
         int totalDuration = 150 + (frames.length * 120) + 250;
         handler.postDelayed(() -> {
             if (ivDropAnimation != null) {
+                // Reset pivot to center for correct shrink animation (was top-center for pendulum swing)
+                ivDropAnimation.setPivotX(ivDropAnimation.getWidth() / 2f);
+                ivDropAnimation.setPivotY(ivDropAnimation.getHeight() / 2f);
+                
                 // Shrink animation to match map symbol size (from 80dp to ~48dp = 0.6 scale)
                 ivDropAnimation.animate()
                     .scaleX(0.6f).scaleY(0.6f)
